@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+.claude-plugin/types/
+plugins/squad-chat/.claude-plugin/types/
+plugins/squad-chat/tsconfig.json
+.in_use/
+supabase/.temp/
+.env*
