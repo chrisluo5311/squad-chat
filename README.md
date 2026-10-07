@@ -257,11 +257,13 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 * **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you, and `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
 * **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message.
 
-Found a security problem? Please [open an issue](https://github.com/chrisluo5311/squad-chat/issues/new?labels=security) without exploit details and I'll get in touch.
+Found a security problem? Please report it privately, as described in [SECURITY.md](SECURITY.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Development
+
+Want to help? [CONTRIBUTING.md](CONTRIBUTING.md) covers setting up, the tests and how to send a pull request.
 
 ```sh
 # The mod
