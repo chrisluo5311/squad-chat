@@ -41,7 +41,7 @@
        │ HTTPS (Auth/REST/RPC)          │ WSS (Realtime)
        ▼                                │
 ┌──────────────────── Supabase ─────────┴──────────────────┐
-│ Auth: email OTP（6 位數碼）                                │
+│ Auth: email OTP（8 位數碼）                                │
 │ Postgres: profiles / rooms / room_members / messages + RLS│
 │ RPC: join_room(slug, passcode)                            │
 │ Realtime: private channel "room:<uuid>"                   │

@@ -26,7 +26,7 @@ supabase test db    # pgTAP access-control tests
 supabase db advisors --local --type all
 ```
 
-Hosted project: `pijyocogpbiiwccfxqkp` (Tokyo, free plan), with the same two migrations applied.
+Hosted project: `pijyocogpbiiwccfxqkp` (Tokyo, free plan), with the same two migrations applied. Sign-in emails go through Resend SMTP from `login@mail.chris-luo.me` and carry an 8-digit code (set in the dashboard, since free projects can only customize templates with their own SMTP).
 
 ## Try it
 
