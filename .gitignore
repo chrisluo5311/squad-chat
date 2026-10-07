@@ -6,3 +6,6 @@ plugins/squad-chat/tsconfig.json
 .in_use/
 supabase/.temp/
 .env*
+
+# Local planning notes, not part of the project
+docs/PLAN.md

@@ -1,6 +1,6 @@
 # Architecture
 
-How squad-chat fits together, and why it's built this way. For using it, see the [README](../README.md). The original plan, in Traditional Chinese, is in [PLAN.md](PLAN.md).
+How squad-chat fits together, and why it's built this way. For using it, see the [README](../README.md).
 
 ## Overview
 
