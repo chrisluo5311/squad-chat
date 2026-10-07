@@ -143,7 +143,7 @@ function drawRow(els, row, width) {
       return Box({ key: row.key, flexShrink: 0, flexDirection: "row", gap: 1, marginTop: 1,
         justifyContent: row.m.mine ? "flex-end" : "flex-start", children: row.m.mine ? [
           Text({ key: "t", color: theme.muted, children: formatTime(row.m.at) }),
-          Text({ key: "n", bold: true, color: theme.accent, children: "you" }),
+          Text({ key: "n", bold: true, color: theme.you, children: "you" }),
         ] : [
           Text({ key: "n", bold: true, color: nameColor(row.m.user_id), wrap: "truncate-end", children: displayName(row.m) }),
           Text({ key: "t", color: theme.muted, children: formatTime(row.m.at) }),
@@ -369,7 +369,7 @@ function inlineView(els, props, handlers) {
       prevUser = m.user_id;
       parts.push(Box({ key: `m${m.id}`, flexDirection: "row", gap: 1, children: [
         Box({ key: "n", flexShrink: 0, children: [
-          Text({ key: "t", bold: true, color: m.mine ? theme.accent : nameColor(m.user_id), children: name.padEnd(nameWidth) }),
+          Text({ key: "t", bold: true, color: m.mine ? theme.you : nameColor(m.user_id), children: name.padEnd(nameWidth) }),
         ] }),
         Text({ key: "b", wrap: "truncate-end", children: m.body }),
       ] }));
@@ -414,7 +414,7 @@ export function bandView(els, props, { onOpen }) {
   if (unreadElsewhere) bits.push(fixed("elsewhere", `+${unreadElsewhere}`, { color: theme.muted }));
   if (last) {
     bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
-    bits.push(fixed("who", displayName(last), { bold: true, color: last.mine ? theme.accent : nameColor(last.user_id) }));
+    bits.push(fixed("who", displayName(last), { bold: true, color: last.mine ? theme.you : nameColor(last.user_id) }));
     bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", children: last.body })] }));
   }
   return Box({ flexDirection: "row", children: [

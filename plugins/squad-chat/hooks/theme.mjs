@@ -8,6 +8,7 @@ export const theme = {
   onAccent: "#1F1E1D",     // text drawn on the accent
   amber: "#E2B86B",        // secondary highlight: unread badges, the band's "new"
   sky: "#7FB6E2",          // informational dots
+  you: "#7FB6E2",          // your name: set apart from your coral bubbles
   online: "#6CC070",       // online, live
   // Message bubbles: fixed text and fill, so they read in light and dark themes.
   mineBubble: "#D97757",
@@ -20,8 +21,9 @@ export const theme = {
   error: "#E06C75",
 };
 
-// Warm, distinct name colors; coral is kept for "you".
-const NAME_COLORS = ["#E2B86B", "#7FB6E2", "#6CC070", "#C8A2E0", "#E58FA8", "#6FC2B5", "#D9A877", "#9DB4F0"];
+// Warm, distinct name colors for friends. Sky blue is kept for "you", and
+// coral for your bubbles, so neither appears here.
+const NAME_COLORS = ["#E2B86B", "#6CC070", "#C8A2E0", "#E58FA8", "#6FC2B5", "#D9A877", "#B8C46A", "#D4A5A5"];
 
 // The same person always gets the same color, in every pane.
 export function nameColor(userId = "") {
