@@ -16,6 +16,16 @@ A Claude Code mod: your friends' online status and a group chat in a side pane, 
 
 The only place `/say` text still exists is the local transcript's input-queue bookkeeping line on your own disk. The model never reads that line.
 
+## Backend (Phase 1)
+
+`supabase/` holds the schema: profiles, passcode-protected rooms, members, messages and presence heartbeats, all behind RLS with explicit column grants (anon gets nothing). Rooms are joined only through `join_room(slug, passcode)`, which rate-limits wrong passcodes. A flood trigger caps each user at 10 messages per 10 s, and `pg_cron` deletes messages older than 30 days. Realtime uses private `room:<uuid>` channels that only members can receive or track presence on.
+
+```bash
+supabase start      # local stack on ports 56420-56429 (mail UI: http://127.0.0.1:56424)
+supabase test db    # pgTAP access-control tests
+supabase db advisors --local --type all
+```
+
 ## Try it
 
 Requires Claude Code ≥ 2.1.287 and Node ≥ 18 on `PATH`.
