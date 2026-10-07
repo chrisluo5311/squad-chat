@@ -354,7 +354,7 @@ Project link: [https://github.com/chrisluo5311/squad-chat](https://github.com/ch
 ## Acknowledgments
 
 * [Supabase](https://supabase.com), for auth, Postgres and Realtime
-* [Resend](https://resend.com), for delivering sign-in codes
+* [Resend](https://resend.com) (optional), for delivering sign-in codes on servers that use email sign-in
 * [glowup](https://github.com/NovusEdge/glowup), whose classic pack inspired the palette and card layout
 * [Shields.io](https://shields.io) and [Hits](https://hits.sh), for the badges
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template), for this README's layout
@@ -384,5 +384,5 @@ Project link: [https://github.com/chrisluo5311/squad-chat](https://github.com/ch
 [postgres-url]: https://www.postgresql.org
 [esbuild-shield]: https://img.shields.io/badge/esbuild-FFCF00?style=for-the-badge&logo=esbuild&logoColor=black
 [esbuild-url]: https://esbuild.github.io
-[resend-shield]: https://img.shields.io/badge/Resend-000000?style=for-the-badge&logo=resend&logoColor=white
+[resend-shield]: https://img.shields.io/badge/Resend-optional-000000?style=for-the-badge&logo=resend&logoColor=white
 [resend-url]: https://resend.com
