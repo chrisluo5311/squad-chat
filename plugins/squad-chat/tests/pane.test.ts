@@ -83,7 +83,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1 }, { type: 'auth', state: 'signed_out', user: null })
     await settle()
     const ui = await $.ui.mount({ ...PANE, surface, props: props('dock') })
-    expect(await ui.find({ type: 'Text', text: /Sign in to chat/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'SIGN IN' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'step 1 of 2' })).toBeDefined()
 
     await ui.input({ key: 'compose', text: 'me@example.com' })
     expect(bridge.calls.at(-1)).toEqual({ path: '/login/start', body: { email: 'me@example.com' } })
@@ -91,6 +92,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     bridge.emit({ type: 'auth', state: 'code_sent', user: null, email: 'me@example.com' })
     await settle()
     expect(await ui.find({ type: 'Text', text: /Code sent to me@example.com/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'step 2 of 2' })).toBeDefined()
 
     bridge.replies['/login/verify'] = () => [200, { ok: true, user: ME }]
     await ui.input({ key: 'compose', text: '1234 5678' })
@@ -105,10 +107,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
     bridge.emit(msg(1, 'bob', 'hi there'), msg(2, 'me', 'hey bob'))
     await settle()
     const ui = await $.ui.mount({ ...PANE, surface, props: props('dock') })
-    expect(await ui.find({ type: 'Text', text: '#lobby' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /1 online · ● bob {2}○ carol/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /bob: hi there/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /me: hey bob/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()            // the active tab
+    expect(await ui.find({ type: 'Text', text: '1/2 online' })).toBeDefined()          // FRIENDS card meta
+    expect(await ui.find({ type: 'Text', text: '1 here' })).toBeDefined()              // room card meta
+    expect(await ui.find({ type: 'Text', text: /^bob$/ })).toBeDefined()               // a group header
+    expect(await ui.find({ type: 'Text', text: 'hi there' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^you$/ })).toBeDefined()              // own messages say "you"
+    expect(await ui.find({ type: 'Text', text: 'hey bob' })).toBeDefined()
 
     await ui.input({ key: 'compose', text: 'hello all' })
     expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: 'hello all', room: LOBBY.id } })
@@ -122,7 +127,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     for (let i = 1; i <= 12; i++) bridge.emit(msg(i, 'bob', `message number ${i}`))
     await settle()
     const ui = await $.ui.mount({ ...PANE, surface, props: props('inline') })
-    expect(await ui.find({ type: 'Text', text: /online: bob/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '● bob' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /message number 12/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /message number 3$/ })).toBeUndefined()
     await ui.unmount()
@@ -136,8 +141,8 @@ test('messages are kept in id order and drawn once', SLOW, async ($, on) => {
   bridge.emit(msg(5, 'bob', 'five'), msg(3, 'bob', 'three'), msg(5, 'bob', 'five'))
   await settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
-  const lines = await ui.findAll({ type: 'Text', text: /bob: (three|five)/ })
-  expect(lines.map((l: any) => l.text.replace(/^\d\d:\d\d /, ''))).toEqual(['bob: three', 'bob: five'])
+  const lines = await ui.findAll({ type: 'Text', text: /^(three|five)$/ })
+  expect(lines.map((l: any) => l.text)).toEqual(['three', 'five'])
   await ui.unmount()
 })
 
@@ -185,7 +190,10 @@ test('band: shows the room above the prompt while the pane is not up, and opens 
   bridge.emit(news(1, msg(1, 'bob', 'are you around?')))
   await settle()
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
-  expect(await ui.find({ type: 'Text', text: /💬 #lobby · 1 online · 1 unread │ bob: are you around\?/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '◆ #lobby' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '● 1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' 1 new ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'are you around?' })).toBeDefined()
   await ui.press({ key: 'open' })
   expect(seen.opened).toEqual(['squad-chat'])
   await ui.unmount()
@@ -198,7 +206,7 @@ test('band: stays out of the way while the pane is shown', SLOW, async ($, on) =
   signedIn(bridge)
   await settle()
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
-  expect(await ui.find({ type: 'Text', text: /💬/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /◆/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -226,4 +234,34 @@ test('an @mention toasts only with /chat notify on', SLOW, async ($, on) => {
   bridge.emit(news(1, msg(9, 'bob', 'hey @me, lunch?')), news(2, msg(10, 'bob', 'and @meg too')))
   await settle()
   expect(seen.toasts).toEqual(['💬 bob in #lobby: hey @me, lunch?'])
+})
+
+test('a "new" line marks where you had read up to, under a date label', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [{ ...LOBBY, last_read_id: 1, unread: 1 }] })
+  bridge.emit(msg(1, 'bob', 'old news'), news(1, msg(2, 'bob', 'fresh news', { at: new Date().toISOString() })))
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })   // focused: marks read
+  await settle()
+  expect(bridge.calls.find((c) => c.path === '/read')).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'new ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Today/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('room tabs switch rooms when pressed', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  const SIDE = { id: 'r-side', slug: 'side', last_read_id: 0, unread: 2 }
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, SIDE] })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '2' })).toBeDefined()   // unread badge on the #side tab
+  await ui.press({ key: 'tab-r-side' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/room/select', body: { room: 'r-side' } })
+  await ui.unmount()
 })

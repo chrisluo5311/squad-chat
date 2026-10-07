@@ -23,6 +23,7 @@ export const state = {
   paneFocused: false,     // the pane holds the keyboard: messages there count as read
   notify: false,          // toast @mentions (/chat notify on), kept in $.store
   mention: null,          // newest unseen message that @mentions me, until toasted
+  dividerAt: new Map(),   // room id → read marker when the pane last caught up: the "new" line
   ended: false,
 };
 
@@ -94,7 +95,10 @@ export function applyEvent(event) {
     case "rooms": {
       const known = new Set(event.rooms.map((r) => r.id));
       for (const id of [...state.messages.keys()]) if (!known.has(id)) state.messages.delete(id);
-      if (event.current !== state.current) state.notice = "";   // it was about the old room
+      if (event.current !== state.current) {
+        state.notice = "";          // it was about the old room
+        state.dividerAt.clear();
+      }
       state.rooms = event.rooms;
       state.current = event.current;
       return true;

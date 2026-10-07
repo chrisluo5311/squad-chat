@@ -75,6 +75,9 @@ export async function sendMessage(call, text, say) {
 }
 
 function requireSignedIn() {
+  if (state.auth === "starting" || state.bridge !== "ready") {
+    throw new Error(state.bridge === "unavailable" ? state.detail : "Chat is still connecting, try again in a moment.");
+  }
   if (state.auth !== "signed_in") {
     throw new Error(state.auth === "code_sent"
       ? `Enter the code emailed to ${state.email} first.`

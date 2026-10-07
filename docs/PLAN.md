@@ -194,3 +194,14 @@ squad-chat/
 - **授權**：MIT。
 - **執行方式**：auto mode；**完成 Phase 0 後 commit 並 push 到使用者 GitHub 的新公開 repo `squad-chat`**（`gh repo create`），之後繼續後續 Phase。
 - 尚待確認（遇到時再問）：SMTP 提供者（免費 SMTP 額度不足時）。
+
+## Phase 6 — 聊天 UI 重新設計（v0.2.0）
+參考 glowup 的「圓角卡片＋分頁＋右對齊 meta」質感與業界聊天 UI 慣例（同發送者訊息分組、日期分隔、未讀「new」分隔線、在線點），但用自己的配色與結構：
+- **配色**：單一品牌色紫羅蘭 `#A78BFA`（標題、目前房間分頁、自己的名字、聚焦輸入框、new 線），其餘用使用者主題的 theme key（`success`/`subtle`/`warning`/`inactive`）跟隨深淺主題；每個人的名字依 user id 固定配一個顏色（8 色）。
+- **Dock**：標題列（◆ squad-chat · 你的名字 · ● live）→ 房間分頁（目前房間實心高亮，其他可點擊、未讀數以品牌色顯示）→ FRIENDS 卡片（n/m online）→ 房間卡片（填滿剩餘高度、訊息貼底；同人 5 分鐘內合併成一組、日期分隔、`new ───` 標出上次讀到的位置）→ 圓角輸入框 → 淡色快捷鍵提示。
+- **Inline**：一行標頭（房間 · 在線的人 · 狀態），最後 5 則訊息以名字欄對齊、同人只顯示一次。
+- **Band**：單行，只有訊息內容會縮短；`N new` 用品牌色底標示，右側 [ Open ]。
+- **登入/建房引導**：SIGN IN 卡片（step 1 of 2 / 2 of 2）、JOIN A ROOM 卡片。
+- 版面細節：文字列不得用 Text 的 flex 屬性（engine 會拒絕整棵樹），改包在 Box；訊息內文 Box 用 column 方向才會正確換行；行數估算以 word-wrap 與寬字元計算，dock 預留一列給關閉鈕。
+✅ 15 個 mod 測試通過（含 new 分隔線、分頁切換）；80/150 欄實機截圖確認（docs/screenshots/）。
+

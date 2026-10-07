@@ -157,6 +157,8 @@ async function markRead($) {
   const newest = roomMessages().at(-1)?.id ?? 0;
   if (marking || !room || (!room.unread && newest <= room.last_read_id)) return;
   marking = true;
+  // Remember where they'd read up to, so the pane can draw a "new" line there.
+  if (!state.dividerAt.has(room.id) && room.last_read_id > 0) state.dividerAt.set(room.id, room.last_read_id);
   try {
     await callBridge($, "/read", { room: room.id, last_id: newest });
     room.last_read_id = Math.max(room.last_read_id, newest);
@@ -176,9 +178,19 @@ async function submitFromPane($, value) {
   $.ui.invalidate("ui.render");
   try {
     await paneInput((path, body) => callBridge($, path, body), value, say);
-    await markRead($);   // they're looking at the room they just wrote in
+    state.dividerAt.clear();   // they've replied: everything above is read
+    await markRead($);         // they're looking at the room they just wrote in
   } catch (err) {
     say(err?.message ?? String(err));
+  }
+}
+
+async function selectRoom($, id) {
+  try {
+    await callBridge($, "/room/select", { room: id });
+  } catch (err) {
+    state.notice = err?.message ?? String(err);
+    $.ui.invalidate("ui.render");
   }
 }
 
@@ -190,7 +202,7 @@ async function answer($, fn) {
   try {
     await fn((path, body) => callBridge($, path, body), say);
   } catch (err) {
-    say(`squad-chat: ${err?.message ?? err}`);
+    say(err?.message ?? String(err));   // the engine already labels notices "squad-chat:"
   }
   return {};
 }
@@ -217,7 +229,7 @@ export function register(on) {
     if (!m) return openPane($);
     state.notify = m[1].toLowerCase() === "on";
     await $.store.set("notify", state.notify);
-    say(state.notify ? "squad-chat: will toast when someone @mentions you." : "squad-chat: mention toasts off.");
+    say(state.notify ? "Will toast when someone @mentions you." : "Mention toasts off.");
   }));
   on("command.run", { command: "say" }, ($, e) => answer($, (call, say) => sendMessage(call, e.args, say)));
   on("command.run", { command: "room" }, ($, e) => answer($, (call, say) => room(call, e.args, say)));
@@ -236,6 +248,7 @@ export function register(on) {
     return paneView($.ui.resolve(e), props, {
       onInput: (value) => { state.draft = value; },
       onSubmit: (value) => { void submitFromPane($, value); },
+      onSelectRoom: (id) => { void selectRoom($, id); },
     });
   });
 
@@ -251,6 +264,7 @@ export function register(on) {
   on("ui.close", ($, e, next) => {
     if (e.id === PANE_ID) {
       state.paneFocused = false;
+      state.dividerAt.clear();
       $.ui.invalidate("ui.render");
     }
     return next(e);

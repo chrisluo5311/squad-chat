@@ -2,7 +2,9 @@
 
 A Claude Code mod: your friends' online status and a group chat in a side pane, so you can chat while you vibe code. Chat text never reaches Claude's context and uses no model tokens.
 
-> **Status: v0.1.0.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes.
+![squad-chat docked beside Claude Code](docs/screenshots/pane.png)
+
+> **Status: v0.2.0.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes.
 
 ## Install
 
@@ -60,7 +62,7 @@ claude plugin test ./plugins/squad-chat
 claude --plugin-dir ./plugins/squad-chat
 ```
 
-Then type `/chat` to open the pane. In a terminal at least 110 columns wide (fullscreen) it docks on the right; narrower, it sits above the prompt in a compact form. While the pane is closed or can't be placed, a one-line band above the prompt shows the room, who's online, unread counts and the latest message, with an **Open** button. Unread counts also show on the status line; a room counts as read once you look at it in the focused pane or send from it.
+Then type `/chat` to open the pane (screenshots: [docked](docs/screenshots/pane.png), [band](docs/screenshots/band.png), [sign-in](docs/screenshots/sign-in.png)). In a terminal at least 110 columns wide (fullscreen) it docks on the right; narrower, it sits above the prompt in a compact form. While the pane is closed or can't be placed, a one-line band above the prompt shows the room, who's online, unread counts and the latest message, with an **Open** button. Unread counts also show on the status line; a room counts as read once you look at it in the focused pane or send from it.
 
 | | |
 |---|---|
