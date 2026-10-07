@@ -4,6 +4,7 @@
 
 [![Stars][stars-shield]][stars-url]
 [![Version][version-shield]][version-url]
+[![CI][ci-shield]][ci-url]
 [![License][license-shield]][license-url]
 [![Made for Claude Code][made-for-shield]][made-for-url]
 [![Node][node-shield]][node-url]
@@ -390,6 +391,8 @@ Project link: [https://github.com/chrisluo5311/squad-chat](https://github.com/ch
 [stars-url]: https://github.com/chrisluo5311/squad-chat/stargazers
 [version-shield]: https://img.shields.io/badge/dynamic/json?style=for-the-badge&label=version&color=d97757&url=https%3A%2F%2Fraw.githubusercontent.com%2Fchrisluo5311%2Fsquad-chat%2Fmain%2Fplugins%2Fsquad-chat%2F.claude-plugin%2Fplugin.json&query=%24.version
 [version-url]: plugins/squad-chat/.claude-plugin/plugin.json
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/chrisluo5311/squad-chat/ci.yml?branch=main&style=for-the-badge&label=CI&logo=githubactions&logoColor=white
+[ci-url]: https://github.com/chrisluo5311/squad-chat/actions/workflows/ci.yml
 [license-shield]: https://img.shields.io/badge/license-MIT-3da639?style=for-the-badge
 [license-url]: LICENSE
 [made-for-shield]: https://img.shields.io/badge/made%20for-Claude%20Code-d97757?style=for-the-badge&logo=claude&logoColor=white

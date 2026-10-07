@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mod:
+    name: Mod (validate + pane tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.292
+      - name: Validate the plugin
+        run: claude plugin validate ./plugins/squad-chat
+      - name: Pane tests
+        run: claude plugin test ./plugins/squad-chat
+
+  backend:
+    name: Bridge + database (local Supabase)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: plugins/squad-chat/bridge
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: plugins/squad-chat/bridge/package-lock.json
+      - run: npm ci
+      - name: Committed bundle matches the source
+        run: |
+          npm run build
+          git diff --exit-code -- dist/bridge.mjs
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+      - name: Start local Supabase
+        working-directory: .
+        run: |
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta
+          echo "SQUAD_TEST_SUPABASE_KEY=$(supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p')" >> "$GITHUB_ENV"
+      - name: Database tests (pgTAP)
+        working-directory: .
+        run: supabase test db
+      - name: Bridge tests
+        run: |
+          curl -fsS http://127.0.0.1:56421/auth/v1/health -H "apikey: $SQUAD_TEST_SUPABASE_KEY" > /dev/null
+          npm test | tee test.log
+          # The suites skip themselves when the stack is down. In CI that is a failure.
+          ! grep -Eq '^# skipped [1-9]' test.log

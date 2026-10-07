@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 
 export const LOCAL_URL = "http://127.0.0.1:56421";
-export const LOCAL_KEY = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";   // local stack's fixed dev key
+// The local stack's dev key. CI passes the one `supabase status` reports.
+export const LOCAL_KEY = process.env.SQUAD_TEST_SUPABASE_KEY || "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
 const MAILPIT = "http://127.0.0.1:56424";
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), "../plugins/squad-chat/bridge/dist/bridge.mjs");
 
