@@ -13,7 +13,8 @@ function formatTime(iso) {
 function statusDot() {
   if (state.bridge === "unavailable") return { color: "red", text: "● unavailable" };
   if (state.bridge !== "ready") return { color: "yellow", text: `● ${state.bridge}` };
-  if (state.auth !== "signed_in") return { color: "yellow", text: "● signed out" };
+  if (state.auth === "code_sent") return { color: "yellow", text: "● code sent" };
+  if (state.auth !== "signed_in") return { color: "yellow", text: state.auth === "starting" ? "● connecting" : "● signed out" };
   const room = currentRoom();
   if (!room) return { color: "green", text: "● connected" };
   const status = state.roomStatus.get(room.id);
