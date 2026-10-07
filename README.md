@@ -66,7 +66,6 @@
     <li><a href="#host-your-own-server">Host your own server</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
@@ -370,14 +369,6 @@ See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for pro
 ## License
 
 Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Contact
-
-chrisluo5311 · [@chrisluo5311](https://github.com/chrisluo5311)
-
-Project link: [https://github.com/chrisluo5311/squad-chat](https://github.com/chrisluo5311/squad-chat)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
