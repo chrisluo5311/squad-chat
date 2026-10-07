@@ -12,6 +12,7 @@
 //   SQUAD_CONFIG_DIR     session + prefs (default ~/.config/squad-chat)
 //   SQUAD_SOCKET_DIR     where the socket goes (default /tmp/squad-chat-<uid>)
 //   SQUAD_DEBUG=1        log Realtime traffic to stderr
+//   SQUAD_REFRESH_MS     how often to refresh friends and rooms (tests)
 //
 // Built into dist/bridge.mjs (one file, dependencies bundled): npm run build
 
@@ -71,6 +72,7 @@ const routes = {
   "POST /room": (b) => chat.join(b.slug, b.passcode),
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),
   "POST /room/leave": (b) => chat.leave(b.room).then(() => ({ ok: true })),
+  "POST /room/delete": (b) => chat.deleteRoom(b.room),
   "POST /send": (b) => chat.send(b.text, b.room),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },

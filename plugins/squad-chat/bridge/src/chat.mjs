@@ -13,7 +13,7 @@ const BACKFILL_PAGE = 200;
 const BACKFILL_OVERLAP = 20;     // re-read a few ids back: rows can commit out of id order
 const SEEN_LIMIT = 1000;
 const HEARTBEAT_MS = 30_000;
-const FRIENDS_MS = 60_000;
+const FRIENDS_MS = Number(process.env.SQUAD_REFRESH_MS) || 60_000;   // friends + room list refresh
 const ONLINE_WINDOW_MS = 75_000; // heartbeat-only clients count as online this long
 const WATCHDOG_MS = 5_000;
 const STUCK_MS = 10_000;         // realtime down this long → force a reconnect
@@ -133,7 +133,10 @@ export class Chat {
     await this.refreshFriends();
     this.heartbeat();
     this.timers.push(setInterval(() => this.heartbeat(), HEARTBEAT_MS));
-    this.timers.push(setInterval(() => this.refreshFriends(), FRIENDS_MS));
+    this.timers.push(setInterval(() => {
+      this.refreshFriends();
+      this.loadRooms().catch((e) => this.log(`rooms: ${e.message}`));   // notice rooms deleted elsewhere
+    }, FRIENDS_MS));
     this.timers.push(setInterval(() => this.watchdog(), WATCHDOG_MS));
   }
 
@@ -195,12 +198,20 @@ export class Chat {
       .eq("user_id", me.id);
     if (error) throw fail(error, "could not load rooms");
     const prefs = this.prefs();
+    const added = [];
     for (const row of data) {
-      if (!this.rooms.has(row.room_id)) this.addRoom(row.room_id, row.rooms.slug, row.last_read_id);
+      if (!this.rooms.has(row.room_id)) added.push(this.addRoom(row.room_id, row.rooms.slug, row.last_read_id));
     }
-    await Promise.all([...this.rooms.values()].map((room) => this.countUnread(room)));
-    const preferred = [...this.rooms.values()].find((r) => r.slug === prefs.room);
-    this.current = preferred?.id ?? this.rooms.keys().next().value ?? null;
+    // Rooms we're no longer in (deleted by their creator, or left elsewhere).
+    const still = new Set(data.map((row) => row.room_id));
+    for (const room of [...this.rooms.values()]) if (!still.has(room.id)) await this.dropRoom(room);
+    // Only new rooms start from the database's count; the others keep their
+    // running count (a recount would double what catch-up adds after it).
+    await Promise.all(added.map((room) => this.countUnread(room)));
+    if (!this.rooms.has(this.current)) {
+      const preferred = [...this.rooms.values()].find((r) => r.slug === prefs.room);
+      this.current = preferred?.id ?? this.rooms.keys().next().value ?? null;
+    }
     this.emitRooms();
   }
 
@@ -251,6 +262,22 @@ export class Chat {
     const room = this.room(roomRef);
     const { error } = await this.sb.from("room_members").delete().eq("room_id", room.id).eq("user_id", this.user.id);
     if (error) throw fail(error, "could not leave");
+    await this.dropRoom(room);
+  }
+
+  // Deletes the room for everyone; only its creator may (RLS). A delete
+  // that matched no row means this person didn't create it.
+  async deleteRoom(roomRef) {
+    const room = this.room(roomRef);
+    const { data, error } = await this.sb.from("rooms").delete().eq("id", room.id).select("id");
+    if (error) throw fail(error, "could not delete");
+    if (!data?.length) throw new HttpError(403, `only the person who created #${room.slug} can delete it`);
+    await this.dropRoom(room);
+    return { slug: room.slug };
+  }
+
+  // Forget a room here: its channel, its place in the list.
+  async dropRoom(room) {
     await room.channel.untrack().catch(() => {});
     await this.sb.removeChannel(room.channel).catch(() => {});
     this.rooms.delete(room.id);

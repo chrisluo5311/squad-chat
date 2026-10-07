@@ -48,6 +48,10 @@ export async function room(call, args, say) {
     const list = state.rooms.map((r) => `${r.id === state.current ? "▸" : " "} #${r.slug}${r.unread ? ` (${r.unread} unread)` : ""}`);
     return say(`Rooms:\n${list.join("\n")}`);
   }
+  // "/room leave <name>" and "/room delete <name>". A room literally called
+  // "leave" or "delete" is still reachable as "/room #leave".
+  if ((slug === "leave" || slug === "delete") && rest.length) return manageRoom(call, slug, rest[0], say);
+
   const name = slug.replace(/^#/, "").toLowerCase();
   const joined = state.rooms.find((r) => r.slug === name);
   if (joined && !passcode) {
@@ -56,6 +60,28 @@ export async function room(call, args, say) {
   }
   const r = await call("/room", { slug: name, passcode });
   return say(`Now in #${r.slug}.`);
+}
+
+const CONFIRM_MS = 30_000;
+let pendingDelete = null;   // { slug, until }: a delete waiting for its second ask
+
+async function manageRoom(call, action, ref, say) {
+  const name = ref.replace(/^#/, "").toLowerCase();
+  const target = state.rooms.find((r) => r.slug === name);
+  if (!target) return say(`You're not in a room called #${name}.`);
+  if (action === "leave") {
+    await call("/room/leave", { room: target.id });
+    return say(`Left #${name}. Rejoin any time with its passcode.`);
+  }
+  // Deleting is for everyone and can't be undone: ask twice.
+  const now = Date.now();
+  if (!pendingDelete || pendingDelete.slug !== name || now > pendingDelete.until) {
+    pendingDelete = { slug: name, until: now + CONFIRM_MS };
+    return say(`This deletes #${name} and all its messages for everyone in it. Run /room delete ${name} again within 30 seconds to confirm.`);
+  }
+  pendingDelete = null;
+  await call("/room/delete", { room: target.id });
+  return say(`Deleted #${name}.`);
 }
 
 export function who(say) {
@@ -98,7 +124,7 @@ export async function paneInput(call, value, say) {
       case "login": case "chat-login": return login(call, args, say);
       case "logout": case "chat-logout": return logout(call, say);
       case "say": return sendMessage(call, args, say);
-      case "help": return say("/room [name] [passcode] · /who · /logout · anything else is a message");
+      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /logout · anything else is a message");
       default: return say(`Unknown command /${cmd}. Try /help.`);
     }
   }

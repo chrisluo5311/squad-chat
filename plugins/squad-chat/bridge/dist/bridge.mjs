@@ -22115,7 +22115,7 @@ var BACKFILL_PAGE = 200;
 var BACKFILL_OVERLAP = 20;
 var SEEN_LIMIT = 1e3;
 var HEARTBEAT_MS = 3e4;
-var FRIENDS_MS = 6e4;
+var FRIENDS_MS = Number(process.env.SQUAD_REFRESH_MS) || 6e4;
 var ONLINE_WINDOW_MS = 75e3;
 var WATCHDOG_MS = 5e3;
 var STUCK_MS = 1e4;
@@ -22223,7 +22223,10 @@ var Chat = class {
     await this.refreshFriends();
     this.heartbeat();
     this.timers.push(setInterval(() => this.heartbeat(), HEARTBEAT_MS));
-    this.timers.push(setInterval(() => this.refreshFriends(), FRIENDS_MS));
+    this.timers.push(setInterval(() => {
+      this.refreshFriends();
+      this.loadRooms().catch((e) => this.log(`rooms: ${e.message}`));
+    }, FRIENDS_MS));
     this.timers.push(setInterval(() => this.watchdog(), WATCHDOG_MS));
   }
   // realtime-js retries once after the connection drops. If that attempt
@@ -22279,12 +22282,17 @@ var Chat = class {
     const { data, error } = await this.sb.from("room_members").select("room_id, last_read_id, rooms(slug)").eq("user_id", me.id);
     if (error) throw fail(error, "could not load rooms");
     const prefs = this.prefs();
+    const added = [];
     for (const row of data) {
-      if (!this.rooms.has(row.room_id)) this.addRoom(row.room_id, row.rooms.slug, row.last_read_id);
+      if (!this.rooms.has(row.room_id)) added.push(this.addRoom(row.room_id, row.rooms.slug, row.last_read_id));
     }
-    await Promise.all([...this.rooms.values()].map((room) => this.countUnread(room)));
-    const preferred = [...this.rooms.values()].find((r) => r.slug === prefs.room);
-    this.current = preferred?.id ?? this.rooms.keys().next().value ?? null;
+    const still = new Set(data.map((row) => row.room_id));
+    for (const room of [...this.rooms.values()]) if (!still.has(room.id)) await this.dropRoom(room);
+    await Promise.all(added.map((room) => this.countUnread(room)));
+    if (!this.rooms.has(this.current)) {
+      const preferred = [...this.rooms.values()].find((r) => r.slug === prefs.room);
+      this.current = preferred?.id ?? this.rooms.keys().next().value ?? null;
+    }
     this.emitRooms();
   }
   addRoom(id, slug, lastReadId = 0) {
@@ -22328,6 +22336,20 @@ var Chat = class {
     const room = this.room(roomRef);
     const { error } = await this.sb.from("room_members").delete().eq("room_id", room.id).eq("user_id", this.user.id);
     if (error) throw fail(error, "could not leave");
+    await this.dropRoom(room);
+  }
+  // Deletes the room for everyone; only its creator may (RLS). A delete
+  // that matched no row means this person didn't create it.
+  async deleteRoom(roomRef) {
+    const room = this.room(roomRef);
+    const { data, error } = await this.sb.from("rooms").delete().eq("id", room.id).select("id");
+    if (error) throw fail(error, "could not delete");
+    if (!data?.length) throw new HttpError(403, `only the person who created #${room.slug} can delete it`);
+    await this.dropRoom(room);
+    return { slug: room.slug };
+  }
+  // Forget a room here: its channel, its place in the list.
+  async dropRoom(room) {
     await room.channel.untrack().catch(() => {
     });
     await this.sb.removeChannel(room.channel).catch(() => {
@@ -22608,6 +22630,7 @@ var routes = {
   "POST /room": (b) => chat.join(b.slug, b.passcode),
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),
   "POST /room/leave": (b) => chat.leave(b.room).then(() => ({ ok: true })),
+  "POST /room/delete": (b) => chat.deleteRoom(b.room),
   "POST /send": (b) => chat.send(b.text, b.room),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /shutdown": () => {

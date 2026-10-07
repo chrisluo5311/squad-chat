@@ -212,7 +212,7 @@ export function register(on) {
     const r = await next(e);
     await $.command.register({ name: "chat", description: "squad-chat: open the chat pane (/chat notify on|off: toast @mentions)", argumentHint: "[notify on|off]", immediate: true });
     await $.command.register({ name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>", immediate: true });
-    await $.command.register({ name: "room", description: "squad-chat: list rooms, switch, or join/create one", argumentHint: "[name] [passcode]", immediate: true });
+    await $.command.register({ name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>", immediate: true });
     await $.command.register({ name: "who", description: "squad-chat: who's online", immediate: true });
     await $.command.register({ name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>", immediate: true });
     await $.command.register({ name: "chat-logout", description: "squad-chat: sign out on this computer", immediate: true });

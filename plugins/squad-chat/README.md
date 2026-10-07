@@ -41,6 +41,8 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/room` | List your rooms |
 | `/room <name>` | Switch to a room you're in |
 | `/room <name> <passcode>` | Create a room, or join a friend's |
+| `/room leave <name>` | Leave a room (rejoin any time with its passcode) |
+| `/room delete <name>` | Delete a room you created, with all its messages, for everyone. Asks you to run it twice. |
 | `/who` | Who's online, across all your rooms |
 | `/chat-login <email>`, then `/chat-login <code>` | Sign in from the prompt instead of the pane |
 | `/chat-logout` | Sign out on this computer |

@@ -197,6 +197,23 @@ select set_config('realtime.topic', 'room:not-a-uuid', true);
 select is(private.is_room_topic_member((select realtime.topic())), false,
   'malformed topic is denied, not an error');
 
+-- ---------------------------------------------------------------- deleting rooms
+
+select tests.act_as('bob');
+delete from public.rooms where id = tests.room('lobby');
+reset role;
+select isnt(tests.room('lobby'), null, 'a member who did not create the room cannot delete it');
+
+select tests.act_as('alice');
+select isnt(public.join_room('doomed', 'pass1234'), null, 'alice creates a room to delete');
+insert into public.messages (room_id, body) values (tests.room('doomed'), 'soon gone');
+select lives_ok(format($$ delete from public.rooms where id = %L $$, tests.room('doomed')),
+  'the creator can delete the room');
+reset role;
+select is(tests.room('doomed'), null, 'the room is gone');
+select is((select count(*)::int from public.messages m where not exists (select 1 from public.rooms r where r.id = m.room_id)), 0,
+  'its messages went with it');
+
 -- ---------------------------------------------------------------- leaving
 
 select tests.act_as('bob');

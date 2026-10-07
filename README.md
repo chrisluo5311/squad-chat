@@ -4,7 +4,7 @@ A Claude Code mod: your friends' online status and a group chat in a side pane, 
 
 ![squad-chat docked beside Claude Code](docs/screenshots/pane.png)
 
-> **Status: v0.2.1.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes.
+> **Status: v0.3.0.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes.
 
 ## Install
 
@@ -67,7 +67,7 @@ Then type `/chat` to open the pane (screenshots: [docked](docs/screenshots/pane.
 | | |
 |---|---|
 | Sign in | Type your email in the pane, then the code from the email. Or `/chat-login you@example.com`, then `/chat-login <code>`. |
-| Rooms | `/room <name> <passcode>` creates a room or joins a friend's. `/room <name>` switches to one you're in; `/room` lists them. |
+| Rooms | `/room <name> <passcode>` creates a room or joins a friend's. `/room <name>` switches to one you're in; `/room` lists them. `/room leave <name>` leaves one; `/room delete <name>` (creator only, asks twice) deletes it for everyone. |
 | Chat | Type in the pane and press Enter, or `/say <message>` from the prompt. |
 | Friends | The pane shows who's online. `/who` lists everyone you share a room with. |
 | Sign out | `/chat-logout`. |
@@ -83,7 +83,7 @@ Done in v0.1.0: the Supabase backend (schema, RLS, passcode rooms, 30-day retent
 
 Next:
 - A REST polling mode for the desktop app, which can't start the bridge process. The `presence_heartbeats` table is already there for it.
-- `/chat-name` to change your display name, and `/room leave`.
+- `/chat-name` to change your display name.
 
 ## License
 

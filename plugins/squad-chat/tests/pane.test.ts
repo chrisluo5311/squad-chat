@@ -265,3 +265,21 @@ test('room tabs switch rooms when pressed', SLOW, async ($, on) => {
   expect(bridge.calls.at(-1)).toEqual({ path: '/room/select', body: { room: 'r-side' } })
   await ui.unmount()
 })
+
+test('/room delete asks for a second run before deleting; /room leave leaves', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await ui.input({ key: 'compose', text: '/room delete lobby' })
+  expect(bridge.calls.some((c) => c.path === '/room/delete')).toBe(false)
+  expect(await ui.find({ type: 'Text', text: /again within 30 seconds to confirm/ })).toBeDefined()
+  bridge.replies['/room/delete'] = () => [200, { slug: 'lobby' }]
+  await ui.input({ key: 'compose', text: '/room delete lobby' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/room/delete', body: { room: LOBBY.id } })
+
+  await ui.input({ key: 'compose', text: '/room leave lobby' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/room/leave', body: { room: LOBBY.id } })
+  await ui.unmount()
+})

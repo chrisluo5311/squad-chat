@@ -151,6 +151,20 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
     assert.equal(rooms.rooms[0].last_read_id, last);
   });
 
+  it("deletes a room: only its creator can, and members drop it", async () => {
+    const temp = await alice.ok("POST", "/room", { slug: `temp-${id}`, passcode: "pass1234" });
+    await bob.ok("POST", "/room", { slug: `temp-${id}`, passcode: "pass1234" });
+    await bob.waitFor((e) => e.type === "rooms" && e.rooms.some((r) => r.id === temp.id));
+    const refused = await bob.call("POST", "/room/delete", { room: temp.id });
+    assert.equal(refused.status, 403);
+    assert.deepEqual(await alice.ok("POST", "/room/delete", { room: temp.id }), { slug: `temp-${id}` });
+    const mark = bob.events.length;
+    await bob.waitFor((e) => bob.events.indexOf(e) >= mark && e.type === "rooms" && !e.rooms.some((r) => r.id === temp.id),
+      15_000, "bob to drop the deleted room");
+    await alice.ok("POST", "/room/select", { room: room.id });
+    await bob.ok("POST", "/room/select", { room: room.id });
+  });
+
   it("shows a killed bridge as offline within 60 seconds", async () => {
     await bob.waitFor((e) => e.type === "presence" && e.room === room.id && e.online.some((u) => u.name === `alice-${id}`));
     const t0 = Date.now();

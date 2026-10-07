@@ -46,6 +46,7 @@ export class Bridge {
         SQUAD_SUPABASE_KEY: LOCAL_KEY,
         SQUAD_CONFIG_DIR: this.configDir,
         SQUAD_SOCKET_DIR: this.socketDir,
+        SQUAD_REFRESH_MS: "2000",   // notice deleted rooms quickly
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
