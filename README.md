@@ -2,7 +2,15 @@
 
 A Claude Code mod: your friends' online status and a group chat in a side pane, so you can chat while you vibe code. Chat text never reaches Claude's context and uses no model tokens.
 
-> **Status: Phase 4 done.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes. Phase 5 is packaging it for friends to install. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
+> **Status: v0.1.0.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes.
+
+## Install
+
+```
+/plugin install squad-chat --marketplace chrisluo5311/squad-chat
+```
+
+Needs Node 22+ and the Claude Code terminal. [plugins/squad-chat/README.md](plugins/squad-chat/README.md) has getting started, commands and privacy details; the rest of this page is for developing it. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
 
 ## What Phase 0 proves
 
@@ -40,7 +48,7 @@ npm test                          # two users, two bridges, against `supabase st
 
 The tests cover sign-in, passcodes, presence, messages both ways, a simulated network drop (exactly the missed messages arrive, once), session reuse across restarts, unread counts, `kill -9` showing as offline, leaving and signing out. realtime-js stops retrying if its first reconnect fails while the network is still down, so the bridge runs a watchdog that forces a reconnect after 10 s.
 
-## Try it
+## Develop
 
 Requires Claude Code ≥ 2.1.287 and Node ≥ 22 on `PATH` (supabase-js needs Node 22).
 
@@ -69,11 +77,11 @@ To develop against the local stack instead of the hosted project, start Claude C
 
 ## Roadmap
 
-1. Supabase backend: schema, RLS, room passcodes, 30-day retention.
-2. Real bridge: email OTP login, Realtime presence and messages, backfill on reconnect.
-3. Mod: cross-room friends list, `/say`, `/room`, `/who`, unread counts.
-4. Narrow-terminal layouts, resilience, REST polling mode for the desktop app.
-5. Install from this marketplace with `claude plugin install`.
+Done in v0.1.0: the Supabase backend (schema, RLS, passcode rooms, 30-day retention), the bridge (email-code sign-in, Realtime presence and messages, catch-up after reconnects), the mod (pane, band, status line, commands, cross-room friends) and this marketplace.
+
+Next:
+- A REST polling mode for the desktop app, which can't start the bridge process. The `presence_heartbeats` table is already there for it.
+- `/chat-name` to change your display name, and `/room leave`.
 
 ## License
 
