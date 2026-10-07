@@ -196,6 +196,9 @@ Until a server is set, the pane says so and shows these steps.
    Your friends join with the same line.
 4. Chat: type in the pane and press Enter. Esc goes back to the prompt.
 
+> [!IMPORTANT]
+> **An account made with just a name can't be recovered.** It has no email, so once you sign out, delete `~/.config/squad-chat` or switch computers, you can't sign back into it. Signing in again makes a new account: rejoin your rooms with their passcodes and you'll see their history again. Messages from the old account stay in the rooms until they expire after 30 days. Signing in by email doesn't have this problem.
+
 <div align="center">
   <img src="docs/screenshots/sign-in.png" alt="The sign-in card: step 1 of 2, enter your email" width="100%">
 </div>
@@ -315,7 +318,28 @@ One person per group does this, once. It fits in Supabase's free plan.
 3. **Lock down Realtime.** In the dashboard, under **Realtime → Settings**, turn off **Allow public access to channels**.
 4. **Choose how people sign in.** You can turn on either or both.
    * **With a name (simplest, no email service).** Under **Authentication → Sign In / Providers**, turn on **Allow anonymous sign-ins**. Anyone can make an account this way, but rooms still need their passcode, so strangers see nothing. Supabase limits anonymous sign-ups to 30 per hour per IP address.
-   * **With an email code.** Supabase's built-in email only reaches your project's own team members (2 an hour), so set up an email service under **Authentication → Emails → SMTP Settings**. [Resend](https://resend.com) has a free tier, and Postmark, Amazon SES or your mail provider's SMTP work too. Then edit the **Confirm signup** and **Magic Link** templates so they show the code, `{{ .Token }}`.
+   * **With an email code.** Supabase sends the codes, but its built-in email only reaches your project's own team members (2 an hour), so connect an email service over SMTP. [Resend](https://resend.com) has a free tier; Postmark, Amazon SES or your mail provider's SMTP work the same way. With Resend:
+     1. In Resend, [add and verify a domain](https://resend.com/domains) you own, such as `mail.example.com`.
+     2. Create an [API key](https://resend.com/api-keys) with **Sending access**, restricted to that domain.
+     3. In Supabase, open **Authentication → Emails → SMTP Settings**, turn on **Enable custom SMTP**, and fill in:
+
+        | Field | Value |
+        | --- | --- |
+        | Sender email | an address on your domain, such as `login@mail.example.com` |
+        | Sender name | `squad-chat` |
+        | Host | `smtp.resend.com` |
+        | Port | `465` |
+        | Username | `resend` |
+        | Password | the Resend API key |
+
+     4. Under **Authentication → Emails → Templates**, edit **Confirm signup** and **Magic Link** so they show the code. For example, subject `Your squad-chat code` and body:
+        ```html
+        <h2>squad-chat</h2>
+        <p>Your sign-in code:</p>
+        <p style="font-size:28px;font-weight:bold;letter-spacing:4px">{{ .Token }}</p>
+        <p>Type it into Claude Code. It expires in one hour.</p>
+        ```
+     5. Try it: sign in with your own email. Each code shows up under **Emails** in Resend's dashboard, with its delivery status.
 5. **Share the server** with your friends: the project URL and the publishable key, from **Project Settings → API Keys**. Everyone, you included, [connects with them](#connect-to-a-server).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
