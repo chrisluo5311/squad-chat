@@ -81,6 +81,14 @@ function rowsFor(text, width) {
 // The room's messages as rows: date separators, the "new" divider, a header
 // per group of messages from one sender, and the bodies. Each row knows how
 // many terminal rows it takes at `width`, so the newest ones can be fitted.
+// A bubble is as wide as its text (plus a cell of padding each side), up to
+// about three quarters of the room's width; longer text wraps inside it.
+function bubbleWidth(body, width) {
+  const max = Math.max(12, Math.floor(width * 0.78));
+  const longest = Math.max(...String(body).split("\n").map(cells));
+  return Math.min(max, longest + 2);
+}
+
 function messageRows(list, width, dividerAt) {
   const rows = [];
   let prev = null;
@@ -95,8 +103,9 @@ function messageRows(list, width, dividerAt) {
     }
     const sameGroup = prev && !newDay && !isNew && prev.user_id === m.user_id
       && Date.parse(m.at) - Date.parse(prev.at) < GROUP_GAP_MS;
-    if (!sameGroup) rows.push({ kind: "head", key: `h${m.id}`, m, height: 1 });
-    rows.push({ kind: "body", key: `m${m.id}`, m, height: rowsFor(m.body, width - 2) });
+    if (!sameGroup) rows.push({ kind: "head", key: `h${m.id}`, m, height: 2 });   // a blank row, then the header
+    const bubble = bubbleWidth(m.body, width);
+    rows.push({ kind: "body", key: `m${m.id}`, m, bubble, height: rowsFor(m.body, bubble - 2) });
     prev = m;
   }
   return rows;
@@ -130,14 +139,25 @@ function drawRow(els, row, width) {
         Text({ key: "r", color: theme.accent, children: glyph.rule.repeat(Math.max(4, width - 4)) }),
       ] });
     case "head":
-      return Box({ key: row.key, flexShrink: 0, flexDirection: "row", gap: 1, marginTop: 0, children: [
-        Text({ key: "n", bold: true, color: row.m.mine ? theme.accent : nameColor(row.m.user_id), wrap: "truncate-end", children: displayName(row.m) }),
-        Text({ key: "t", color: theme.muted, children: formatTime(row.m.at) }),
+      // Theirs: "name 12:04" on the left. Yours: "12:04 you" on the right.
+      return Box({ key: row.key, flexShrink: 0, flexDirection: "row", gap: 1, marginTop: 1,
+        justifyContent: row.m.mine ? "flex-end" : "flex-start", children: row.m.mine ? [
+          Text({ key: "t", color: theme.muted, children: formatTime(row.m.at) }),
+          Text({ key: "n", bold: true, color: theme.accent, children: "you" }),
+        ] : [
+          Text({ key: "n", bold: true, color: nameColor(row.m.user_id), wrap: "truncate-end", children: displayName(row.m) }),
+          Text({ key: "t", color: theme.muted, children: formatTime(row.m.at) }),
+        ] });
+    default: {
+      // A bubble: yours on the right in the accent, theirs on the left in grey.
+      const mine = row.m.mine;
+      return Box({ key: row.key, flexShrink: 0, flexDirection: "row", justifyContent: mine ? "flex-end" : "flex-start", children: [
+        Box({ key: "bubble", flexDirection: "column", width: row.bubble, paddingX: 1,
+          backgroundColor: mine ? theme.mineBubble : theme.theirBubble, children: [
+            Text({ key: "b", wrap: "wrap", color: mine ? theme.mineText : theme.theirText, children: row.m.body }),
+          ] }),
       ] });
-    default:
-      return Box({ key: row.key, flexShrink: 0, flexDirection: "column", paddingLeft: 2, children: [
-        Text({ key: "b", wrap: "wrap", children: row.m.body }),
-      ] });
+    }
   }
 }
 

@@ -4,7 +4,7 @@ A Claude Code mod: your friends' online status and a group chat in a side pane, 
 
 ![squad-chat docked beside Claude Code](docs/screenshots/pane.png)
 
-> **Status: v0.3.0.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes.
+> **Status: v0.3.1.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes.
 
 ## Install
 

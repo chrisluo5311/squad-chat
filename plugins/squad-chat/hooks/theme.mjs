@@ -9,6 +9,11 @@ export const theme = {
   amber: "#E2B86B",        // secondary highlight: unread badges, the band's "new"
   sky: "#7FB6E2",          // informational dots
   online: "#6CC070",       // online, live
+  // Message bubbles: fixed text and fill, so they read in light and dark themes.
+  mineBubble: "#D97757",
+  mineText: "#1F1E1D",
+  theirBubble: "#3A3836",
+  theirText: "#ECE7E1",
   border: "inactive",      // card borders
   muted: "subtle",         // meta text: times, counts, hints
   warn: "#E2B86B",
