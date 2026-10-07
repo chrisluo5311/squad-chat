@@ -185,7 +185,7 @@ function roomTabs(els, onSelectRoom) {
     if (!r.unread) return tab;
     return Box({ key: `tabbox-${r.id}`, flexDirection: "row", gap: 1, children: [
       tab,
-      Text({ key: "badge", bold: true, color: theme.accent, children: String(r.unread) }),
+      Text({ key: "badge", bold: true, color: theme.amber, children: String(r.unread) }),
     ] });
   }) });
 }
