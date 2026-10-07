@@ -26,6 +26,8 @@ supabase test db    # pgTAP access-control tests
 supabase db advisors --local --type all
 ```
 
+Hosted project: `pijyocogpbiiwccfxqkp` (Tokyo, free plan), with the same two migrations applied.
+
 ## Try it
 
 Requires Claude Code ≥ 2.1.287 and Node ≥ 18 on `PATH`.
