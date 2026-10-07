@@ -110,9 +110,11 @@ const server = createServer(async (req, res) => {
     try { body = raw ? JSON.parse(raw) : {}; } catch { throw new HttpError(400, "body is not JSON"); }
     reply(200, (await route(body)) ?? { ok: true });
   } catch (err) {
-    const status = err instanceof HttpError ? err.status : 500;
-    if (status === 500) log(err?.stack ?? String(err));
-    reply(status, { error: err?.message ?? String(err) });
+    if (err instanceof HttpError) return reply(err.status, { error: err.message });
+    // Anything else is a bug: the details go to stderr (the mod's debug log),
+    // not into the answer.
+    log(err?.stack ?? String(err));
+    reply(500, { error: "something went wrong in the chat bridge (details in the debug log)" });
   }
 });
 

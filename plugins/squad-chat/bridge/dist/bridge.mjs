@@ -22772,9 +22772,9 @@ var server = createServer(async (req, res) => {
     }
     reply(200, await route(body) ?? { ok: true });
   } catch (err) {
-    const status = err instanceof HttpError ? err.status : 500;
-    if (status === 500) log(err?.stack ?? String(err));
-    reply(status, { error: err?.message ?? String(err) });
+    if (err instanceof HttpError) return reply(err.status, { error: err.message });
+    log(err?.stack ?? String(err));
+    reply(500, { error: "something went wrong in the chat bridge (details in the debug log)" });
   }
 });
 var stopping = false;
