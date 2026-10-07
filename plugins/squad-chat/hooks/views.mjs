@@ -3,7 +3,7 @@
 // as many recent messages as fit, input box. Inline (above the prompt): a
 // compact version with the last few messages.
 
-import { state, currentRoom, roomMessages } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, totalUnread } from "./state.mjs";
 
 function formatTime(iso) {
   const d = new Date(iso);
@@ -124,4 +124,27 @@ export function paneView(els, props, { onSubmit, onInput }) {
   }
 
   return Box({ flexDirection: "column", children: rows });
+}
+
+// One line above the prompt while the pane can't be seen (terminal too
+// narrow, or the pane closed): room, who's online, unread, the latest message.
+export function bandView(els, props, { onOpen }) {
+  const { Box, Text, Button } = els;
+  const room = currentRoom();
+  const here = (state.online.get(room?.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
+  const unreadHere = room.unread ?? 0;
+  const unreadElsewhere = totalUnread() - unreadHere;
+  const last = lastMessage();
+  const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
+  const parts = [`💬 #${room.slug}`, live ? `${here} online` : "reconnecting…"];
+  if (unreadHere) parts.push(`${unreadHere} unread`);
+  if (unreadElsewhere) parts.push(`+${unreadElsewhere} in other rooms`);
+  let line = parts.join(" · ");
+  if (last) line += ` │ ${last.user}: ${last.body}`;
+  return Box({ flexDirection: "row", children: [
+    Box({ key: "line", flexGrow: 1, flexShrink: 1, children: [
+      Text({ key: "summary", wrap: "truncate-end", children: line }),
+    ] }),
+    Button({ key: "open", label: "Open", onPress: onOpen }),
+  ] });
 }

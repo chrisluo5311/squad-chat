@@ -2,7 +2,7 @@
 
 A Claude Code mod: your friends' online status and a group chat in a side pane, so you can chat while you vibe code. Chat text never reaches Claude's context and uses no model tokens.
 
-> **Status: Phase 3 done.** The mod runs the real bridge against the hosted Supabase project: sign in, rooms, presence and chat work. Narrow-terminal layouts, unread markers and resilience polish come in Phase 4. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
+> **Status: Phase 4 done.** Sign in, rooms, presence and chat work against the hosted Supabase project, in wide and narrow terminals, through network drops and bridge crashes. Phase 5 is packaging it for friends to install. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
 
 ## What Phase 0 proves
 
@@ -52,7 +52,7 @@ claude plugin test ./plugins/squad-chat
 claude --plugin-dir ./plugins/squad-chat
 ```
 
-Then type `/chat` to open the pane. In a terminal at least 110 columns wide (fullscreen) it docks on the right; narrower, it sits above the prompt.
+Then type `/chat` to open the pane. In a terminal at least 110 columns wide (fullscreen) it docks on the right; narrower, it sits above the prompt in a compact form. While the pane is closed or can't be placed, a one-line band above the prompt shows the room, who's online, unread counts and the latest message, with an **Open** button. Unread counts also show on the status line; a room counts as read once you look at it in the focused pane or send from it.
 
 | | |
 |---|---|
@@ -61,6 +61,7 @@ Then type `/chat` to open the pane. In a terminal at least 110 columns wide (ful
 | Chat | Type in the pane and press Enter, or `/say <message>` from the prompt. |
 | Friends | The pane shows who's online. `/who` lists everyone you share a room with. |
 | Sign out | `/chat-logout`. |
+| Mentions | `/chat notify on` toasts when someone writes `@yourname` while you aren't looking at that room (off by default). |
 
 The pane's input box also takes `/room`, `/who` and `/logout`. Anything typed there never enters the conversation. For slash commands, the arguments of `/say`, `/room` and `/chat-login` are replaced with a placeholder before Claude Code stores the row, and the commands' answers are notices the model never reads. A copy of a slash command's raw text stays only in the local transcript's input-queue line on your own disk, so type passcodes in the pane if that matters to you.
 

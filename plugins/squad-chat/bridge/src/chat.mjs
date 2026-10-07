@@ -63,6 +63,7 @@ export class Chat {
     this.nextKick = 0;
     this.kickGap = 0;
     this.friendsLoading = null;
+    this.leftAt = new Map();        // user id → when presence last saw them leave
 
     // A refresh token that stops working (revoked, signed out elsewhere)
     // ends the session. Don't call Supabase from inside this callback.
@@ -297,13 +298,17 @@ export class Chat {
     channel
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${room.id}` },
-        ({ new: row }) => this.enqueue(room, [row], false))
+        ({ new: row }) => this.enqueue(room, [row], { backfill: false, count: true }))
       .on("presence", { event: "sync" }, () => this.presenceChanged(room))
       .subscribe(async (status, err) => {
         if (this.closing || this.rooms.get(room.id) !== room) return;
         room.status = status;
         this.emit({ type: "status", room: room.id, status, ...(err ? { error: err.message } : {}) });
-        if (status !== "SUBSCRIBED") return;
+        if (status !== "SUBSCRIBED") {
+          // Presence from a dropped channel is stale until it rejoins.
+          if (room.online.size) this.presenceChanged(room, { clear: true });
+          return;
+        }
         await channel.track({ user_id: me.id, name: me.name, at: new Date().toISOString() }).catch(() => {});
         await this.backfill(room).catch((e) => this.emit({ type: "error", message: `backfill failed: ${e.message}` }));
       });
@@ -317,13 +322,17 @@ export class Chat {
     }
   }
 
-  presenceChanged(room) {
+  presenceChanged(room, { clear = false } = {}) {
+    const before = new Set(room.online.keys());
     room.online.clear();
-    for (const [key, metas] of Object.entries(room.channel.presenceState())) {
+    for (const [key, metas] of clear ? [] : Object.entries(room.channel.presenceState())) {
       const name = metas[0]?.name;
       room.online.set(key, name ?? this.names.get(key) ?? "someone");
       if (name) this.names.set(key, name);
     }
+    // Someone dropped out of a live channel: they left (unless it is our own
+    // channel that dropped, `clear`). A newer heartbeat can bring them back.
+    if (!clear) for (const id of before) if (!room.online.has(id)) this.leftAt.set(id, Date.now());
     this.emit({ type: "presence", room: room.id, online: [...room.online].map(([user_id, name]) => ({ user_id, name })) });
     // Someone new in the room isn't in the friends list yet: reload it.
     const known = new Set(this.friends.map((f) => f.user_id));
@@ -342,7 +351,7 @@ export class Chat {
       const { data, error } = await this.sb.from("messages").select(cols)
         .eq("room_id", room.id).order("id", { ascending: false }).limit(HISTORY);
       if (error) throw fail(error, "could not load history");
-      await this.enqueue(room, data.reverse(), true);
+      await this.enqueue(room, data.reverse(), { backfill: true, count: false });   // already in the unread count
       return;
     }
     let after = Math.max(0, room.lastSeenId - BACKFILL_OVERLAP);
@@ -350,13 +359,16 @@ export class Chat {
       const { data, error } = await this.sb.from("messages").select(cols)
         .eq("room_id", room.id).gt("id", after).order("id", { ascending: true }).limit(BACKFILL_PAGE);
       if (error) throw fail(error, "could not catch up");
-      await this.enqueue(room, data, true);
+      await this.enqueue(room, data, { backfill: true, count: true });
       if (data.length < BACKFILL_PAGE) return;
       after = data[data.length - 1].id;
     }
   }
 
-  enqueue(room, rows, backfill) {
+  // `count`: these may be news to the person (live, or caught up after a
+  // reconnect), so others' messages past the read marker add to room.unread.
+  // Every message event carries the room's unread count after it.
+  enqueue(room, rows, { backfill, count }) {
     room.queue = room.queue.then(async () => {
       const fresh = rows.filter((r) => !room.seen.has(r.id));
       if (!fresh.length) return;
@@ -365,9 +377,13 @@ export class Chat {
         if (room.seen.has(row.id)) continue;
         room.seen.add(row.id);
         room.lastSeenId = Math.max(room.lastSeenId, row.id);
+        const counted = count && row.user_id !== this.user?.id && row.id > room.lastReadId;
+        if (counted) room.unread++;
         this.emit({
           type: "message",
           backfill,
+          counted,
+          unread: room.unread,
           message: {
             id: row.id,
             room: room.id,
@@ -403,7 +419,7 @@ export class Chat {
     const { data, error } = await this.sb.from("messages").insert({ room_id: room.id, body })
       .select("id, room_id, user_id, body, created_at").single();
     if (error) throw fail(error, "could not send");
-    await this.enqueue(room, [data], false);   // show it now; the realtime copy is dropped as a duplicate
+    await this.enqueue(room, [data], { backfill: false, count: true });   // show it now; the realtime copy is dropped as a duplicate
     return { id: data.id };
   }
 
@@ -441,16 +457,21 @@ export class Chat {
   }
 
   // Online = tracked in any room channel, or a recent heartbeat (clients
-  // without a socket only send heartbeats).
+  // without a socket only send heartbeats) newer than their last presence leave.
   friendList() {
     const now = Date.now();
     const present = new Set();
     for (const room of this.rooms.values()) for (const id of room.online.keys()) present.add(id);
+    const recentBeat = (f) => {
+      if (f.last_seen == null) return false;
+      const beat = Date.parse(f.last_seen);
+      return now - beat < ONLINE_WINDOW_MS && beat > (this.leftAt.get(f.user_id) ?? 0);
+    };
     return this.friends.map((f) => ({
       user_id: f.user_id,
       name: f.display_name,
       rooms: f.rooms,
-      online: present.has(f.user_id) || (f.last_seen != null && now - Date.parse(f.last_seen) < ONLINE_WINDOW_MS),
+      online: present.has(f.user_id) || recentBeat(f),
     })).sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
   }
 

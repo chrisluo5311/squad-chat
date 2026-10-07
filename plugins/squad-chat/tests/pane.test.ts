@@ -3,7 +3,7 @@ import { test, expect, mock } from 'claude-code/testing'
 // The bridge, faked beneath the plugin: `node --version` answers, the spawned
 // child prints whatever the test pushes, and control requests are recorded and
 // answered from `replies`.
-function fakeBridge(on: any, { node = 'v22.17.0' } = {}) {
+function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, unknown> } = {}) {
   const lines: string[] = []
   let wake: (() => void) | null = null
   const calls: { path: string; body: any }[] = []
@@ -12,6 +12,7 @@ function fakeBridge(on: any, { node = 'v22.17.0' } = {}) {
   // The harness never starts a session on its own: answer what the plugin's
   // session.start leans on, and `start($)` raises it.
   mock.clock(on)   // the bridge loop reads the time and sleeps between restarts
+  mock.store(on, store)
   on('session.start', async () => ({ cwd: '/' }))
   on('command.register', async (_$: any, e: any) => ({ value: { command: e.name } }))
   on('process.run', async () => ({
@@ -57,6 +58,8 @@ const SLOW = { timeoutMs: 20_000 }
 const ME = { id: 'u-me', name: 'me', email: 'me@example.com' }
 const BOB = { user_id: 'u-bob', name: 'bob' }
 const LOBBY = { id: 'r-lobby', slug: 'lobby', last_read_id: 0, unread: 0 }
+// A message the bridge counted as news, and the room's unread count after it.
+const news = (unread: number, m: object) => ({ ...m, counted: true, unread })
 const msg = (id: number, user: string, body: string, extra: object = {}) => ({
   type: 'message', backfill: false,
   message: { id, room: LOBBY.id, slug: 'lobby', user_id: `u-${user}`, user, mine: user === 'me', body, at: '2026-10-07T04:15:00Z', ...extra },
@@ -157,4 +160,70 @@ test('an old Node is reported instead of starting the bridge', SLOW, async ($, o
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
   expect(await ui.find({ type: 'Text', text: /needs Node 22 or newer \(found v20.11.0\)/ })).toBeDefined()
   await ui.unmount()
+})
+
+const BAND = { plugin: 'squad-chat', component: 'AbovePrompt' } as const
+const bandProps = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 100, scroll: { offset: 0, bodyRows: 6 }, view: {} } as any
+
+// What the plugin shows outside its pane, recorded beneath it.
+function recordUi(on: any, { panes = [] as any[] } = {}) {
+  const seen = { statuses: [] as (string | undefined)[], toasts: [] as string[], opened: [] as string[] }
+  on('ui.status', (_$: any, e: any) => { seen.statuses.push(e && typeof e === 'object' ? e.text : e); return { value: undefined } })
+  on('ui.toast', (_$: any, e: any) => { seen.toasts.push(e.text ?? e); return { value: undefined } })
+  on('ui.panes', () => ({ value: panes }))
+  on('ui.open', (_$: any, e: any) => { seen.opened.push(e.id); return { value: { isPlaced: true } } })
+  // The engine's own band, for when the plugin passes: nothing.
+  on('ui.render', { component: 'AbovePrompt' }, (t$: any, e: any) => t$.ui.resolve(e).Box({ children: [] }))
+  return seen
+}
+
+test('band: shows the room above the prompt while the pane is not up, and opens it', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(news(1, msg(1, 'bob', 'are you around?')))
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: /💬 #lobby · 1 online · 1 unread │ bob: are you around\?/ })).toBeDefined()
+  await ui.press({ key: 'open' })
+  expect(seen.opened).toEqual(['squad-chat'])
+  await ui.unmount()
+})
+
+test('band: stays out of the way while the pane is shown', SLOW, async ($, on) => {
+  recordUi(on, { panes: [{ id: 'squad-chat', title: 'Squad Chat', isShown: true, isFocused: false, isPlaced: true }] })
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: /💬/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('unread shows on the status line and clears when the pane is focused', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(news(1, msg(7, 'bob', 'one')), news(2, msg(8, 'bob', 'two')))
+  await settle()
+  expect(seen.statuses.at(-1)).toBe('💬 #lobby 2')
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })   // isFocused: true
+  await settle()
+  expect(bridge.calls.find((c) => c.path === '/read')).toEqual({ path: '/read', body: { room: LOBBY.id, last_id: 8 } })
+  expect(seen.statuses.at(-1)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('an @mention toasts only with /chat notify on', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on, { store: { notify: true } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(news(1, msg(9, 'bob', 'hey @me, lunch?')), news(2, msg(10, 'bob', 'and @meg too')))
+  await settle()
+  expect(seen.toasts).toEqual(['💬 bob in #lobby: hey @me, lunch?'])
 })

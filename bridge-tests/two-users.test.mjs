@@ -105,6 +105,7 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
 
   it("catches up exactly once after a network drop", async () => {
     const before = alice.messages(room.id).length;
+    const unreadBefore = alice.events.filter((e) => e.type === "message").at(-1).unread;
     const mark = alice.events.length;
     proxy.cut();
     await alice.waitFor((e) => alice.events.indexOf(e) >= mark && e.type === "status" && e.room === room.id
@@ -122,6 +123,8 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
     const after = alice.messages(room.id).slice(before);
     assert.deepEqual(after.map((m) => m.body), ["while", "you", "were away"]);
     assert.ok(after.every((m) => m.backfill), "missed messages come from backfill");
+    const unreadAfter = alice.events.filter((e) => e.type === "message").at(-1).unread;
+    assert.equal(unreadAfter, unreadBefore + 3, "each missed message counts as unread once");
   });
 
   it("keeps the session across restarts and replays recent history", async () => {
@@ -157,6 +160,10 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
       && !e.online.some((u) => u.name === `alice-${id}`), 60_000, "alice to leave");
     const secs = (Date.now() - t0) / 1000;
     assert.ok(secs <= 60, `left after ${secs}s`);
+    // The friends list agrees at once: alice's recent heartbeat doesn't keep
+    // her "online" after presence saw her go.
+    await bob.waitFor((e) => bob.events.indexOf(e) >= mark && e.type === "friends"
+      && e.friends.some((f) => f.name === `alice-${id}` && !f.online), 5_000, "alice offline in friends");
     console.log(`# alice shown offline ${secs.toFixed(1)}s after kill -9`);
   });
 

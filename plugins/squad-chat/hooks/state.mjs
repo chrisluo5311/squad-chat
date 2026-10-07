@@ -20,6 +20,9 @@ export const state = {
   friends: [],            // [{ user_id, name, online, rooms }]
   notice: "",             // last error or hint, shown in the pane
   draft: "",              // what's typed in the pane's input box, kept across redraws
+  paneFocused: false,     // the pane holds the keyboard: messages there count as read
+  notify: false,          // toast @mentions (/chat notify on), kept in $.store
+  mention: null,          // newest unseen message that @mentions me, until toasted
   ended: false,
 };
 
@@ -29,6 +32,30 @@ export function currentRoom() {
 
 export function roomMessages(roomId = state.current) {
   return state.messages.get(roomId) ?? [];
+}
+
+export function totalUnread() {
+  return state.rooms.reduce((n, r) => n + (r.unread ?? 0), 0);
+}
+
+// "@ann" or "@Ann," mentions ann, not "@anna".
+export function mentions(body, name) {
+  if (!name) return false;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\w@])@${escaped}(?![\\w-])`, "i").test(body);
+}
+
+// The status line: unread counts, or nothing.
+export function statusText() {
+  if (state.auth !== "signed_in") return undefined;
+  const unread = state.rooms.filter((r) => r.unread > 0);
+  if (!unread.length) return undefined;
+  return `💬 ${unread.map((r) => `#${r.slug} ${r.unread}`).join(" · ")}`;
+}
+
+// The latest message in the current room, for the band.
+export function lastMessage() {
+  return roomMessages().at(-1) ?? null;
 }
 
 function addMessage(m) {
@@ -75,10 +102,12 @@ export function applyEvent(event) {
     case "message": {
       const m = event.message;
       if (!addMessage(m)) return false;
-      if (!event.backfill && !m.mine && m.room !== state.current) {
-        const room = state.rooms.find((r) => r.id === m.room);
-        if (room) room.unread = (room.unread ?? 0) + 1;
-      }
+      // The bridge keeps the unread count (it knows the read marker and what
+      // it has already counted); a focused pane marks the room read at once.
+      const room = state.rooms.find((r) => r.id === m.room);
+      if (room && typeof event.unread === "number") room.unread = event.unread;
+      const seen = m.room === state.current && state.paneFocused;
+      if (event.counted && !seen && mentions(m.body, state.user?.name)) state.mention = m;
       return true;
     }
     case "presence":

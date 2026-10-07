@@ -7,9 +7,9 @@
 //   commands.mjs  slash commands and the pane's input box
 //   views.mjs     the pane
 
-import { state, applyEvent, resetBridgeState } from "./state.mjs";
+import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText } from "./state.mjs";
 import { PRIVATE_ARGS, login, logout, room, who, sendMessage, paneInput } from "./commands.mjs";
-import { paneView } from "./views.mjs";
+import { paneView, bandView } from "./views.mjs";
 
 const PANE_ID = "squad-chat";
 const MIN_NODE_MAJOR = 22;
@@ -71,7 +71,7 @@ async function runBridge($) {
           let event;
           try { event = JSON.parse(line); }
           catch { $.ui.log(`squad-chat bridge: unparsable line: ${line.slice(0, 120)}`, { to: "debug" }); continue; }
-          if (applyEvent(event)) $.ui.invalidate("ui.render");
+          if (applyEvent(event)) afterChange($);
         }
       }
     } catch (err) {
@@ -137,6 +137,38 @@ async function openPane($) {
   if (opened?.isPlaced === false) $.ui.toast("squad-chat: widen the terminal to see the chat pane");
 }
 
+// After any state change: redraw, refresh the status line, and toast an
+// @mention when the person asked for that (/chat notify on).
+function afterChange($) {
+  $.ui.invalidate("ui.render");
+  $.ui.status(statusText());
+  if (state.mention) {
+    const m = state.mention;
+    state.mention = null;
+    if (state.notify) $.ui.toast(`💬 ${m.user} in #${m.slug}: ${m.body.slice(0, 80)}`);
+  }
+}
+
+// Tell the bridge the current room is read up to its newest message. Runs
+// when the pane has the keyboard and when the person sends from it.
+let marking = false;
+async function markRead($) {
+  const room = currentRoom();
+  const newest = roomMessages().at(-1)?.id ?? 0;
+  if (marking || !room || (!room.unread && newest <= room.last_read_id)) return;
+  marking = true;
+  try {
+    await callBridge($, "/read", { room: room.id, last_id: newest });
+    room.last_read_id = Math.max(room.last_read_id, newest);
+    room.unread = 0;
+    afterChange($);
+  } catch (err) {
+    $.ui.log(`squad-chat: could not mark read: ${err?.message ?? err}`, { to: "debug" });
+  } finally {
+    marking = false;
+  }
+}
+
 async function submitFromPane($, value) {
   const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
   state.draft = "";
@@ -144,6 +176,7 @@ async function submitFromPane($, value) {
   $.ui.invalidate("ui.render");
   try {
     await paneInput((path, body) => callBridge($, path, body), value, say);
+    await markRead($);   // they're looking at the room they just wrote in
   } catch (err) {
     say(err?.message ?? String(err));
   }
@@ -165,12 +198,13 @@ async function answer($, fn) {
 export function register(on) {
   on("session.start", async ($, e, next) => {
     const r = await next(e);
-    await $.command.register({ name: "chat", description: "squad-chat: open the chat pane", immediate: true });
+    await $.command.register({ name: "chat", description: "squad-chat: open the chat pane (/chat notify on|off: toast @mentions)", argumentHint: "[notify on|off]", immediate: true });
     await $.command.register({ name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>", immediate: true });
     await $.command.register({ name: "room", description: "squad-chat: list rooms, switch, or join/create one", argumentHint: "[name] [passcode]", immediate: true });
     await $.command.register({ name: "who", description: "squad-chat: who's online", immediate: true });
     await $.command.register({ name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>", immediate: true });
     await $.command.register({ name: "chat-logout", description: "squad-chat: sign out on this computer", immediate: true });
+    state.notify = (await $.store.get("notify")) === true;
     if (!bridgeStarted) {
       bridgeStarted = true;
       void runBridge($);
@@ -178,7 +212,13 @@ export function register(on) {
     return r;
   });
 
-  on("command.run", { command: "chat" }, ($) => answer($, () => openPane($)));
+  on("command.run", { command: "chat" }, ($, e) => answer($, async (call, say) => {
+    const m = /^notify\s+(on|off)$/i.exec(String(e.args ?? "").trim());
+    if (!m) return openPane($);
+    state.notify = m[1].toLowerCase() === "on";
+    await $.store.set("notify", state.notify);
+    say(state.notify ? "squad-chat: will toast when someone @mentions you." : "squad-chat: mention toasts off.");
+  }));
   on("command.run", { command: "say" }, ($, e) => answer($, (call, say) => sendMessage(call, e.args, say)));
   on("command.run", { command: "room" }, ($, e) => answer($, (call, say) => room(call, e.args, say)));
   on("command.run", { command: "who" }, ($) => answer($, (call, say) => who(say)));
@@ -190,10 +230,30 @@ export function register(on) {
 
   on("ui.render", { component: "Pane" }, ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e);
-    return paneView($.ui.resolve(e), e.props ?? {}, {
+    const props = e.props ?? {};
+    state.paneFocused = props.isFocused === true;
+    if (state.paneFocused) void markRead($);
+    return paneView($.ui.resolve(e), props, {
       onInput: (value) => { state.draft = value; },
       onSubmit: (value) => { void submitFromPane($, value); },
     });
+  });
+
+  // While the pane can't be seen (too narrow to place, or closed), a one-line
+  // band above the prompt keeps the room in view. It yields to surveys.
+  on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
+    if (e.props?.hasSurvey || state.auth !== "signed_in" || !currentRoom()) return next(e);
+    const panes = await $.ui.panes();
+    if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
+    return bandView($.ui.resolve(e), e.props ?? {}, { onOpen: () => { void openPane($); } });
+  });
+
+  on("ui.close", ($, e, next) => {
+    if (e.id === PANE_ID) {
+      state.paneFocused = false;
+      $.ui.invalidate("ui.render");
+    }
+    return next(e);
   });
 
   on("session.append", { door: "command" }, ($, e, next) => {
