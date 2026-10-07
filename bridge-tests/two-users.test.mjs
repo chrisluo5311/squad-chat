@@ -151,6 +151,44 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
     assert.equal(rooms.rooms[0].last_read_id, last);
   });
 
+  // Events that arrive after this point, for waitFor.
+  const since = (b) => { const mark = b.events.length; return (pred) => (e) => b.events.indexOf(e) >= mark && pred(e); };
+
+  it("shows who's typing, until they send or go quiet", async () => {
+    const typing = (e, name) => e.type === "typing" && e.room === room.id && e.users.some((u) => u.name === name);
+    const quiet = (e) => e.type === "typing" && e.room === room.id && e.users.length === 0;
+
+    let after = since(bob);
+    await alice.ok("POST", "/typing", { room: room.id });
+    await bob.waitFor(after((e) => typing(e, `alice-${id}`)), 10_000, "alice typing");
+    after = since(bob);
+    await alice.ok("POST", "/send", { text: "done typing", room: room.id });
+    await bob.waitFor(after(quiet), 10_000, "typing to end with the message");
+
+    await sleep(2100);   // past the bridge's send throttle
+    after = since(bob);
+    await alice.ok("POST", "/typing", { room: room.id });
+    await bob.waitFor(after((e) => typing(e, `alice-${id}`)), 10_000, "alice typing again");
+    const t0 = Date.now();
+    await bob.waitFor(after(quiet), 10_000, "typing to time out");
+    assert.ok(Date.now() - t0 >= 4000, "typing lasts about 5 seconds");
+    assert.ok(!alice.events.some((e) => e.type === "typing" && e.users.length), "nobody sees themselves typing");
+  });
+
+  it("renames: the room hears the new name, and names stay unique", async () => {
+    assert.equal((await bob.call("POST", "/name", { name: `alice-${id}` })).status, 409);
+    assert.equal((await bob.call("POST", "/name", { name: "has space" })).status, 400);
+    const after = since(alice);
+    assert.deepEqual(await bob.ok("POST", "/name", { name: `robert-${id}` }), { name: `robert-${id}` });
+    await bob.waitFor((e) => e.type === "auth" && e.user?.name === `robert-${id}`, 10_000, "bob's new name");
+    await alice.waitFor(after((e) => e.type === "name" && e.name === `robert-${id}`), 10_000, "alice to hear the new name");
+    await alice.waitFor(after((e) => e.type === "presence" && e.room === room.id && e.online.some((u) => u.name === `robert-${id}`)),
+      10_000, "the new name in presence");
+    const sent = await bob.ok("POST", "/send", { text: "call me robert", room: room.id });
+    const msg = await alice.waitFor((e) => e.type === "message" && e.message.id === sent.id, 10_000, "bob's message");
+    assert.equal(msg.message.user, `robert-${id}`);
+  });
+
   it("deletes a room: only its creator can, and members drop it", async () => {
     const temp = await alice.ok("POST", "/room", { slug: `temp-${id}`, passcode: "pass1234" });
     await bob.ok("POST", "/room", { slug: `temp-${id}`, passcode: "pass1234" });

@@ -16,6 +16,7 @@ export const state = {
   current: null,          // room id
   messages: new Map(),    // room id → [{ id, user, user_id, mine, body, at }] sorted by id
   online: new Map(),      // room id → [{ user_id, name }]
+  typing: new Map(),      // room id → [{ user_id, name }] typing there now
   roomStatus: new Map(),  // room id → SUBSCRIBED | CHANNEL_ERROR | ...
   friends: [],            // [{ user_id, name, online, rooms }]
   notice: "",             // last error or hint, shown in the pane
@@ -54,6 +55,15 @@ export function statusText() {
   return `💬 ${unread.map((r) => `#${r.slug} ${r.unread}`).join(" · ")}`;
 }
 
+// "sam is typing…" for a room, or "".
+export function typingText(roomId = state.current) {
+  const names = (state.typing.get(roomId) ?? []).filter((u) => u.user_id !== state.user?.id).map((u) => u.name);
+  if (!names.length) return "";
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return "several people are typing…";
+}
+
 // The latest message in the current room, for the band.
 export function lastMessage() {
   return roomMessages().at(-1) ?? null;
@@ -88,6 +98,7 @@ export function applyEvent(event) {
         state.email = null;
         state.messages.clear();
         state.online.clear();
+        state.typing.clear();
         state.friends = [];
         if (event.reason) state.notice = event.reason;
       }
@@ -117,6 +128,15 @@ export function applyEvent(event) {
     case "presence":
       state.online.set(event.room, event.online);
       return true;
+    case "typing":
+      state.typing.set(event.room, event.users);
+      return true;
+    case "name":
+      // Someone changed their name: messages already here show the new one.
+      for (const list of state.messages.values()) {
+        for (const m of list) if (m.user_id === event.user_id) m.user = event.name;
+      }
+      return true;
     case "friends":
       state.friends = event.friends;
       return true;
@@ -142,4 +162,5 @@ export function resetBridgeState() {
   state.auth = "starting";
   state.roomStatus.clear();
   state.online.clear();
+  state.typing.clear();
 }

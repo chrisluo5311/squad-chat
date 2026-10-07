@@ -56,7 +56,8 @@ Two rules of the mod runtime shape the code:
 * **Joining:** only through `join_room(slug, passcode)`, which creates the room if it doesn't exist and locks a caller out for 15 minutes after 5 wrong passcodes. Privileged helpers live in an unexposed `private` schema.
 * **Deleting:** only the room's creator can delete it, and its members and messages go with it.
 * **Limits:** a trigger caps each user at 10 messages per 10 seconds. `pg_cron` deletes messages older than 30 days.
-* **Realtime:** private `room:<uuid>` channels. Policies on `realtime.messages` let only members receive a room's channel or track presence on it. New messages arrive through `postgres_changes`, filtered by the table's own RLS.
+* **Renaming:** people may change only their own display name, and names stay unique.
+* **Realtime:** private `room:<uuid>` channels. Policies on `realtime.messages` let only members receive a room's channel, track presence on it, or broadcast on it (typing indicators). New messages arrive through `postgres_changes`, filtered by the table's own RLS.
 
 `supabase/tests/rls.test.sql` checks all of this with pgTAP: non-members see nothing, nobody can post as someone else or backdate a message, wrong passcodes fail and lock out, the flood limit holds, only creators delete rooms.
 
@@ -71,7 +72,7 @@ Two ways to sign in, both through Supabase Auth:
 
 `plugins/squad-chat/bridge/src/`:
 
-* `bridge.mjs`: the process. Control API over the Unix socket (`/login/name`, `/login/start`, `/login/verify`, `/logout`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/read`, `/who`, `/state`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `friends`, `status`, `error`), and the parent watch.
+* `bridge.mjs`: the process. Control API over the Unix socket (`/login/name`, `/login/start`, `/login/verify`, `/logout`, `/name`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/typing`, `/read`, `/who`, `/state`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `typing`, `name`, `friends`, `status`, `error`), and the parent watch.
 * `chat.mjs`: everything Supabase. Sign-in with the emailed code, rooms, one private channel per room, catch-up, unread counts, heartbeats and the friends list.
 * `file-storage.mjs`: the session file, `~/.config/squad-chat/session.json`, written `0600` through a temp file and a rename.
 
@@ -81,6 +82,8 @@ Things that took a while to get right:
 * **Reconnecting.** realtime-js retries once after the connection drops. If that attempt fails while the network is still down, the socket stays "connecting" forever. A watchdog forces `disconnect()` then `connect()` after 10 s offline, with backoff.
 * **Unread counts.** The bridge owns them: the database's count when a room is first seen, then each live or caught-up message from someone else past the read marker. Recounting later would double what catch-up adds.
 * **Presence.** Online means present in any room's channel, or a heartbeat newer than that person's last presence leave. Without that rule, a recent heartbeat kept someone "online" for minutes after they quit.
+* **Typing.** Keystrokes in the pane reach the bridge at most every 2 seconds, and the bridge broadcasts at most that often per room. Receivers show someone as typing until their message arrives or 5 seconds pass. The broadcast carries only a user id, and the name comes from the receiver's own records, so nobody can type under a made-up name.
+* **Renaming.** A new name goes to the database, then out through presence, so roommates see it at once. The bridge tells the mod when a known name changes, and the pane relabels messages already on screen.
 
 `dist/bridge.mjs` is one file bundled by esbuild and committed, so installing the plugin needs no `npm install`.
 

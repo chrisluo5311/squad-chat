@@ -7,7 +7,7 @@
 // Inline (above the prompt): one header line, the last few messages, input.
 // Band (pane not up): one line with an Open button.
 
-import { state, currentRoom, roomMessages, lastMessage, totalUnread } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText } from "./state.mjs";
 import { theme, nameColor, glyph } from "./theme.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
@@ -242,6 +242,12 @@ function hints(els, text) {
   return Text({ key: "hints", color: theme.muted, wrap: "truncate-end", children: text });
 }
 
+// "sam is typing…", in the row the key hints use, so nothing moves.
+function typingLine(els, text) {
+  const { Text } = els;
+  return Text({ key: "hints", color: theme.muted, italic: true, wrap: "truncate-end", children: `${glyph.typing} ${text}` });
+}
+
 function notice(els) {
   const { Text } = els;
   return state.notice ? Text({ key: "notice", color: theme.warn, wrap: "wrap", children: state.notice }) : null;
@@ -337,7 +343,8 @@ function dockView(els, props, handlers) {
     }));
     if (n) parts.push(n);
     if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused));
-    parts.push(hints(els, "enter send · esc back · /room · /who · /help"));
+    const typing = typingText(room.id);
+    parts.push(typing ? typingLine(els, typing) : hints(els, "enter send · esc back · /room · /who · /help"));
   } else {
     parts.push(setupCard(els, width));
     const n = notice(els);
@@ -383,6 +390,8 @@ function inlineView(els, props, handlers) {
         Text({ key: "b", wrap: "truncate-end", children: m.body }),
       ] }));
     }
+    const typing = typingText(room.id);
+    if (typing) parts.push(typingLine(els, typing));
   } else {
     parts.push(titleBar(els));
     parts.push(setupCard(els, width));
@@ -413,6 +422,7 @@ export function bandView(els, props, { onOpen }) {
   const unreadElsewhere = totalUnread() - unreadHere;
   const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
   const last = lastMessage();
+  const typing = typingText(room.id);
   // Everything but the message keeps its size; the message gives way.
   const fixed = (key, children, style = {}) => Box({ key, flexShrink: 0, children: [Text({ key: "t", children, ...style })] });
   const bits = [
@@ -421,7 +431,10 @@ export function bandView(els, props, { onOpen }) {
   ];
   if (unreadHere) bits.push(fixed("unread", ` ${unreadHere} new `, { bold: true, color: theme.onAccent, backgroundColor: theme.accent }));
   if (unreadElsewhere) bits.push(fixed("elsewhere", `+${unreadElsewhere}`, { color: theme.muted }));
-  if (last) {
+  if (typing) {
+    bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
+    bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", color: theme.muted, italic: true, wrap: "truncate-end", children: typing })] }));
+  } else if (last) {
     bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
     bits.push(fixed("who", displayName(last), { bold: true, color: last.mine ? theme.you : nameColor(last.user_id) }));
     bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", children: last.body })] }));

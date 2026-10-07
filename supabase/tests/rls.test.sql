@@ -177,6 +177,21 @@ select tests.act_as('carol');
 select is((select count(*)::int from public.presence_heartbeats), 0, 'stranger sees no heartbeats');
 select is((select count(*)::int from public.my_friends()), 0, 'stranger has no friends yet');
 
+-- ---------------------------------------------------------------- renaming
+
+select tests.act_as('bob');
+select lives_ok($$ update public.profiles set display_name = 'bobby' where id = auth.uid() $$,
+  'renames self');
+select throws_ok($$ update public.profiles set display_name = 'alice' where id = auth.uid() $$,
+  '23505', null, 'cannot take a name in use');
+select throws_ok($$ update public.profiles set display_name = 'has space' where id = auth.uid() $$,
+  '23514', null, 'a name must be letters, digits, - or _');
+update public.profiles set display_name = 'mallory' where id = tests.uid('alice');
+reset role;
+select is((select display_name from public.profiles where id = tests.uid('alice')), 'alice',
+  'cannot rename someone else');
+update public.profiles set display_name = 'bob' where id = tests.uid('bob');
+
 -- ---------------------------------------------------------------- realtime authorization
 
 reset role;
@@ -198,10 +213,14 @@ select throws_ok($$ insert into realtime.messages (topic, extension, event, payl
                     values ('room:' || tests.room('lobby'), 'presence', 'track', '{}', true) $$,
   '42501', null, 'non-member cannot track presence');
 
-select tests.act_as('alice');
 select throws_ok($$ insert into realtime.messages (topic, extension, event, payload, private)
-                    values ('room:' || tests.room('lobby'), 'broadcast', 'x', '{}', true) $$,
-  '42501', null, 'member cannot broadcast (presence only)');
+                    values ('room:' || tests.room('lobby'), 'broadcast', 'typing', '{}', true) $$,
+  '42501', null, 'non-member cannot broadcast');
+
+select tests.act_as('alice');
+select lives_ok($$ insert into realtime.messages (topic, extension, event, payload, private)
+                   values ('room:' || tests.room('lobby'), 'broadcast', 'typing', '{}', true) $$,
+  'member can broadcast (typing)');
 select set_config('realtime.topic', 'room:not-a-uuid', true);
 select is(private.is_room_topic_member((select realtime.topic())), false,
   'malformed topic is denied, not an error');

@@ -20,8 +20,8 @@ Only the latest release gets security fixes. Update with `claude plugin marketpl
 
 | Version | Supported |
 | --- | --- |
-| 0.4.x | ✅ |
-| < 0.4 | ❌ |
+| 0.5.x | ✅ |
+| < 0.5 | ❌ |
 
 ## What's in scope
 

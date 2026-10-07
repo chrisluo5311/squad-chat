@@ -41,6 +41,16 @@ export async function login(call, arg, say) {
     : "Sign in with your email (/chat-login you@example.com) or a name of 1-24 letters, digits, - or _.");
 }
 
+// A new display name for this account, unique on the server.
+export async function rename(call, arg, say) {
+  arg = String(arg ?? "").trim().replace(/^@/, "");
+  requireSignedIn();
+  if (!arg) return say(`You're ${state.user?.name}. Change it with /chat-name <new name>.`);
+  if (!NAME.test(arg)) return say("A name is 1-24 letters, digits, - or _.");
+  const r = await call("/name", { name: arg });
+  return say(`You're now ${r.name}.`);
+}
+
 let pendingLogout = 0;   // until when a second /chat-logout confirms
 
 export async function logout(call, say) {
@@ -139,8 +149,9 @@ export async function paneInput(call, value, say) {
       case "who": return who(say);
       case "login": case "chat-login": return login(call, args, say);
       case "logout": case "chat-logout": return logout(call, say);
+      case "name": case "chat-name": return rename(call, args, say);
       case "say": return sendMessage(call, args, say);
-      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /logout · anything else is a message");
+      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /logout · anything else is a message");
       default: return say(`Unknown command /${cmd}. Try /help.`);
     }
   }

@@ -8,12 +8,13 @@
 //   views.mjs     the pane
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, room, who, sendMessage, paneInput } from "./commands.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 
 const PANE_ID = "squad-chat";
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
+const TYPING_PING_MS = 2_000;
 
 // ---------------------------------------------------------------- the bridge
 
@@ -195,11 +196,24 @@ async function keepFocusAcrossRoomChange($, before) {
   await $.ui.focus({ requestId: PANE_ID, key: "compose" });
 }
 
+// While a message is being typed in the pane, tell the room every couple of
+// seconds. Commands and sign-in steps aren't messages, so they stay quiet.
+let lastTypingPing = 0;
+function typingPing($, value) {
+  const text = String(value ?? "").trimStart();
+  if (!text || text.startsWith("/") || state.auth !== "signed_in" || !currentRoom()) return;
+  const now = Date.now();
+  if (now - lastTypingPing < TYPING_PING_MS) return;
+  lastTypingPing = now;
+  callBridge($, "/typing", { room: state.current }).catch(() => { /* a missed ping only hides a hint */ });
+}
+
 async function submitFromPane($, value) {
   const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
   const before = { current: state.current, count: state.rooms.length };
   state.draft = "";
   state.notice = "";
+  lastTypingPing = 0;
   $.ui.invalidate("ui.render");
   try {
     await paneInput((path, body) => callBridge($, path, body), value, say);
@@ -246,6 +260,7 @@ export function register(on, options) {
     await $.command.register({ name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>", immediate: true });
     await $.command.register({ name: "who", description: "squad-chat: who's online", immediate: true });
     await $.command.register({ name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>", immediate: true });
+    await $.command.register({ name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>", immediate: true });
     await $.command.register({ name: "chat-logout", description: "squad-chat: sign out on this computer", immediate: true });
     state.notify = (await $.store.get("notify")) === true;
     if (!bridgeStarted) {
@@ -269,6 +284,7 @@ export function register(on, options) {
     if (!String(e.args ?? "").trim()) await openPane($);
     await login(call, e.args, say);
   }));
+  on("command.run", { command: "chat-name" }, ($, e) => answer($, (call, say) => rename(call, e.args, say)));
   on("command.run", { command: "chat-logout" }, ($) => answer($, (call, say) => logout(call, say)));
 
   on("ui.render", { component: "Pane" }, ($, e, next) => {
@@ -277,7 +293,7 @@ export function register(on, options) {
     state.paneFocused = props.isFocused === true;
     if (state.paneFocused) void markRead($);
     return paneView($.ui.resolve(e), props, {
-      onInput: (value) => { state.draft = value; },
+      onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void selectRoom($, id); },
     });

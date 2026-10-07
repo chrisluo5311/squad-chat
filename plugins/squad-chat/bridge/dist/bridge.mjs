@@ -22120,6 +22120,9 @@ var ONLINE_WINDOW_MS = 75e3;
 var WATCHDOG_MS = 5e3;
 var STUCK_MS = 1e4;
 var MAX_KICK_GAP_MS = 3e4;
+var TYPING_SEND_MS = 2e3;
+var TYPING_TTL_MS = 5e3;
+var NAME = /^[A-Za-z0-9_-]{1,24}$/;
 var HttpError = class extends Error {
   constructor(status, message) {
     super(message);
@@ -22210,7 +22213,7 @@ var Chat = class {
   // works where the server has anonymous sign-ins switched on.
   async loginName(name) {
     name = String(name ?? "").trim();
-    if (!/^[A-Za-z0-9_-]{1,24}$/.test(name)) {
+    if (!NAME.test(name)) {
       throw new HttpError(400, "a name is 1-24 letters, digits, - or _ (or enter an email address)");
     }
     if (this.authState === "signed_in") throw new HttpError(409, "already signed in");
@@ -22222,6 +22225,26 @@ var Chat = class {
       throw new HttpError(error.status === 429 ? 429 : 502, `could not sign in: ${error.message}`);
     }
     await this.signedIn(data.user);
+  }
+  // A new display name, kept unique by the database. Roommates see it
+  // through presence right away, and through the friends list after that.
+  async rename(name) {
+    const me = this.requireUser();
+    name = String(name ?? "").trim();
+    if (!NAME.test(name)) throw new HttpError(400, "a name is 1-24 letters, digits, - or _");
+    if (name === me.name) return { name };
+    const { error } = await this.sb.from("profiles").update({ display_name: name }).eq("id", me.id);
+    if (error?.code === "23505") throw new HttpError(409, `${name} is taken, try another`);
+    if (error) throw fail(error, "could not change your name");
+    me.name = name;
+    this.noteName(me.id, name);
+    this.setAuth("signed_in");
+    for (const room of this.rooms.values()) {
+      if (room.status === "SUBSCRIBED") room.channel.track({ user_id: me.id, name, at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+      });
+    }
+    this.emitFriends();
+    return { name };
   }
   async logout() {
     await this.leaveChannels();
@@ -22271,8 +22294,11 @@ var Chat = class {
   }
   reset(reason) {
     this.stopTimers();
-    for (const room of this.rooms.values()) this.sb.removeChannel(room.channel).catch(() => {
-    });
+    for (const room of this.rooms.values()) {
+      this.clearTyping(room);
+      this.sb.removeChannel(room.channel).catch(() => {
+      });
+    }
     this.rooms.clear();
     this.current = null;
     this.user = null;
@@ -22322,6 +22348,10 @@ var Chat = class {
       seen: /* @__PURE__ */ new Set(),
       online: /* @__PURE__ */ new Map(),
       // user id → name
+      typing: /* @__PURE__ */ new Map(),
+      // user id → timer that ends their "typing"
+      typingSent: 0,
+      // when we last told the room we're typing
       status: "joining",
       queue: Promise.resolve(),
       // keeps message emits in order
@@ -22367,6 +22397,7 @@ var Chat = class {
   }
   // Forget a room here: its channel, its place in the list.
   async dropRoom(room) {
+    this.clearTyping(room);
     await room.channel.untrack().catch(() => {
     });
     await this.sb.removeChannel(room.channel).catch(() => {
@@ -22412,7 +22443,7 @@ var Chat = class {
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${room.id}` },
       ({ new: row }) => this.enqueue(room, [row], { backfill: false, count: true })
-    ).on("presence", { event: "sync" }, () => this.presenceChanged(room)).subscribe(async (status, err) => {
+    ).on("presence", { event: "sync" }, () => this.presenceChanged(room)).on("broadcast", { event: "typing" }, ({ payload }) => this.typingSeen(room, payload?.user_id)).subscribe(async (status, err) => {
       if (this.closing || this.rooms.get(room.id) !== room) return;
       room.status = status;
       this.emit({ type: "status", room: room.id, status, ...err ? { error: err.message } : {} });
@@ -22438,9 +22469,9 @@ var Chat = class {
     const before = new Set(room.online.keys());
     room.online.clear();
     for (const [key, metas] of clear ? [] : Object.entries(room.channel.presenceState())) {
-      const name = metas[0]?.name;
+      const name = metas.at(-1)?.name;
       room.online.set(key, name ?? this.names.get(key) ?? "someone");
-      if (name) this.names.set(key, name);
+      this.noteName(key, name);
     }
     if (!clear) {
       for (const id of before) if (!room.online.has(id)) this.leftAt.set(id, Date.now());
@@ -22483,6 +22514,7 @@ var Chat = class {
         if (room.seen.has(row.id)) continue;
         room.seen.add(row.id);
         room.lastSeenId = Math.max(room.lastSeenId, row.id);
+        if (!backfill) this.typingStopped(room, row.user_id);
         const counted = count && row.user_id !== this.user?.id && row.id > room.lastReadId;
         if (counted) room.unread++;
         this.emit({
@@ -22513,7 +22545,15 @@ var Chat = class {
     const missing = [...new Set(ids)].filter((id) => !this.names.has(id));
     if (!missing.length) return;
     const { data } = await this.sb.from("profiles").select("id, display_name").in("id", missing);
-    for (const p of data ?? []) this.names.set(p.id, p.display_name);
+    for (const p of data ?? []) this.noteName(p.id, p.display_name);
+  }
+  // Remember someone's name. When it changed, tell the pane, so messages
+  // already on screen show the new one.
+  noteName(id, name) {
+    if (!name) return;
+    const old = this.names.get(id);
+    this.names.set(id, name);
+    if (old && old !== name) this.emit({ type: "name", user_id: id, name });
   }
   async send(text, roomRef) {
     const room = this.room(roomRef);
@@ -22524,6 +22564,45 @@ var Chat = class {
     if (error) throw fail(error, "could not send");
     await this.enqueue(room, [data], { backfill: false, count: true });
     return { id: data.id };
+  }
+  // ------------------------------------------------------------ typing
+  // Tell the room we're typing. The pane calls this on keystrokes; at most
+  // one broadcast goes out per TYPING_SEND_MS.
+  async typing(roomRef) {
+    const room = this.room(roomRef);
+    const now = Date.now();
+    if (room.status !== "SUBSCRIBED" || now - room.typingSent < TYPING_SEND_MS) return;
+    room.typingSent = now;
+    await room.channel.send({ type: "broadcast", event: "typing", payload: { user_id: this.user.id } });
+  }
+  // Only the room's members can broadcast on its channel (RLS). The name
+  // comes from our own records, never from the broadcast.
+  async typingSeen(room, id) {
+    if (typeof id !== "string" || id === this.user?.id) return;
+    if (!this.names.has(id)) await this.resolveNames([id]).catch(() => {
+    });
+    if (!this.names.has(id) || this.rooms.get(room.id) !== room) return;
+    const fresh = !room.typing.has(id);
+    clearTimeout(room.typing.get(id));
+    room.typing.set(id, setTimeout(() => this.typingStopped(room, id), TYPING_TTL_MS));
+    if (fresh) this.emitTyping(room);
+  }
+  typingStopped(room, id) {
+    if (!room.typing.has(id)) return;
+    clearTimeout(room.typing.get(id));
+    room.typing.delete(id);
+    this.emitTyping(room);
+  }
+  clearTyping(room) {
+    for (const timer of room.typing.values()) clearTimeout(timer);
+    room.typing.clear();
+  }
+  emitTyping(room) {
+    this.emit({
+      type: "typing",
+      room: room.id,
+      users: [...room.typing.keys()].map((id) => ({ user_id: id, name: this.names.get(id) }))
+    });
   }
   async markRead(roomRef, lastId) {
     const room = this.room(roomRef);
@@ -22548,7 +22627,7 @@ var Chat = class {
       const { data, error } = await this.sb.rpc("my_friends");
       if (error) return this.log(`friends: ${error.message}`);
       this.friends = data;
-      for (const f of data) this.names.set(f.user_id, f.display_name);
+      for (const f of data) this.noteName(f.user_id, f.display_name);
       this.emitFriends();
     })().finally(() => {
       this.friendsLoading = null;
@@ -22568,7 +22647,7 @@ var Chat = class {
     };
     return this.friends.map((f) => ({
       user_id: f.user_id,
-      name: f.display_name,
+      name: this.names.get(f.user_id) ?? f.display_name,
       rooms: f.rooms,
       online: present.has(f.user_id) || recentBeat(f)
     })).sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
@@ -22647,12 +22726,14 @@ var routes = {
   "POST /login/verify": (b) => chat.loginVerify(b.code, b.email).then(() => ({ ok: true, user: chat.snapshot().user })),
   "POST /login/name": (b) => chat.loginName(b.name).then(() => ({ ok: true, user: chat.snapshot().user })),
   "POST /logout": () => chat.logout().then(() => ({ ok: true })),
+  "POST /name": (b) => chat.rename(b.name),
   "POST /room": (b) => chat.join(b.slug, b.passcode),
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),
   "POST /room/leave": (b) => chat.leave(b.room).then(() => ({ ok: true })),
   "POST /room/delete": (b) => chat.deleteRoom(b.room),
   "POST /send": (b) => chat.send(b.text, b.room),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
+  "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
   "POST /shutdown": () => {
     setTimeout(() => shutdown(0), 0);
     return { ok: true };

@@ -72,12 +72,14 @@ const routes = {
   "POST /login/verify": (b) => chat.loginVerify(b.code, b.email).then(() => ({ ok: true, user: chat.snapshot().user })),
   "POST /login/name": (b) => chat.loginName(b.name).then(() => ({ ok: true, user: chat.snapshot().user })),
   "POST /logout": () => chat.logout().then(() => ({ ok: true })),
+  "POST /name": (b) => chat.rename(b.name),
   "POST /room": (b) => chat.join(b.slug, b.passcode),
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),
   "POST /room/leave": (b) => chat.leave(b.room).then(() => ({ ok: true })),
   "POST /room/delete": (b) => chat.deleteRoom(b.room),
   "POST /send": (b) => chat.send(b.text, b.room),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
+  "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
   "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },
 };
 

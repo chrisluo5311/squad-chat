@@ -334,3 +334,79 @@ test('the server from the plugin options reaches the bridge', { ...SLOW, options
     SQUAD_SUPABASE_URL: 'https://abcd.supabase.co', SQUAD_SUPABASE_KEY: 'sb_publishable_x',
   }))
 })
+
+test('shows who is typing in place of the key hints, and in the band', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(msg(1, 'bob', 'hi there'), { type: 'typing', room: LOBBY.id, users: [BOB] })
+  await settle()
+  const dock = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await dock.find({ type: 'Text', text: '✎ bob is typing…' })).toBeDefined()
+  expect(await dock.find({ type: 'Text', text: /enter send/ })).toBeUndefined()
+  await dock.unmount()
+  const inline = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  expect(await inline.find({ type: 'Text', text: '✎ bob is typing…' })).toBeDefined()
+  await inline.unmount()
+
+  bridge.emit({ type: 'typing', room: LOBBY.id, users: [BOB, { user_id: 'u-carol', name: 'carol' }] })
+  await settle()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: 'bob and carol are typing…' })).toBeDefined()
+  await band.unmount()
+
+  bridge.emit({ type: 'typing', room: LOBBY.id, users: [] })
+  await settle()
+  const after = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await after.find({ type: 'Text', text: /is typing/ })).toBeUndefined()
+  expect(await after.find({ type: 'Text', text: /enter send/ })).toBeDefined()
+  await after.unmount()
+})
+
+test('typing a message tells the room, at most every couple of seconds; commands stay quiet', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  const pings = () => bridge.calls.filter((c) => c.path === '/typing')
+  await ui.input({ key: 'compose', text: '/ro', kind: 'change' })
+  expect(pings()).toHaveLength(0)
+  await ui.input({ key: 'compose', text: 'h', kind: 'change' })
+  await ui.input({ key: 'compose', text: 'he', kind: 'change' })
+  await ui.input({ key: 'compose', text: 'hey', kind: 'change' })
+  await settle()
+  expect(pings()).toEqual([{ path: '/typing', body: { room: LOBBY.id } }])
+  await ui.unmount()
+})
+
+test('/name changes your display name, and renamed people show their new name', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(msg(1, 'bob', 'hi there'))
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await ui.input({ key: 'compose', text: '/name has space' })
+  expect(bridge.calls.some((c) => c.path === '/name')).toBe(false)
+  expect(await ui.find({ type: 'Text', text: /1-24 letters/ })).toBeDefined()
+
+  bridge.replies['/name'] = (b) => [200, { name: b.name }]
+  await ui.input({ key: 'compose', text: '/name captain' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/name', body: { name: 'captain' } })
+  expect(await ui.find({ type: 'Text', text: "You're now captain." })).toBeDefined()
+
+  bridge.replies['/name'] = () => [409, { error: 'captain is taken, try another' }]
+  await ui.input({ key: 'compose', text: '/name captain' })
+  expect(await ui.find({ type: 'Text', text: 'captain is taken, try another' })).toBeDefined()
+
+  bridge.emit(
+    { type: 'name', user_id: 'u-bob', name: 'robert' },
+    { type: 'friends', friends: [{ user_id: 'u-bob', name: 'robert', online: true, rooms: ['lobby'] }] },
+  )
+  await settle()
+  expect(await ui.find({ type: 'Text', text: /^robert$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^bob$/ })).toBeUndefined()
+  await ui.unmount()
+})

@@ -84,7 +84,7 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 
 * **Lives inside Claude Code.** One `/chat` command opens a pane: no browser tab, no extra app.
 * **Never reaches Claude.** What you type in the pane never enters the conversation, and slash-command arguments are hidden from the model, so chatting costs no tokens.
-* **Presence across rooms.** See who's online in every room you share, with a status line for unread messages and an optional toast when someone @mentions you.
+* **Presence across rooms.** See who's online in every room you share and who's typing, with a status line for unread messages and an optional toast when someone @mentions you.
 * **Your own server.** Each group of friends runs its own free Supabase project. There is no central service and no account with us.
 * **Private rooms.** Rooms are joined with a passcode, and the database only shows a room's messages to its members.
 * **Survives bad networks.** After a dropped connection, a closed laptop or a crashed process, it reconnects by itself and fetches exactly the messages you missed.
@@ -142,6 +142,8 @@ To update later:
 ```sh
 claude plugin marketplace update squad-chat && claude plugin update squad-chat@squad-chat
 ```
+
+If you host your group's server, also run `supabase db push` again from an updated clone, so the server has what the new version needs. For example, typing indicators need 0.5.0's database change.
 
 To uninstall:
 
@@ -218,10 +220,11 @@ Until a server is set, the pane says so and shows these steps.
 | `/who` | Who's online, across all your rooms |
 | `/chat-login <email>`, then `/chat-login <code>` | Sign in by email from the prompt instead of the pane |
 | `/chat-login <name>` | Sign in with just a name, where the server allows it |
+| `/chat-name <new name>` | Change your display name. Your friends see the new one right away. |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 
-The pane's input box takes `/room`, `/who`, `/logout` and `/help` too. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/logout` and `/help` too. Type passcodes there: it never touches the conversation.
 
 ### Layouts
 
@@ -356,9 +359,9 @@ One person per group does this, once. It fits in Supabase's free plan.
 - [x] Chat bubbles, room tabs, unread markers and @mention toasts
 - [x] Leave and delete rooms
 - [x] Bring your own server, with sign-in by name or by email code
-- [ ] `/chat-name` to change your display name
+- [x] `/chat-name` to change your display name
+- [x] Typing indicators
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
-- [ ] Typing indicators
 
 See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for proposed features and known issues.
 

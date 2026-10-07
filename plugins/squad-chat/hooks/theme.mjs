@@ -39,4 +39,5 @@ export const glyph = {
   prompt: "›",
   rule: "─",
   bar: "│",
+  typing: "✎",
 };
