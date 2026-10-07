@@ -2,7 +2,7 @@
 
 A Claude Code mod: your friends' online status and a group chat in a side pane, so you can chat while you vibe code. Chat text never reaches Claude's context and uses no model tokens.
 
-> **Status: Phase 2 (bridge) done.** The backend and the real bridge work and are tested end to end against a local Supabase. The mod still uses the Phase 0 fake bridge until Phase 3 wires them together. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
+> **Status: Phase 3 done.** The mod runs the real bridge against the hosted Supabase project: sign in, rooms, presence and chat work. Narrow-terminal layouts, unread markers and resilience polish come in Phase 4. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
 
 ## What Phase 0 proves
 
@@ -52,7 +52,19 @@ claude plugin test ./plugins/squad-chat
 claude --plugin-dir ./plugins/squad-chat
 ```
 
-Then type `/chat` to open the pane, or `/say hi`. Use `/tui fullscreen` in a terminal at least 110 columns wide to dock the pane on the right. In Phase 0 the bridge only echoes your own messages back and ticks every 5 s.
+Then type `/chat` to open the pane. In a terminal at least 110 columns wide (fullscreen) it docks on the right; narrower, it sits above the prompt.
+
+| | |
+|---|---|
+| Sign in | Type your email in the pane, then the code from the email. Or `/chat-login you@example.com`, then `/chat-login <code>`. |
+| Rooms | `/room <name> <passcode>` creates a room or joins a friend's. `/room <name>` switches to one you're in; `/room` lists them. |
+| Chat | Type in the pane and press Enter, or `/say <message>` from the prompt. |
+| Friends | The pane shows who's online. `/who` lists everyone you share a room with. |
+| Sign out | `/chat-logout`. |
+
+The pane's input box also takes `/room`, `/who` and `/logout`. Anything typed there never enters the conversation. For slash commands, the arguments of `/say`, `/room` and `/chat-login` are replaced with a placeholder before Claude Code stores the row, and the commands' answers are notices the model never reads. A copy of a slash command's raw text stays only in the local transcript's input-queue line on your own disk, so type passcodes in the pane if that matters to you.
+
+To develop against the local stack instead of the hosted project, start Claude Code with `SQUAD_SUPABASE_URL=http://127.0.0.1:56421 SQUAD_SUPABASE_KEY=<local publishable key> SQUAD_CONFIG_DIR=<a temp dir>`.
 
 ## Roadmap
 
