@@ -45,7 +45,17 @@ async function nodeProblem($) {
 
 // Runs bridge/dist/bridge.mjs for the life of the module, restarting it with
 // backoff. Leaving the loop, or the module unloading, kills the child.
-async function runBridge($) {
+// The squad's server comes from the plugin's options (userConfig). An unset
+// one is left out, so a SQUAD_SUPABASE_* variable in the environment (local
+// development) still applies.
+function serverEnv(options) {
+  const env = {};
+  if (options?.supabase_url) env.SQUAD_SUPABASE_URL = String(options.supabase_url).trim();
+  if (options?.supabase_key) env.SQUAD_SUPABASE_KEY = String(options.supabase_key).trim();
+  return env;
+}
+
+async function runBridge($, options) {
   const problem = await nodeProblem($);
   if (problem) return unavailable($, problem);
 
@@ -58,7 +68,7 @@ async function runBridge($) {
     try {
       const child = $.process.spawn({
         argv: ["node", `${$.plugin.root}/bridge/dist/bridge.mjs`],
-        env: { SQUAD_BRIDGE_TOKEN: state.token },
+        env: { SQUAD_BRIDGE_TOKEN: state.token, ...serverEnv(options) },
       });
       for await (const { stream, text } of child) {
         if (stream === "stderr") { $.ui.log(`squad-chat bridge: ${text.trimEnd()}`, { to: "debug" }); continue; }
@@ -78,7 +88,7 @@ async function runBridge($) {
       // Cannot start: no process noun on this surface (desktop), or no node.
       return unavailable($, `cannot start the chat bridge: ${err?.message ?? err}`);
     }
-    if (state.ended) return;
+    if (state.ended || state.bridge === "unconfigured") return;   // nothing to retry until options change
     if ((await $.clock.now()) - startedAt > 60_000) backoff = 1000;
     resetBridgeState();
     state.bridge = "restarting";
@@ -228,7 +238,7 @@ async function answer($, fn) {
   return {};
 }
 
-export function register(on) {
+export function register(on, options) {
   on("session.start", async ($, e, next) => {
     const r = await next(e);
     await $.command.register({ name: "chat", description: "squad-chat: open the chat pane (/chat notify on|off: toast @mentions)", argumentHint: "[notify on|off]", immediate: true });
@@ -240,7 +250,7 @@ export function register(on) {
     state.notify = (await $.store.get("notify")) === true;
     if (!bridgeStarted) {
       bridgeStarted = true;
-      void runBridge($);
+      void runBridge($, options);
     }
     return r;
   });

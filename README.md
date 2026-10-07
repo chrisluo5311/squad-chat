@@ -48,6 +48,7 @@
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
+        <li><a href="#connect-to-a-server">Connect to a server</a></li>
       </ul>
     </li>
     <li>
@@ -61,7 +62,7 @@
     </li>
     <li><a href="#privacy--security">Privacy &amp; Security</a></li>
     <li><a href="#development">Development</a></li>
-    <li><a href="#self-hosting-the-backend">Self-hosting the backend</a></li>
+    <li><a href="#host-your-own-server">Host your own server</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
@@ -83,6 +84,7 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 * **Lives inside Claude Code.** One `/chat` command opens a pane: no browser tab, no extra app.
 * **Never reaches Claude.** What you type in the pane never enters the conversation, and slash-command arguments are hidden from the model, so chatting costs no tokens.
 * **Presence across rooms.** See who's online in every room you share, with a status line for unread messages and an optional toast when someone @mentions you.
+* **Your own server.** Each group of friends runs its own free Supabase project. There is no central service and no account with us.
 * **Private rooms.** Rooms are joined with a passcode, and the database only shows a room's messages to its members.
 * **Survives bad networks.** After a dropped connection, a closed laptop or a crashed process, it reconnects by itself and fetches exactly the messages you missed.
 * **Fits any terminal.** Docked beside the transcript in a wide terminal, compact above the prompt in a narrow one, and a one-line summary when the pane is closed.
@@ -111,6 +113,7 @@ It is a Claude Code mod: a plugin of function hooks, plus a small Node process t
   ```sh
   node --version
   ```
+* A server: one Supabase project per group of friends. Get its URL and key from whoever hosts it, or [host one yourself](#host-your-own-server).
 * A terminal with truecolor, such as iTerm2, Ghostty, kitty or WezTerm.
 * For the side-by-side layout: Claude Code's fullscreen layout (`/tui fullscreen`) and a terminal at least 110 columns wide.
 
@@ -131,10 +134,7 @@ The repository is its own plugin marketplace.
    /plugin install squad-chat --marketplace chrisluo5311/squad-chat
    ```
 2. Restart Claude Code, or run `/reload-plugins`.
-3. Open the pane:
-   ```
-   /chat
-   ```
+3. [Connect to a server](#connect-to-a-server), then open the pane with `/chat`.
 
 To update later:
 
@@ -155,6 +155,30 @@ git clone https://github.com/chrisluo5311/squad-chat.git
 claude --plugin-dir ./squad-chat/plugins/squad-chat
 ```
 
+### Connect to a server
+
+squad-chat has no central server. Each group of friends shares one Supabase project, its *server*: one person [hosts it](#host-your-own-server) on Supabase's free plan, and everyone else connects with two values from them:
+
+* the project URL, such as `https://abcd1234.supabase.co`
+* the project's **publishable** key, `sb_publishable_…` (safe to share; never share the secret key)
+
+Set them when you install:
+
+```sh
+claude plugin install squad-chat@squad-chat \
+  --config supabase_url=https://abcd1234.supabase.co \
+  --config supabase_key=sb_publishable_...
+```
+
+or later, from `/config` in Claude Code (squad-chat's options), or from a shell:
+
+```sh
+echo '{"supabase_url":"https://abcd1234.supabase.co","supabase_key":"sb_publishable_..."}' \
+  | claude plugin configure squad-chat@squad-chat --values-stdin
+```
+
+Until a server is set, the pane says so and shows these steps.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Usage
@@ -162,7 +186,9 @@ claude --plugin-dir ./squad-chat/plugins/squad-chat
 ### First run
 
 1. `/chat` opens the pane.
-2. Type your email in the pane and press Enter. You'll get an email with an 8-digit code; type it in the pane.
+2. Sign in, depending on how your server is set up:
+   * **With a name:** type the name you want and press Enter. That's it.
+   * **With your email:** type your email and press Enter, then type the code from the email.
 3. Create a room and give its name and passcode to your friends. Type this in the pane:
    ```
    /room our-team some-passcode
@@ -186,7 +212,8 @@ claude --plugin-dir ./squad-chat/plugins/squad-chat
 | `/room leave <name>` | Leave a room; rejoin any time with its passcode |
 | `/room delete <name>` | Delete a room you created, with all its messages, for everyone. Run it twice to confirm. |
 | `/who` | Who's online, across all your rooms |
-| `/chat-login <email>`, then `/chat-login <code>` | Sign in from the prompt instead of the pane |
+| `/chat-login <email>`, then `/chat-login <code>` | Sign in by email from the prompt instead of the pane |
+| `/chat-login <name>` | Sign in with just a name, where the server allows it |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 
@@ -221,8 +248,9 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 
 * **What Claude sees.** Nothing typed in the pane enters the conversation. The arguments of `/say`, `/room` and `/chat-login` are replaced with a placeholder before Claude Code stores the command, and command answers are notices the model never reads. Claude Code still keeps a slash command's raw text in one bookkeeping line of the local transcript on your own disk, so type passcodes in the pane if that matters to you.
 * **Who sees your messages.** Only members of the room. Access is enforced in the database with row-level security, and you become a member only with the room's passcode. Five wrong passcodes lock you out for 15 minutes.
-* **What friends see.** Your display name (the part of your email before the `@`) and whether you're online. Never your email.
-* **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you; `/chat-logout` removes it.
+* **Who runs the server.** Your squad's server belongs to whoever hosts it, and they can read its database like any database admin. Pick a host you trust, or host it yourself.
+* **What friends see.** Your display name (the name you picked, or the part of your email before the `@`) and whether you're online. Never your email.
+* **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you; `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
 * **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message.
 
 Found a security problem? Please [open an issue](https://github.com/chrisluo5311/squad-chat/issues/new?labels=security) without exploit details and I'll get in touch.
@@ -274,18 +302,21 @@ Sign-in emails land in the local mail UI at http://127.0.0.1:56424.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-## Self-hosting the backend
+## Host your own server
 
-By default squad-chat talks to the shared hosted project. To run your own:
+One person per group does this, once. It fits in Supabase's free plan.
 
-1. Create a Supabase project and apply `supabase/migrations/` (for example with `supabase link` and `supabase db push`).
-2. Under **Realtime → Settings**, turn off **Allow public access to channels**.
-3. Set up custom SMTP (for example Resend), then change the **Confirm signup** and **Magic Link** email templates to show `{{ .Token }}`, the sign-in code.
-4. Point the bridge at it by setting these before starting Claude Code:
+1. **Create a Supabase project** at [supabase.com](https://supabase.com/dashboard).
+2. **Create the tables.** With the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), from a clone of this repository:
    ```sh
-   export SQUAD_SUPABASE_URL=https://<project-ref>.supabase.co
-   export SQUAD_SUPABASE_KEY=<publishable key>
+   supabase link --project-ref <your-project-ref>
+   supabase db push
    ```
+3. **Lock down Realtime.** In the dashboard, under **Realtime → Settings**, turn off **Allow public access to channels**.
+4. **Choose how people sign in.** You can turn on either or both.
+   * **With a name (simplest, no email service).** Under **Authentication → Sign In / Providers**, turn on **Allow anonymous sign-ins**. Anyone can make an account this way, but rooms still need their passcode, so strangers see nothing. Supabase limits anonymous sign-ups to 30 per hour per IP address.
+   * **With an email code.** Supabase's built-in email only reaches your project's own team members (2 an hour), so set up an email service under **Authentication → Emails → SMTP Settings**. [Resend](https://resend.com) has a free tier, and Postmark, Amazon SES or your mail provider's SMTP work too. Then edit the **Confirm signup** and **Magic Link** templates so they show the code, `{{ .Token }}`.
+5. **Share the server** with your friends: the project URL and the publishable key, from **Project Settings → API Keys**. Everyone, you included, [connects with them](#connect-to-a-server).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -297,6 +328,7 @@ By default squad-chat talks to the shared hosted project. To run your own:
 - [x] Docked pane, compact pane, one-line band and status line
 - [x] Chat bubbles, room tabs, unread markers and @mention toasts
 - [x] Leave and delete rooms
+- [x] Bring your own server, with sign-in by name or by email code
 - [ ] `/chat-name` to change your display name
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 - [ ] Typing indicators

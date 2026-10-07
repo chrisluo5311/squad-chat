@@ -46,6 +46,11 @@ insert into auth.users (id, email, aud, role) values
   (tests.uid('alice2'), 'alice@elsewhere.org',   'authenticated', 'authenticated'),
   (tests.uid('john'),   'Jo.hn+chat@example.com','authenticated', 'authenticated');
 
+-- An anonymous sign-in: no email, a name it picked.
+insert into auth.users (id, email, aud, role, is_anonymous, raw_user_meta_data) values
+  ('77777777-7777-7777-7777-777777777777', null, 'authenticated', 'authenticated', true, '{"display_name": "Night Owl!"}'),
+  ('88888888-8888-8888-8888-888888888888', null, 'authenticated', 'authenticated', true, '{"display_name": "alice"}');
+
 -- ---------------------------------------------------------------- profiles
 
 select is((select display_name from public.profiles where id = tests.uid('alice')), 'alice',
@@ -54,6 +59,10 @@ select is((select display_name from public.profiles where id = tests.uid('alice2
   'display name collision gets a -2 suffix');
 select is((select display_name from public.profiles where id = tests.uid('john')), 'Jo-hn-chat',
   'display name is normalized to [A-Za-z0-9_-]');
+select is((select display_name from public.profiles where id = '77777777-7777-7777-7777-777777777777'), 'Night-Owl',
+  'an anonymous account is named from the name it picked');
+select is((select display_name from public.profiles where id = '88888888-8888-8888-8888-888888888888'), 'alice-3',
+  'a picked name that is taken gets a suffix too');
 
 -- ---------------------------------------------------------------- anon
 

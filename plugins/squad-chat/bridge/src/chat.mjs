@@ -116,6 +116,24 @@ export class Chat {
     await this.signedIn(data.user);
   }
 
+  // Sign in without email: an anonymous account that names itself. Only
+  // works where the server has anonymous sign-ins switched on.
+  async loginName(name) {
+    name = String(name ?? "").trim();
+    if (!/^[A-Za-z0-9_-]{1,24}$/.test(name)) {
+      throw new HttpError(400, "a name is 1-24 letters, digits, - or _ (or enter an email address)");
+    }
+    if (this.authState === "signed_in") throw new HttpError(409, "already signed in");
+    const { data, error } = await this.sb.auth.signInAnonymously({ options: { data: { display_name: name } } });
+    if (error) {
+      if (/anonymous/i.test(error.message) && /disabled/i.test(error.message)) {
+        throw new HttpError(403, "this server signs in by email: enter your email address instead");
+      }
+      throw new HttpError(error.status === 429 ? 429 : 502, `could not sign in: ${error.message}`);
+    }
+    await this.signedIn(data.user);
+  }
+
   async logout() {
     await this.leaveChannels();
     await this.sb.auth.signOut({ scope: "local" }).catch(() => {});
@@ -124,7 +142,7 @@ export class Chat {
   }
 
   async signedIn(user) {
-    this.user = { id: user.id, email: user.email, name: user.email?.split("@")[0] ?? "me" };
+    this.user = { id: user.id, email: user.email || null, anonymous: !!user.is_anonymous, name: user.email?.split("@")[0] || "me" };
     const { data } = await this.sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
     if (data) this.user.name = data.display_name;
     this.names.set(this.user.id, this.user.name);
@@ -175,7 +193,7 @@ export class Chat {
 
   setAuth(state, extra = {}) {
     this.authState = state;
-    this.emit({ type: "auth", state, user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email }, ...extra });
+    this.emit({ type: "auth", state, user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email, anonymous: this.user.anonymous }, ...extra });
   }
 
   requireUser() {
@@ -511,7 +529,7 @@ export class Chat {
   snapshot() {
     return {
       auth: this.authState,
-      user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email },
+      user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email, anonymous: this.user.anonymous },
       current: this.current,
       rooms: [...this.rooms.values()].map((r) => ({
         id: r.id, slug: r.slug, status: r.status, last_read_id: r.lastReadId, last_seen_id: r.lastSeenId, unread: r.unread,

@@ -1,6 +1,6 @@
 {
   "name": "squad-chat",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Friends' online status and group chat in a Claude Code side pane. Chat never reaches the model.",
   "author": {
     "name": "chrisluo5311"
@@ -11,5 +11,19 @@
     "chat"
   ],
   "repository": "https://github.com/chrisluo5311/squad-chat",
-  "homepage": "https://github.com/chrisluo5311/squad-chat#readme"
+  "homepage": "https://github.com/chrisluo5311/squad-chat#readme",
+  "userConfig": {
+    "supabase_url": {
+      "type": "string",
+      "title": "Supabase URL",
+      "description": "Your squad's Supabase project, e.g. https://abcd.supabase.co (whoever hosts the server gives you this)",
+      "default": ""
+    },
+    "supabase_key": {
+      "type": "string",
+      "title": "Supabase publishable key",
+      "description": "The project's publishable (anon) key, sb_publishable_… It is safe to share; never use the secret key.",
+      "default": ""
+    }
+  }
 }

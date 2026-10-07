@@ -5,7 +5,7 @@
 export const MAX_MESSAGES = 100;   // per room
 
 export const state = {
-  bridge: "starting",     // starting | ready | restarting | unavailable
+  bridge: "starting",     // starting | ready | restarting | unavailable | unconfigured
   detail: "",             // why the bridge isn't ready
   socket: null,
   token: null,
@@ -124,6 +124,11 @@ export function applyEvent(event) {
       state.roomStatus.set(event.room, event.status);
       return true;
     case "error":
+      if (event.code === "unconfigured") {
+        state.bridge = "unconfigured";
+        state.detail = event.message;
+        return true;
+      }
       state.notice = event.message;
       return true;
     default:

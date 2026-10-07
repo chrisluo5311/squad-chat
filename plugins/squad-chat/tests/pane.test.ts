@@ -7,6 +7,7 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   const lines: string[] = []
   let wake: (() => void) | null = null
   const calls: { path: string; body: any }[] = []
+  const spawned: any[] = []
   const replies: Record<string, (body: any) => [number, any]> = {}
 
   // The harness never starts a session on its own: answer what the plugin's
@@ -18,7 +19,8 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   on('process.run', async () => ({
     value: { exitCode: 0, stdout: `${node}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
   }))
-  on('process.spawn', async function* () {
+  on('process.spawn', async function* (_$: any, e: any) {
+    spawned.push(e)
     for (;;) {
       while (lines.length) yield { stream: 'stdout', text: lines.shift()! }
       await new Promise<void>((r) => { wake = r })
@@ -35,6 +37,7 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   return {
     calls,
     replies,
+    spawned,
     start: ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true }),
     emit(...events: object[]) {
       for (const ev of events) lines.push(JSON.stringify(ev) + '\n')
@@ -282,4 +285,52 @@ test('/room delete asks for a second run before deleting; /room leave leaves', S
   await ui.input({ key: 'compose', text: '/room leave lobby' })
   expect(bridge.calls.at(-1)).toEqual({ path: '/room/leave', body: { room: LOBBY.id } })
   await ui.unmount()
+})
+
+test('signs in with just a name where the server allows it', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1 }, { type: 'auth', state: 'signed_out', user: null })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  bridge.replies['/login/name'] = () => [200, { ok: true, user: { ...ME, name: 'night_owl', anonymous: true } }]
+  await ui.input({ key: 'compose', text: 'night_owl' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/login/name', body: { name: 'night_owl' } })
+  await ui.unmount()
+})
+
+test('signing out an account without an email asks twice', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'auth', state: 'signed_in', user: { ...ME, anonymous: true } })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await ui.input({ key: 'compose', text: '/logout' })
+  expect(bridge.calls.some((c) => c.path === '/logout')).toBe(false)
+  expect(await ui.find({ type: 'Text', text: /loses "me" and your rooms for good/ })).toBeDefined()
+  await ui.input({ key: 'compose', text: '/logout' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/logout', body: {} })
+  await ui.unmount()
+})
+
+test('without a server it says how to connect one, and stops retrying', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'error', code: 'unconfigured', message: 'no server configured' })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'CONNECT A SERVER' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /claude plugin configure squad-chat@squad-chat/ })).toBeDefined()
+  expect(await ui.find({ key: 'compose' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the server from the plugin options reaches the bridge', { ...SLOW, options: { supabase_url: 'https://abcd.supabase.co', supabase_key: 'sb_publishable_x' } }, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  await settle()
+  expect(bridge.spawned[0].env).toEqual(expect.objectContaining({
+    SQUAD_SUPABASE_URL: 'https://abcd.supabase.co', SQUAD_SUPABASE_KEY: 'sb_publishable_x',
+  }))
 })

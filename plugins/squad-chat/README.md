@@ -12,7 +12,7 @@ In Claude Code:
 /plugin install squad-chat --marketplace chrisluo5311/squad-chat
 ```
 
-Then `/reload-plugins` (or restart Claude Code). Or from a shell:
+Then `/reload-plugins` (or restart Claude Code), and connect to your squad's server (below). Or from a shell:
 
 ```bash
 claude plugin marketplace add chrisluo5311/squad-chat
@@ -23,10 +23,19 @@ Requires:
 - Claude Code 2.1.287 or newer, in the terminal. The desktop app can't run the chat's background process yet.
 - Node 22 or newer on your `PATH` (`node --version`). squad-chat tells you if it's missing or too old.
 
+## Connect to a server
+
+Each group of friends shares its own free Supabase project. Get its URL and publishable key from whoever hosts it, or host one yourself ([instructions](https://github.com/chrisluo5311/squad-chat#host-your-own-server)). Then set them in `/config` under squad-chat, or:
+
+```bash
+echo '{"supabase_url":"https://abcd1234.supabase.co","supabase_key":"sb_publishable_..."}' \
+  | claude plugin configure squad-chat@squad-chat --values-stdin
+```
+
 ## Get started
 
 1. `/chat` opens the pane.
-2. Type your email in the pane and press Enter. You'll get an email with an 8-digit code; type it in the pane.
+2. Sign in: type a name and press Enter (where the server allows it), or type your email, then the code from the email.
 3. Create a room and give the passcode to your friends: type `/room our-team some-passcode` in the pane. Friends join with the same line.
 4. Chat: type in the pane and press Enter. Esc goes back to the prompt.
 
@@ -44,7 +53,8 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/room leave <name>` | Leave a room (rejoin any time with its passcode) |
 | `/room delete <name>` | Delete a room you created, with all its messages, for everyone. Asks you to run it twice. |
 | `/who` | Who's online, across all your rooms |
-| `/chat-login <email>`, then `/chat-login <code>` | Sign in from the prompt instead of the pane |
+| `/chat-login <email>`, then `/chat-login <code>` | Sign in by email from the prompt instead of the pane |
+| `/chat-login <name>` | Sign in with just a name, where the server allows it |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 
@@ -57,10 +67,10 @@ The pane's input box takes `/room`, `/who` and `/logout` too.
   - For `/say`, `/room` and `/chat-login`, the arguments are replaced with a placeholder before Claude Code saves the command, and command answers are notices the model never reads.
   - Claude Code still keeps a slash command's raw text in one bookkeeping line of the local transcript on your own disk, so type passcodes in the pane if that matters to you.
 - **Where your data lives:**
-  - Messages live in a Supabase database and are deleted after 30 days.
+  - Messages live in your squad's own Supabase database and are deleted after 30 days. Whoever hosts it can read it, like any database admin.
   - Only members of a room can read it. You become a member only with the room's passcode, and access is enforced in the database.
 - **On your computer:** your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you. `/chat-logout` removes it.
-- **What others see:** your display name is the part of your email before the `@` (`ann@example.com` → `ann`). Friends see it, plus whether you're online. They never see your email.
+- **What others see:** your display name: the name you picked, or the part of your email before the `@` (`ann@example.com` → `ann`). Friends see it, plus whether you're online. They never see your email.
 
 ## How it works
 

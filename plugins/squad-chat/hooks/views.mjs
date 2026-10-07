@@ -35,6 +35,7 @@ function dayLabel(iso, now = new Date()) {
 
 function connection() {
   if (state.bridge === "unavailable") return { color: theme.error, text: `${glyph.on} unavailable` };
+  if (state.bridge === "unconfigured") return { color: theme.warn, text: `${glyph.off} no server` };
   if (state.bridge !== "ready") return { color: theme.warn, text: `${glyph.off} ${state.bridge}` };
   if (state.auth === "code_sent") return { color: theme.warn, text: `${glyph.off} code sent` };
   if (state.auth !== "signed_in") return { color: theme.muted, text: `${glyph.off} ${state.auth === "starting" ? "connecting" : "signed out"}` };
@@ -249,7 +250,7 @@ function notice(els) {
 // What the input box is for right now.
 function inputMode() {
   if (state.bridge !== "ready") return null;
-  if (state.auth === "signed_out") return { placeholder: "you@example.com", label: "send code" };
+  if (state.auth === "signed_out") return { placeholder: "you@example.com, or a name", label: "continue" };
   if (state.auth === "code_sent") return { placeholder: "8-digit code from the email", label: "sign in" };
   if (state.auth !== "signed_in") return null;
   if (!currentRoom()) return { placeholder: "/room <name> <passcode>", label: "join" };
@@ -263,13 +264,21 @@ function setupCard(els, width) {
   if (state.bridge === "unavailable") {
     return card(els, { key: "setup", marginTop: 1, title: "CAN'T START", titleColor: theme.error, children: [line("why", state.detail)] });
   }
+  if (state.bridge === "unconfigured") {
+    return card(els, { key: "setup", marginTop: 1, title: "CONNECT A SERVER", titleColor: theme.accent, children: [
+      line("a", "squad-chat talks to your squad's own Supabase server."),
+      line("b", "Ask whoever runs it for the URL and publishable key, or host one yourself (see the README)."),
+      line("c", "Then set them in /config under squad-chat, or run:", { color: theme.muted }),
+      line("d", "claude plugin configure squad-chat@squad-chat", { color: theme.accent }),
+    ] });
+  }
   if (state.bridge !== "ready" || state.auth === "starting") {
     return card(els, { key: "setup", marginTop: 1, title: "CONNECTING", meta: "…", children: [line("wait", state.detail || "Starting the chat in the background.", { color: theme.muted })] });
   }
   if (state.auth === "signed_out") {
     return card(els, { key: "setup", marginTop: 1, title: "SIGN IN", meta: "step 1 of 2", children: [
       line("a", "Chat with your friends while you code."),
-      line("b", "Enter your email below and we'll send you a sign-in code.", { color: theme.muted }),
+      line("b", "Enter your email to get a sign-in code, or just pick a name if your server allows it.", { color: theme.muted }),
     ] });
   }
   if (state.auth === "code_sent") {

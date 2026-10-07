@@ -15,6 +15,10 @@ export const PRIVATE_ARGS = new Set(["say", "room", "chat-login"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE = /^\d[\d\s]{4,12}\d$/;
 
+const NAME = /^[A-Za-z0-9_-]{1,24}$/;
+
+// Sign in with an email (a code follows by email) or, where the server
+// allows it, with just a name (an anonymous account).
 export async function login(call, arg, say) {
   arg = String(arg ?? "").trim();
   if (state.auth === "signed_in") return say(`Already signed in as ${state.user?.name}. /chat-logout first to switch accounts.`);
@@ -28,13 +32,25 @@ export async function login(call, arg, say) {
     const r = await call("/login/verify", { code: arg.replace(/\s+/g, "") });
     return say(`Signed in as ${r.user?.name ?? "you"}.`);
   }
+  if (NAME.test(arg) && state.auth !== "code_sent") {
+    const r = await call("/login/name", { name: arg });
+    return say(`Signed in as ${r.user?.name ?? arg}.`);
+  }
   return say(state.auth === "code_sent"
     ? `Enter the code emailed to ${state.email}, or another email address.`
-    : "Sign in with your email: /chat-login you@example.com");
+    : "Sign in with your email (/chat-login you@example.com) or a name of 1-24 letters, digits, - or _.");
 }
+
+let pendingLogout = 0;   // until when a second /chat-logout confirms
 
 export async function logout(call, say) {
   if (state.auth !== "signed_in") return say("Not signed in.");
+  // An account without an email can't be signed back into: ask twice.
+  if (state.user?.anonymous && Date.now() > pendingLogout) {
+    pendingLogout = Date.now() + 30_000;
+    return say(`You signed in with just a name, so signing out loses "${state.user.name}" and your rooms for good. Run /chat-logout again within 30 seconds to confirm.`);
+  }
+  pendingLogout = 0;
   await call("/logout", {});
   return say("Signed out.");
 }

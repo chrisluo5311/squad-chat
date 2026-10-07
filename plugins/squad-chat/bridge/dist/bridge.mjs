@@ -22206,6 +22206,23 @@ var Chat = class {
     this.pendingEmail = null;
     await this.signedIn(data.user);
   }
+  // Sign in without email: an anonymous account that names itself. Only
+  // works where the server has anonymous sign-ins switched on.
+  async loginName(name) {
+    name = String(name ?? "").trim();
+    if (!/^[A-Za-z0-9_-]{1,24}$/.test(name)) {
+      throw new HttpError(400, "a name is 1-24 letters, digits, - or _ (or enter an email address)");
+    }
+    if (this.authState === "signed_in") throw new HttpError(409, "already signed in");
+    const { data, error } = await this.sb.auth.signInAnonymously({ options: { data: { display_name: name } } });
+    if (error) {
+      if (/anonymous/i.test(error.message) && /disabled/i.test(error.message)) {
+        throw new HttpError(403, "this server signs in by email: enter your email address instead");
+      }
+      throw new HttpError(error.status === 429 ? 429 : 502, `could not sign in: ${error.message}`);
+    }
+    await this.signedIn(data.user);
+  }
   async logout() {
     await this.leaveChannels();
     await this.sb.auth.signOut({ scope: "local" }).catch(() => {
@@ -22214,7 +22231,7 @@ var Chat = class {
     this.reset("signed out");
   }
   async signedIn(user) {
-    this.user = { id: user.id, email: user.email, name: user.email?.split("@")[0] ?? "me" };
+    this.user = { id: user.id, email: user.email || null, anonymous: !!user.is_anonymous, name: user.email?.split("@")[0] || "me" };
     const { data } = await this.sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
     if (data) this.user.name = data.display_name;
     this.names.set(this.user.id, this.user.name);
@@ -22266,7 +22283,7 @@ var Chat = class {
   }
   setAuth(state, extra = {}) {
     this.authState = state;
-    this.emit({ type: "auth", state, user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email }, ...extra });
+    this.emit({ type: "auth", state, user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email, anonymous: this.user.anonymous }, ...extra });
   }
   requireUser() {
     if (!this.user) throw new HttpError(401, "not signed in");
@@ -22563,7 +22580,7 @@ var Chat = class {
   snapshot() {
     return {
       auth: this.authState,
-      user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email },
+      user: this.user && { id: this.user.id, name: this.user.name, email: this.user.email, anonymous: this.user.anonymous },
       current: this.current,
       rooms: [...this.rooms.values()].map((r) => ({
         id: r.id,
@@ -22590,8 +22607,6 @@ var Chat = class {
 };
 
 // src/bridge.mjs
-var HOSTED_URL = "https://pijyocogpbiiwccfxqkp.supabase.co";
-var HOSTED_KEY = "sb_publishable_AciVm_P47NRs-HCKooiNHQ_SNR1fxEQ";
 var MAX_BODY = 16 * 1024;
 var env = process.env;
 var token = env.SQUAD_BRIDGE_TOKEN;
@@ -22606,6 +22621,10 @@ if (!token) {
   emit({ type: "error", message: "SQUAD_BRIDGE_TOKEN is not set" });
   process.exit(2);
 }
+if (!env.SQUAD_SUPABASE_URL || !env.SQUAD_SUPABASE_KEY) {
+  emit({ type: "error", code: "unconfigured", message: "no server configured" });
+  process.exit(3);
+}
 var configDir = env.SQUAD_CONFIG_DIR || join2(env.XDG_CONFIG_HOME || join2(homedir(), ".config"), "squad-chat");
 var socketDir = env.SQUAD_SOCKET_DIR || join2(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
 mkdirSync2(socketDir, { recursive: true, mode: 448 });
@@ -22613,8 +22632,8 @@ chmodSync2(socketDir, 448);
 var socketPath = join2(socketDir, `${process.pid}.sock`);
 rmSync2(socketPath, { force: true });
 var chat = new Chat({
-  url: env.SQUAD_SUPABASE_URL || HOSTED_URL,
-  key: env.SQUAD_SUPABASE_KEY || HOSTED_KEY,
+  url: env.SQUAD_SUPABASE_URL,
+  key: env.SQUAD_SUPABASE_KEY,
   configDir,
   emit,
   log,
@@ -22626,6 +22645,7 @@ var routes = {
   "GET /who": () => ({ friends: chat.user ? chat.friendList() : [] }),
   "POST /login/start": (b) => chat.loginStart(b.email).then(() => ({ ok: true })),
   "POST /login/verify": (b) => chat.loginVerify(b.code, b.email).then(() => ({ ok: true, user: chat.snapshot().user })),
+  "POST /login/name": (b) => chat.loginName(b.name).then(() => ({ ok: true, user: chat.snapshot().user })),
   "POST /logout": () => chat.logout().then(() => ({ ok: true })),
   "POST /room": (b) => chat.join(b.slug, b.passcode),
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),

@@ -7,8 +7,8 @@
 //
 // Environment:
 //   SQUAD_BRIDGE_TOKEN   required, per-run secret shared with the mod
-//   SQUAD_SUPABASE_URL   default: the hosted squad-chat project
-//   SQUAD_SUPABASE_KEY   publishable key for that project
+//   SQUAD_SUPABASE_URL   required: the squad's Supabase project
+//   SQUAD_SUPABASE_KEY   required: its publishable (anon) key
 //   SQUAD_CONFIG_DIR     session + prefs (default ~/.config/squad-chat)
 //   SQUAD_SOCKET_DIR     where the socket goes (default /tmp/squad-chat-<uid>)
 //   SQUAD_DEBUG=1        log Realtime traffic to stderr
@@ -22,8 +22,6 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chat, HttpError } from "./chat.mjs";
 
-const HOSTED_URL = "https://pijyocogpbiiwccfxqkp.supabase.co";
-const HOSTED_KEY = "sb_publishable_AciVm_P47NRs-HCKooiNHQ_SNR1fxEQ";   // publishable: safe to ship
 const MAX_BODY = 16 * 1024;
 
 const env = process.env;
@@ -40,6 +38,10 @@ if (!token) {
   emit({ type: "error", message: "SQUAD_BRIDGE_TOKEN is not set" });
   process.exit(2);
 }
+if (!env.SQUAD_SUPABASE_URL || !env.SQUAD_SUPABASE_KEY) {
+  emit({ type: "error", code: "unconfigured", message: "no server configured" });
+  process.exit(3);
+}
 
 const configDir = env.SQUAD_CONFIG_DIR
   || join(env.XDG_CONFIG_HOME || join(homedir(), ".config"), "squad-chat");
@@ -52,8 +54,8 @@ const socketPath = join(socketDir, `${process.pid}.sock`);
 rmSync(socketPath, { force: true });
 
 const chat = new Chat({
-  url: env.SQUAD_SUPABASE_URL || HOSTED_URL,
-  key: env.SQUAD_SUPABASE_KEY || HOSTED_KEY,
+  url: env.SQUAD_SUPABASE_URL,
+  key: env.SQUAD_SUPABASE_KEY,
   configDir,
   emit,
   log,
@@ -68,6 +70,7 @@ const routes = {
   "GET /who": () => ({ friends: chat.user ? chat.friendList() : [] }),
   "POST /login/start": (b) => chat.loginStart(b.email).then(() => ({ ok: true })),
   "POST /login/verify": (b) => chat.loginVerify(b.code, b.email).then(() => ({ ok: true, user: chat.snapshot().user })),
+  "POST /login/name": (b) => chat.loginName(b.name).then(() => ({ ok: true, user: chat.snapshot().user })),
   "POST /logout": () => chat.logout().then(() => ({ ok: true })),
   "POST /room": (b) => chat.join(b.slug, b.passcode),
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),

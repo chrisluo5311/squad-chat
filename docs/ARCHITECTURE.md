@@ -52,6 +52,7 @@ Two rules of the mod runtime shape the code:
 
 * **Tables:** `profiles` (display name from the email's local part, made unique), `rooms` (bcrypt passcode hash, never readable by clients), `room_members` (read markers), `messages` and `presence_heartbeats`.
 * **Access:** RLS on every table, column-level grants to `authenticated` only, nothing for `anon`. You see a room, its members and its messages only while you are a member.
+* **Accounts:** a profile is created for every new user, named after the email's local part, or for an anonymous account after the name it picked (made unique with `-2`, `-3`, …).
 * **Joining:** only through `join_room(slug, passcode)`, which creates the room if it doesn't exist and locks a caller out for 15 minutes after 5 wrong passcodes. Privileged helpers live in an unexposed `private` schema.
 * **Deleting:** only the room's creator can delete it; members and messages go with it.
 * **Limits:** a trigger caps each user at 10 messages per 10 seconds. `pg_cron` deletes messages older than 30 days.
@@ -59,13 +60,18 @@ Two rules of the mod runtime shape the code:
 
 `supabase/tests/rls.test.sql` checks all of this with pgTAP: non-members see nothing, nobody can post as someone else or backdate a message, wrong passcodes fail and lock out, the flood limit holds, only creators delete rooms.
 
-The hosted project is `pijyocogpbiiwccfxqkp` (Tokyo). Sign-in emails go through Resend SMTP from `login@mail.chris-luo.me` and carry an 8-digit code. New free-tier projects can only change their email templates once custom SMTP is set up.
+There is no central server: each group runs its own Supabase project, and the plugin's options (`supabase_url`, `supabase_key`, from `userConfig`) point at it. The mod passes them to the bridge as `SQUAD_SUPABASE_URL` and `SQUAD_SUPABASE_KEY`; unset options leave those environment variables alone, which is how local development points at `supabase start`. With neither set, the bridge exits with an `unconfigured` error and the pane explains how to connect.
+
+Two ways to sign in, both through Supabase Auth:
+
+* **A name:** an anonymous account (`signInAnonymously`), its display name passed as user metadata and picked up by the `handle_new_user` trigger. Needs anonymous sign-ins switched on, and no email service.
+* **An email code:** `signInWithOtp`, then `verifyOtp` with the 6-10 digit code. Supabase's built-in email only reaches the project's team, and new free projects can only change their templates once custom SMTP is set up, so this needs an SMTP provider and templates showing `{{ .Token }}`.
 
 ## Bridge
 
 `plugins/squad-chat/bridge/src/`:
 
-* `bridge.mjs`: the process. Control API over the Unix socket (`/login/start`, `/login/verify`, `/logout`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/read`, `/who`, `/state`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `friends`, `status`, `error`), and the parent watch.
+* `bridge.mjs`: the process. Control API over the Unix socket (`/login/name`, `/login/start`, `/login/verify`, `/logout`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/read`, `/who`, `/state`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `friends`, `status`, `error`), and the parent watch.
 * `chat.mjs`: everything Supabase. Sign-in with the emailed code, rooms, one private channel per room, catch-up, unread counts, heartbeats and the friends list.
 * `file-storage.mjs`: the session file, `~/.config/squad-chat/session.json`, written `0600` through a temp file and a rename.
 
