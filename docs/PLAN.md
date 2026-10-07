@@ -32,7 +32,7 @@
 │      │ ③$.http.fetch(socketPath) 控制 ─┼─┐  │
 └──────┼────────────────────────────────┼─┼──┘
        ▼                                │ ▼
-┌────── bridge 子程序 (Node ≥18, 打包好的 supabase-js) ──────┐
+┌────── bridge 子程序 (Node ≥22, 打包好的 supabase-js) ──────┐
 │ Unix socket HTTP 控制 API: /login/start /login/verify     │
 │   /room /send /read /who /shutdown   (0700 目錄 + token)  │
 │ 事件輸出: ready / auth / message / presence / status / err │
@@ -132,12 +132,12 @@ squad-chat/
 │  ├─ hooks/bridge-client.mjs             檢查 node 版本、spawn、NDJSON 行切分/解析、指數退避重啟、socket 控制呼叫 call(path, body)
 │  ├─ hooks/commands.mjs                  /say /room /who /chat(開關面板) /chat-login /chat-logout /chat-name
 │  ├─ hooks/views.mjs                     wideView(dock)、compactView(inline)、bandLine(AbovePrompt)、statusText()
-│  ├─ bridge/src/bridge.ts                Node：supabase-js client、OTP、session 檔、channel 訂閱、backfill、Unix socket server、NDJSON 輸出、ppid 監看
+│  ├─ bridge/src/*.mjs                    Node：supabase-js client、OTP、session 檔、channel 訂閱、backfill、Unix socket server、NDJSON 輸出、ppid 監看
 │  ├─ bridge/dist/bridge.mjs              esbuild 單檔打包（commit 進 repo，朋友不用 npm install）
 │  ├─ bridge/package.json                 esbuild/supabase-js devDeps + build script
 │  ├─ tests/views.test.mjs                claude plugin test：三種版面渲染、Input 送出、未讀數
 │  ├─ tests/commands.test.mjs             指令解析與錯誤訊息（bridge-client 以注入的 fake 取代）
-│  └─ README.md                           安裝、登入、需求（Node ≥18、CLI）、隱私說明
+│  └─ README.md                           安裝、登入、需求（Node ≥22、CLI）、隱私說明
 ├─ bridge-tests/                          node:test：兩個 bridge 對本地 Supabase 互傳
 └─ supabase/
    ├─ config.toml                         本地 stack（含 inbucket 收 OTP 信）
@@ -175,7 +175,7 @@ squad-chat/
 ## 6. 主要風險
 1. **Mods API 標示 EARLY ACCESS**，型別檔寫明可能無預警變動 → 鎖定測試過的最低版本、README 註明。
 2. **桌面版 Code 分頁不能 `process.spawn`** → MVP 只支援 CLI；桌面版面板顯示「需在 CLI 使用」。（日後可加 REST 輪詢備援）
-3. **朋友需要 Node ≥18 在 PATH**，啟動時以 `$.process.run(["node","--version"])` 檢查並提示。
+3. **朋友需要 Node ≥22 在 PATH**（supabase-js 2.117 起要求 Node 22），啟動時以 `$.process.run(["node","--version"])` 檢查並提示。
 4. **`/say` 的指令輸出是否被當成 local-command 輸出送給模型**未有文件保證 → Phase 0 實測；若會進 context，改為只用面板 Input 發言、`/say` 回傳空結果。
 5. **Supabase 內建 SMTP 有很低的寄信額度**（每小時數封）→ 朋友一多就收不到 OTP，需要設定自訂 SMTP（如 Resend）。
 6. **anon key 公開 → 任何人都能註冊**；靠房間通關碼 + RLS + 洗版 trigger 擋，資料安全取決於 RLS 正確（pgTAP 測）。

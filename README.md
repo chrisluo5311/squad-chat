@@ -2,7 +2,7 @@
 
 A Claude Code mod: your friends' online status and a group chat in a side pane, so you can chat while you vibe code. Chat text never reaches Claude's context and uses no model tokens.
 
-> **Status: Phase 0 (API spike).** The plumbing works end to end with a local fake bridge: no Supabase, no login, no real friends yet. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
+> **Status: Phase 2 (bridge) done.** The backend and the real bridge work and are tested end to end against a local Supabase. The mod still uses the Phase 0 fake bridge until Phase 3 wires them together. See [docs/PLAN.md](docs/PLAN.md) for the full plan (in Traditional Chinese).
 
 ## What Phase 0 proves
 
@@ -28,9 +28,21 @@ supabase db advisors --local --type all
 
 Hosted project: `pijyocogpbiiwccfxqkp` (Tokyo, free plan), with the same two migrations applied. Sign-in emails go through Resend SMTP from `login@mail.chris-luo.me` and carry an 8-digit code (set in the dashboard, since free projects can only customize templates with their own SMTP).
 
+## Bridge (Phase 2)
+
+`plugins/squad-chat/bridge/` is the Node process that holds the Supabase connection: email-code sign-in, rooms, a private Realtime channel per room for presence and new messages, catch-up after reconnects, heartbeats and the friends list. The mod talks to it over HTTP on a private Unix socket and reads its NDJSON events from stdout. `dist/bridge.mjs` is a single bundled file, committed so installing the plugin needs no `npm install`.
+
+```bash
+cd plugins/squad-chat/bridge
+npm install && npm run build      # rebuild dist/bridge.mjs after editing src/
+npm test                          # two users, two bridges, against `supabase start`
+```
+
+The tests cover sign-in, passcodes, presence, messages both ways, a simulated network drop (exactly the missed messages arrive, once), session reuse across restarts, unread counts, `kill -9` showing as offline, leaving and signing out. realtime-js stops retrying if its first reconnect fails while the network is still down, so the bridge runs a watchdog that forces a reconnect after 10 s.
+
 ## Try it
 
-Requires Claude Code ≥ 2.1.287 and Node ≥ 18 on `PATH`.
+Requires Claude Code ≥ 2.1.287 and Node ≥ 22 on `PATH` (supabase-js needs Node 22).
 
 ```bash
 git clone https://github.com/chrisluo5311/squad-chat.git
