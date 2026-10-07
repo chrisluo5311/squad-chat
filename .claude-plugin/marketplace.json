@@ -4,13 +4,13 @@
     "name": "chrisluo5311"
   },
   "metadata": {
-    "description": "squad-chat: friends' presence and group chat for Claude Code."
+    "description": "Claude's cooking. Chat with your squad. Friends online, right beside your Claude Code session. Zero tokens, zero leaks to Claude."
   },
   "plugins": [
     {
       "name": "squad-chat",
       "source": "./plugins/squad-chat",
-      "description": "Friends' online status and group chat in a Claude Code side pane. Chat never reaches the model.",
+      "description": "Claude's cooking. Chat with your squad. Friends online, right beside your Claude Code session. Zero tokens, zero leaks to Claude.",
       "version": "0.4.0"
     }
   ]

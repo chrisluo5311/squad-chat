@@ -19,9 +19,9 @@
 <h1 align="center">squad-chat</h1>
 
 <p align="center">
-  See which friends are online and chat with them in a pane beside your Claude Code conversation.
+  <strong>Claude's cooking. Chat with your squad.</strong>
   <br />
-  Chat never reaches Claude and costs no tokens.
+  Friends online, right beside your Claude Code session. Zero tokens, zero leaks to Claude.
   <br />
   <a href="#usage"><strong>Explore the commands »</strong></a>
   <br />
