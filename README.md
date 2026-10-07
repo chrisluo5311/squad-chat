@@ -73,8 +73,8 @@
 ## About The Project
 
 <div align="center">
-  <img src="docs/assets/demo.gif" alt="squad-chat demo: open the pane, sign in with an emailed code, join a room with its passcode, chat with a friend, and switch rooms when a new message arrives" width="100%">
-  <sub>Signing in, joining a room, chatting, and switching rooms when a new message comes in.</sub>
+  <img src="docs/assets/demo.gif" alt="squad-chat demo: open the pane, sign in with an emailed code, join a room with its passcode, chat with a friend who shows as typing, switch rooms when a new message arrives, and change your display name" width="100%">
+  <sub>Signing in, joining a room, chatting while a friend is typing, switching rooms when a new message comes in, and picking a new name with /chat-name.</sub>
 </div>
 
 <br />
