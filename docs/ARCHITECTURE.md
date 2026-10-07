@@ -35,7 +35,7 @@ These findings come from the Phase 0 spike on Claude Code 2.1.291:
 
 | Question | Answer |
 |---|---|
-| Can the pane take keyboard input? | Yes. An `Input` element with `onSubmit`; the pane opens with `focus`. |
+| Can the pane take keyboard input? | Yes. An `Input` element with `onSubmit`, in a pane opened with `focus`. |
 | Can background events redraw the pane? | Yes. The bridge's NDJSON on stdout → `$.ui.invalidate("ui.render")`. |
 | Realtime without WebSocket? | Mods have no WebSocket, so a Node child (`$.process.spawn`) holds the connection. The mod controls it over HTTP on a private Unix socket (`$.http.fetch` with `socketPath`, directory `0700`, per-run token). |
 | Is there a reliable "session ended" event? | `session.end` exists but has a short time budget, so it is best effort. The bridge also exits by itself within about 5 s when its parent dies (it watches `ppid`), and presence relies on the dropped connection. |
@@ -43,7 +43,7 @@ These findings come from the Phase 0 spike on Claude Code 2.1.291:
 
 Two rules of the mod runtime shape the code:
 
-* `$` is never followed across an import, so everything that touches the engine lives in `hooks/squad-chat.mjs`. `state.mjs`, `commands.mjs`, `views.mjs` and `theme.mjs` are plain logic; the hooks module hands them a `call(path, body)` function, a `say(text)` function and the surface's element table.
+* `$` is never followed across an import, so everything that touches the engine lives in `hooks/squad-chat.mjs`. `state.mjs`, `commands.mjs`, `views.mjs` and `theme.mjs` are plain logic. The hooks module hands them a `call(path, body)` function, a `say(text)` function and the surface's element table.
 * `Text` takes no flex props. A tree with one is refused whole and the engine draws its own, so anything that must not shrink is wrapped in a `Box`.
 
 ## Backend
@@ -54,13 +54,13 @@ Two rules of the mod runtime shape the code:
 * **Access:** RLS on every table, column-level grants to `authenticated` only, nothing for `anon`. You see a room, its members and its messages only while you are a member.
 * **Accounts:** a profile is created for every new user, named after the email's local part, or for an anonymous account after the name it picked (made unique with `-2`, `-3`, …).
 * **Joining:** only through `join_room(slug, passcode)`, which creates the room if it doesn't exist and locks a caller out for 15 minutes after 5 wrong passcodes. Privileged helpers live in an unexposed `private` schema.
-* **Deleting:** only the room's creator can delete it; members and messages go with it.
+* **Deleting:** only the room's creator can delete it, and its members and messages go with it.
 * **Limits:** a trigger caps each user at 10 messages per 10 seconds. `pg_cron` deletes messages older than 30 days.
 * **Realtime:** private `room:<uuid>` channels. Policies on `realtime.messages` let only members receive a room's channel or track presence on it. New messages arrive through `postgres_changes`, filtered by the table's own RLS.
 
 `supabase/tests/rls.test.sql` checks all of this with pgTAP: non-members see nothing, nobody can post as someone else or backdate a message, wrong passcodes fail and lock out, the flood limit holds, only creators delete rooms.
 
-There is no central server: each group runs its own Supabase project, and the plugin's options (`supabase_url`, `supabase_key`, from `userConfig`) point at it. The mod passes them to the bridge as `SQUAD_SUPABASE_URL` and `SQUAD_SUPABASE_KEY`; unset options leave those environment variables alone, which is how local development points at `supabase start`. With neither set, the bridge exits with an `unconfigured` error and the pane explains how to connect.
+There is no central server: each group runs its own Supabase project, and the plugin's options (`supabase_url`, `supabase_key`, from `userConfig`) point at it. The mod passes them to the bridge as `SQUAD_SUPABASE_URL` and `SQUAD_SUPABASE_KEY`. Unset options leave those environment variables alone, which is how local development points at `supabase start`. With neither set, the bridge exits with an `unconfigured` error and the pane explains how to connect.
 
 Two ways to sign in, both through Supabase Auth:
 

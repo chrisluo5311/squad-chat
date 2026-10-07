@@ -160,7 +160,7 @@ claude --plugin-dir ./squad-chat/plugins/squad-chat
 squad-chat has no central server. Each group of friends shares one Supabase project, its *server*: one person [hosts it](#host-your-own-server) on Supabase's free plan, and everyone else connects with two values from them:
 
 * the project URL, such as `https://abcd1234.supabase.co`
-* the project's **publishable** key, `sb_publishable_…` (safe to share; never share the secret key)
+* the project's **publishable** key, `sb_publishable_…` (safe to share, unlike the secret key, which you never share)
 
 Set them when you install:
 
@@ -212,7 +212,7 @@ Until a server is set, the pane says so and shows these steps.
 | `/room` | List your rooms |
 | `/room <name>` | Switch to a room you're in (or click its tab) |
 | `/room <name> <passcode>` | Create a room, or join a friend's |
-| `/room leave <name>` | Leave a room; rejoin any time with its passcode |
+| `/room leave <name>` | Leave a room. Rejoin any time with its passcode. |
 | `/room delete <name>` | Delete a room you created, with all its messages, for everyone. Run it twice to confirm. |
 | `/who` | Who's online, across all your rooms |
 | `/chat-login <email>`, then `/chat-login <code>` | Sign in by email from the prompt instead of the pane |
@@ -253,7 +253,7 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 * **Who sees your messages.** Only members of the room. Access is enforced in the database with row-level security, and you become a member only with the room's passcode. Five wrong passcodes lock you out for 15 minutes.
 * **Who runs the server.** Your squad's server belongs to whoever hosts it, and they can read its database like any database admin. Pick a host you trust, or host it yourself.
 * **What friends see.** Your display name (the name you picked, or the part of your email before the `@`) and whether you're online. Never your email.
-* **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you; `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
+* **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you, and `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
 * **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message.
 
 Found a security problem? Please [open an issue](https://github.com/chrisluo5311/squad-chat/issues/new?labels=security) without exploit details and I'll get in touch.
@@ -318,7 +318,7 @@ One person per group does this, once. It fits in Supabase's free plan.
 3. **Lock down Realtime.** In the dashboard, under **Realtime → Settings**, turn off **Allow public access to channels**.
 4. **Choose how people sign in.** You can turn on either or both.
    * **With a name (simplest, no email service).** Under **Authentication → Sign In / Providers**, turn on **Allow anonymous sign-ins**. Anyone can make an account this way, but rooms still need their passcode, so strangers see nothing. Supabase limits anonymous sign-ups to 30 per hour per IP address.
-   * **With an email code.** Supabase sends the codes, but its built-in email only reaches your project's own team members (2 an hour), so connect an email service over SMTP. [Resend](https://resend.com) has a free tier; Postmark, Amazon SES or your mail provider's SMTP work the same way. With Resend:
+   * **With an email code.** Supabase sends the codes, but its built-in email only reaches your project's own team members (2 an hour), so connect an email service over SMTP. [Resend](https://resend.com) has a free tier, and Postmark, Amazon SES or your mail provider's SMTP work the same way. With Resend:
      1. In Resend, [add and verify a domain](https://resend.com/domains) you own, such as `mail.example.com`.
      2. Create an [API key](https://resend.com/api-keys) with **Sending access**, restricted to that domain.
      3. In Supabase, open **Authentication → Emails → SMTP Settings**, turn on **Enable custom SMTP**, and fill in:
