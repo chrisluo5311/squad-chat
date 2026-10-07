@@ -11,7 +11,7 @@
       "name": "squad-chat",
       "source": "./plugins/squad-chat",
       "description": "Friends' online status and group chat in a Claude Code side pane. Chat never reaches the model.",
-      "version": "0.3.2"
+      "version": "0.3.3"
     }
   ]
 }

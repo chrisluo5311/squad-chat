@@ -2,7 +2,7 @@
 
 See which friends are online and chat with them in a side pane while you work in Claude Code. Chat never reaches Claude: it isn't in the conversation and uses no model tokens.
 
-![squad-chat docked beside Claude Code](https://raw.githubusercontent.com/chrisluo5311/squad-chat/main/docs/screenshots/pane.png)
+![squad-chat demo: sign in, join a room, chat, switch rooms](https://raw.githubusercontent.com/chrisluo5311/squad-chat/main/docs/assets/demo.gif)
 
 ## Install
 

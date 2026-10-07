@@ -25,7 +25,7 @@
   <a href="#usage"><strong>Explore the commands »</strong></a>
   <br />
   <br />
-  <a href="#about-the-project">View Screenshots</a>
+  <a href="#about-the-project">View Demo</a>
   ·
   <a href="https://github.com/chrisluo5311/squad-chat/issues/new?labels=bug">Report Bug</a>
   ·
@@ -72,7 +72,8 @@
 ## About The Project
 
 <div align="center">
-  <img src="docs/screenshots/pane.png" alt="squad-chat docked beside a Claude Code conversation: room tabs, friends online, and a chat with bubbles" width="100%">
+  <img src="docs/assets/demo.gif" alt="squad-chat demo: open the pane, sign in with an emailed code, join a room with its passcode, chat with a friend, and switch rooms when a new message arrives" width="100%">
+  <sub>Signing in, joining a room, chatting, and switching rooms when a new message comes in.</sub>
 </div>
 
 <br />

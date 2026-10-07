@@ -171,8 +171,23 @@ async function markRead($) {
   }
 }
 
+// When the room tabs change (join, leave, switch), the pane's focus ring
+// leaves the input box, and what the person types next falls through to the
+// prompt: it would go to Claude. After a room change they started in the
+// pane, wait for the new tabs to be drawn, then put the ring back on the box.
+async function keepFocusAcrossRoomChange($, before) {
+  for (let waited = 0; waited < 2000; waited += 50) {
+    if (state.current !== before.current || state.rooms.length !== before.count) break;
+    await $.clock.sleep(50);
+  }
+  await $.clock.sleep(80);   // let the new tree draw first
+  await $.ui.open({ id: PANE_ID, title: "Squad Chat", focus: true });
+  await $.ui.focus({ requestId: PANE_ID, key: "compose" });
+}
+
 async function submitFromPane($, value) {
   const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
+  const before = { current: state.current, count: state.rooms.length };
   state.draft = "";
   state.notice = "";
   $.ui.invalidate("ui.render");
@@ -183,15 +198,21 @@ async function submitFromPane($, value) {
   } catch (err) {
     say(err?.message ?? String(err));
   }
+  if (/^\/room\b/.test(String(value).trim())) {
+    try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
+  }
 }
 
 async function selectRoom($, id) {
+  const before = { current: state.current, count: state.rooms.length };
   try {
     await callBridge($, "/room/select", { room: id });
   } catch (err) {
     state.notice = err?.message ?? String(err);
     $.ui.invalidate("ui.render");
+    return;
   }
+  try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
 }
 
 // Runs a command body. Its answer and any error go to the transcript as a
