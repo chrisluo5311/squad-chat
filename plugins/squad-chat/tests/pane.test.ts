@@ -648,3 +648,18 @@ test('a snippet reads as its title in the band, and never counts as an @mention'
   expect(await band.find({ type: 'Text', text: '📎 code · js · 1 line' })).toBeDefined()
   await band.unmount()
 })
+
+test('a snippet too tall for the space left shows fewer lines instead of leaving a gap', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  const long = Array.from({ length: 20 }, (_, i) => `const line${i} = ${i}`).join('\n')
+  bridge.emit(msg(1, 'me', long, { kind: 'code', lang: 'ts' }), msg(2, 'bob', 'nice'), msg(3, 'bob', 'stealing it'))
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '📎 code · ts · 20 lines' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'const line0 = 0' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^… \d+ more lines$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stealing it' })).toBeDefined()
+  await ui.unmount()
+})

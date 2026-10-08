@@ -150,10 +150,27 @@ function snippetBody(els, { kind, shown, more }) {
 function fitRows(rows, capacity) {
   const shown = [];
   let used = 0;
-  for (let i = rows.length - 1; i >= 0; i--) {
+  let i = rows.length - 1;
+  for (; i >= 0; i--) {
     if (used + rows[i].height > capacity && shown.length) break;
     used += rows[i].height;
     shown.unshift(rows[i]);
+  }
+  // A snippet that would open the view without its sender's header (it, or
+  // the header, didn't fit) shows fewer lines under a header instead of
+  // leaving the space empty.
+  const cut = i >= 0 && rows[i].kind === "snippet" ? i                       // the snippet didn't fit
+    : shown[0]?.kind === "snippet" && shown.length > 1 ? i + 1 : -1;         // its header didn't
+  if (cut >= 0) {
+    const row = rows[cut];
+    if (shown[0] === row) { shown.shift(); used -= row.height; }
+    const head = rows[cut - 1]?.kind === "head" ? rows[cut - 1] : { kind: "head", key: `h${row.m.id}-cut`, m: row.m, height: 2 };
+    const fit = capacity - used - head.height - row.gap - 2;   // its title and "… more" rows
+    if (fit >= 2) {
+      const all = displayLines(row.m.body, row.m.kind);
+      const more = Math.max(0, all.length - fit);
+      shown.unshift(head, { ...row, shown: all.slice(0, fit), more, height: row.gap + 1 + Math.min(fit, all.length) + (more ? 1 : 0) });
+    }
   }
   // Don't open on a group that has lost its header: start at the next one.
   while (shown.length > 1 && (shown[0].kind === "body" || shown[0].kind === "snippet")) shown.shift();
