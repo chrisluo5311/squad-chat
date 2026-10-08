@@ -665,3 +665,22 @@ test('a snippet too tall for the space left shows fewer lines instead of leaving
   expect(await ui.find({ type: 'Text', text: 'stealing it' })).toBeDefined()
   await ui.unmount()
 })
+
+test('two snippets in a row: when the first can\'t shrink enough, the second keeps a header', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  const long = Array.from({ length: 20 }, (_, i) => `const line${i} = ${i}`).join('\n')
+  bridge.emit(
+    msg(1, 'me', long, { kind: 'code', lang: 'ts' }),
+    msg(2, 'me', '@@ -1,2 +1,2 @@\n keep\n-old\n+new', { kind: 'diff', lang: 'diff' }),
+    msg(3, 'bob', 'nice'), msg(4, 'bob', 'really nice'), msg(5, 'bob', 'stealing it'),
+  )
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '📎 diff · +1 −1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '+new' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'you' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stealing it' })).toBeDefined()
+  await ui.unmount()
+})

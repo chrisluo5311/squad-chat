@@ -158,20 +158,27 @@ function fitRows(rows, capacity) {
   }
   // A snippet that would open the view without its sender's header (it, or
   // the header, didn't fit) shows fewer lines under a header instead of
-  // leaving the space empty.
-  const cut = i >= 0 && rows[i].kind === "snippet" ? i                       // the snippet didn't fit
-    : shown[0]?.kind === "snippet" && shown.length > 1 ? i + 1 : -1;         // its header didn't
-  if (cut >= 0) {
-    const row = rows[cut];
+  // leaving the space empty. First the snippet that didn't fit, else the one
+  // that lost its header.
+  const shrink = (at) => {
+    const row = rows[at];
+    let room = capacity - used;
+    if (shown[0] === row) room += row.height;
+    const own = rows[at - 1]?.kind === "head";
+    const head = own ? rows[at - 1] : { kind: "head", key: `h${row.m.id}-cut`, m: row.m, height: 2 };
+    const gap = own ? row.gap : 0;   // a header of its own sits right above it
+    const all = displayLines(row.m.body, row.m.kind);
+    const lines = room - head.height - gap - 1;   // below its title
+    const fit = all.length <= lines ? all.length : lines - 1;   // keep a row for "… more"
+    if (fit < 2) return false;
     if (shown[0] === row) { shown.shift(); used -= row.height; }
-    const head = rows[cut - 1]?.kind === "head" ? rows[cut - 1] : { kind: "head", key: `h${row.m.id}-cut`, m: row.m, height: 2 };
-    const fit = capacity - used - head.height - row.gap - 2;   // its title and "… more" rows
-    if (fit >= 2) {
-      const all = displayLines(row.m.body, row.m.kind);
-      const more = Math.max(0, all.length - fit);
-      shown.unshift(head, { ...row, shown: all.slice(0, fit), more, height: row.gap + 1 + Math.min(fit, all.length) + (more ? 1 : 0) });
-    }
-  }
+    const more = all.length - fit;
+    const cut = { ...row, gap, shown: all.slice(0, fit), more, height: gap + 1 + fit + (more ? 1 : 0) };
+    shown.unshift(head, cut);
+    used += head.height + cut.height;
+    return true;
+  };
+  if (!(i >= 0 && rows[i].kind === "snippet" && shrink(i)) && shown[0]?.kind === "snippet" && shown.length > 1) shrink(i + 1);
   // Don't open on a group that has lost its header: start at the next one.
   while (shown.length > 1 && (shown[0].kind === "body" || shown[0].kind === "snippet")) shown.shift();
   return shown;
