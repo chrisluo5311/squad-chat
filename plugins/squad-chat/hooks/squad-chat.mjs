@@ -6,16 +6,26 @@
 //   state.mjs     the state built from the bridge's events
 //   commands.mjs  slash commands and the pane's input box
 //   views.mjs     the pane
+//   sysviews.mjs  the built-in rooms (Usage, Git, Agents), with widgets.mjs
+//   metrics.mjs   this session's numbers, github.mjs the Git room's data,
+//   sessions.mjs  heartbeats shared with the other sessions on this computer
 
-import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, sendMessage, paneInput } from "./commands.mjs";
+import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS } from "./state.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, sendMessage, paneInput, sysRooms } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
+import { fetchGit, diffGit } from "./github.mjs";
+import { heartbeat, beatKey } from "./sessions.mjs";
 
 const PANE_ID = "squad-chat";
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
 const TYPING_PING_MS = 2_000;
 const LONG_TURN_MS = 30_000;   // a Claude turn this long turns "auto" do not disturb on
+const GIT_SHOWN_MS = 60_000;   // how often the Git room refreshes while it's on show
+const GIT_HIDDEN_MS = 5 * 60_000;   // and otherwise (for its tab's badge and the toasts)
+const BEAT_IDLE_MS = 10_000;   // a heartbeat at least this often, so others don't drop us
+const PUSHED = /\b(git\s+push|gh\s+pr\s+(create|merge|ready|close|review))\b/;
 
 // ---------------------------------------------------------------- the bridge
 
@@ -254,13 +264,14 @@ async function markRead($) {
   }
 }
 
-// When the room tabs change (join, leave, switch), the pane's focus ring
-// leaves the input box, and what the person types next falls through to the
-// prompt: it would go to Claude. After a room change they started in the
-// pane, wait for the new tabs to be drawn, then put the ring back on the box.
+// When the tabs change (join, leave, switch a room or a built-in room), the
+// pane's focus ring leaves the input box, and what the person types next
+// falls through to the prompt: it would go to Claude. After a change they
+// started in the pane, wait for the new tabs to be drawn, then put the ring
+// back on the box.
 async function keepFocusAcrossRoomChange($, before) {
   for (let waited = 0; waited < 2000; waited += 50) {
-    if (state.current !== before.current || state.rooms.length !== before.count) break;
+    if (state.current !== before.current || state.rooms.length !== before.count || state.view !== before.view) break;
     await $.clock.sleep(50);
   }
   await $.clock.sleep(80);   // let the new tree draw first
@@ -282,25 +293,30 @@ function typingPing($, value) {
 
 async function submitFromPane($, value) {
   const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
-  const before = { current: state.current, count: state.rooms.length };
+  const before = { current: state.current, count: state.rooms.length, view: state.view };
   state.draft = "";
   state.notice = "";
   lastTypingPing = 0;
   $.ui.invalidate("ui.render");
   try {
-    await paneInput((path, body) => callBridge($, path, body), value, say, { setDnd: (mode) => setDnd($, mode), sources: shareSources($, { inPane: true }) });
+    await paneInput((path, body) => callBridge($, path, body), value, say, {
+      setDnd: (mode) => setDnd($, mode),
+      sources: shareSources($, { inPane: true }),
+      setView: (view) => setView($, view),
+      refreshGit: () => refreshGit($),
+    });
     state.dividerAt.clear();   // they've replied: everything above is read
     await markRead($);         // they're looking at the room they just wrote in
   } catch (err) {
     say(err?.message ?? String(err));
   }
-  if (/^\/room\b/.test(String(value).trim())) {
+  if (/^\/room\b/.test(String(value).trim()) || state.view !== before.view) {
     try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
   }
 }
 
 async function selectRoom($, id) {
-  const before = { current: state.current, count: state.rooms.length };
+  const before = { current: state.current, count: state.rooms.length, view: state.view };
   try {
     await callBridge($, "/room/select", { room: id });
   } catch (err) {
@@ -309,6 +325,112 @@ async function selectRoom($, id) {
     return;
   }
   try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
+}
+
+// ---------------------------------------------------------------- the built-in rooms
+
+async function setView($, view) {
+  state.view = view;
+  state.notice = "";
+  await $.store.set("view", view);
+  if (view === "git") void refreshGit($, { ifOlderThan: 15_000 });
+  if (view === "usage") void refreshUsage($);
+  afterChange($);
+}
+
+async function saveSysRooms($, list) {
+  state.sysRooms = list;
+  await $.store.set("sysRooms", list);
+  afterChange($);
+}
+
+// The engine's figures, asked for directly: on opening the room, and for
+// the context breakdown (estimated locally, so it costs nothing).
+async function refreshUsage($) {
+  try {
+    const u = await $.session.usage(state.usage.showBreakdown ? { breakdown: "summary" } : {});
+    applyMeasure(state.usage, u, Date.now());
+    if (u?.context?.breakdown) state.usage.breakdown = u.context.breakdown;
+    afterChange($);
+  } catch (err) {
+    $.ui.log(`squad-chat: could not read usage: ${err?.message ?? err}`, { to: "debug" });
+  }
+}
+
+function toggleBreakdown($) {
+  state.usage.showBreakdown = !state.usage.showBreakdown;
+  $.ui.invalidate("ui.render");
+  if (state.usage.showBreakdown) void refreshUsage($);
+}
+
+let gitBusy = false;
+async function refreshGit($, { ifOlderThan = 0 } = {}) {
+  if (gitBusy || !state.sysRooms.includes("git")) return;
+  if (ifOlderThan && Date.now() - state.git.fetchedAt < ifOlderThan) return;
+  gitBusy = true;
+  const prev = state.git;
+  if (!prev.fetchedAt) { state.git = { ...prev, status: "loading" }; $.ui.invalidate("ui.render"); }
+  try {
+    const cwd = await $.session.cwd();
+    const run = (argv) => $.process.run(argv, { cwd, timeoutMs: 15_000 });
+    const next = await fetchGit(run, prev);
+    state.git = next;
+    for (const text of diffGit(prev, next)) if (!isQuiet()) $.ui.toast(text);
+  } catch (err) {
+    state.git = { ...prev, status: "error", error: err?.message ?? String(err), stale: prev.status === "ok" };
+  } finally {
+    gitBusy = false;
+  }
+  afterChange($);
+}
+
+// Something in this session moved: redraw while a built-in room is on show
+// (the tabs' badges change in the chat too), and tell the other sessions.
+function sysChanged($) {
+  $.ui.invalidate("ui.render");
+  if (state.sysRooms.includes("agents")) beat($, false);
+}
+
+let lastBeat = { key: "", at: 0 };
+let cwdCache = null;
+function beat($, force) {
+  if (!state.sessionId) return;
+  const now = Date.now();
+  state.self = heartbeat(state.usage, { id: state.sessionId, cwd: cwdCache, branch: state.git.local?.branch, now });
+  const key = beatKey(state.self);
+  if (!force && key === lastBeat.key && now - lastBeat.at < BEAT_IDLE_MS) return;
+  if (!force && key !== lastBeat.key && now - lastBeat.at < 1000) return;   // the next tick sends it
+  if (!state.socket) return;
+  lastBeat = { key, at: now };
+  callBridge($, "/sessions/beat", state.self).catch((err) => $.ui.log(`squad-chat: heartbeat: ${err?.message ?? err}`, { to: "debug" }));
+}
+
+function liveNow() {
+  const u = state.usage;
+  if (u.activity.state !== "idle" || runningCalls(u).length || agentCounts(u).running) return true;
+  if (activeView() === "agents") return state.sessions.some((s) => (s.activity?.state && s.activity.state !== "idle") || (s.agents ?? []).length);
+  if (activeView() === "git") return state.git.runs.some((r) => r.status !== "completed");
+  return false;
+}
+
+// One loop for the built-in rooms: a redraw a second while something runs
+// (spinners, timers), the agents' statuses, the heartbeat, and the Git poll.
+async function tick($) {
+  for (;;) {
+    await $.clock.sleep(1000);
+    if (state.ended) return;
+    if (!state.sysRooms.length) continue;
+    const view = activeView();
+    if (agentCounts(state.usage).running) {
+      try { if (applyAgentList(state.usage, await $.agent.list(), Date.now())) sysChanged($); } catch { /* the next tick */ }
+    }
+    if (view !== "chat" && liveNow()) $.ui.invalidate("ui.render");
+    if (state.sysRooms.includes("agents")) beat($, false);
+    if (state.sysRooms.includes("git")) {
+      const shown = view === "git" && state.paneShown;
+      void refreshGit($, { ifOlderThan: shown ? GIT_SHOWN_MS : GIT_HIDDEN_MS });
+    }
+  }
 }
 
 // Runs a command body. Its answer and any error go to the transcript as a
@@ -325,12 +447,12 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the chat pane (notify: toast @mentions, dnd: do not disturb)", argumentHint: "[notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or the Usage, Git and Agents rooms (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents | rooms <list> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
   { name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>" },
-  { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, or your diff to the room", argumentHint: "[diff [path]] [#room] | send | cancel" },
+  { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, your diff, or a Usage/Git/Agents snapshot to the room", argumentHint: "[diff [path] | usage | git | agents] [#room] | send | cancel" },
   { name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>" },
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
 ];
@@ -348,15 +470,34 @@ export function register(on, options) {
     const savedDnd = await $.store.get("dnd");
     state.dnd = ["on", "off", "auto"].includes(savedDnd) ? savedDnd : "off";
     wasQuiet = isQuiet();   // already in effect: no summary for a reload
+    const savedRooms = await $.store.get("sysRooms");
+    if (Array.isArray(savedRooms)) state.sysRooms = SYS_ROOMS.filter((x) => savedRooms.includes(x));
+    const savedView = await $.store.get("view");
+    if (savedView === "chat" || SYS_ROOMS.includes(savedView)) state.view = savedView;
+    try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
+    try { cwdCache = await $.session.cwd(); } catch { cwdCache = null; }
+    try { state.usage.model = (await $.session.model()) || state.usage.model; } catch { /* the first turn tells */ }
+    beat($, false);   // this session's own row in the Agents room, before any heartbeat goes out
+    if (state.sysRooms.includes("usage")) void refreshUsage($);   // numbers right away after a reload
     if (!bridgeStarted) {
       bridgeStarted = true;
       void runBridge($, options);
+      tick($).catch(() => { /* unloaded mid-sleep */ });
     }
     return r;
   });
 
   on("command.run", { command: "chat" }, ($, e) => answer($, async (call, say) => {
     const args = String(e.args ?? "").trim();
+    const v = /^(usage|git|agents|chat)$/i.exec(args);
+    if (v) {
+      const view = v[1].toLowerCase();
+      if (view !== "chat" && !state.sysRooms.includes(view)) return say(`The ${view} room is hidden. Bring it back with /chat rooms all.`);
+      await setView($, view);
+      return openPane($);
+    }
+    const rm = /^rooms\b\s*(.*)$/i.exec(args);
+    if (rm) return sysRooms(rm[1], say, (list) => saveSysRooms($, list));
     const d = /^dnd\b\s*(.*)$/i.exec(args);
     if (d) return dnd(d[1], say, (mode) => setDnd($, mode));
     const m = /^notify\s+(on|off)$/i.exec(args);
@@ -381,19 +522,32 @@ export function register(on, options) {
     const props = e.props ?? {};
     state.paneFocused = props.isFocused === true;
     if (state.paneFocused) void markRead($);
+    state.paneShown = true;
     return paneView($.ui.resolve(e), props, {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
-      onSelectRoom: (id) => { void selectRoom($, id); },
+      onSelectRoom: (id) => { void (async () => { if (state.view !== "chat") await setView($, "chat"); await selectRoom($, id); })(); },
+      onSelectView: (view) => {
+        void (async () => {
+          const before = { current: state.current, count: state.rooms.length, view: state.view };
+          await setView($, view);
+          try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
+        })();
+      },
       onShare: (verb) => { void shareFromPane($, verb); },
       onCopy: (text, surface) => { void copySnippet($, text, surface); },
+      onRefresh: () => { void refreshGit($); },
+      onToggleBreakdown: () => toggleBreakdown($),
+      onToggleSession: (id) => { if (!state.collapsed.delete(id)) state.collapsed.add(id); $.ui.invalidate("ui.render"); },
+      onCycleFilter: () => { state.feedFilter = { all: "here", here: "errors", errors: "all" }[state.feedFilter]; $.ui.invalidate("ui.render"); },
     });
   });
 
   // While the pane can't be seen (too narrow to place, or closed), a one-line
   // band above the prompt keeps the room in view. It yields to surveys.
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
-    if (e.props?.hasSurvey || state.auth !== "signed_in" || !currentRoom()) return next(e);
+    const chatShown = state.auth === "signed_in" && currentRoom();
+    if (e.props?.hasSurvey || (activeView() === "chat" && !chatShown)) return next(e);
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
     return bandView($.ui.resolve(e), e.props ?? {}, { onOpen: () => { void openPane($); } });
@@ -405,6 +559,7 @@ export function register(on, options) {
   on("turn.start", ($, e, next) => {
     const id = e.turnId;
     turn = id;
+    if (!e.agentId) { turnStarted(state.usage, Date.now()); sysChanged($); }
     void (async () => {
       await $.clock.sleep(LONG_TURN_MS);
       if (turn !== id || state.dnd !== "auto") return;
@@ -414,19 +569,71 @@ export function register(on, options) {
     return next(e);
   });
 
-  on("turn.complete", ($, e, next) => {
-    if (e.agentId) return next(e);   // a subagent finished: the main turn goes on
+  on("turn.complete", async ($, e, next) => {
+    const r = await next(e);
+    applyTurnUsage(state.usage, r?.usage);   // the main loop's and each subagent's
+    if (e.agentId) {   // a subagent finished: the main turn goes on
+      sysChanged($);
+      return r;
+    }
     turn = null;
+    turnEnded(state.usage, Date.now());
+    sysChanged($);
+    // The context after the turn, for the band's forecast chart: read fresh,
+    // as the status line has it once the turn is done.
+    (async () => {
+      await refreshUsage($);
+      if (recordTurnContext(state.usage)) $.ui.invalidate("ui.render");
+    })().catch(() => {});
     if (state.working) {
       state.working = false;
       quietChanged($);
     }
-    return next(e);
+    return r;
   });
+
+  // The Usage room's figures, as the engine measures them.
+  on("session.measure", async ($, e, next) => {
+    const r = await next(e);
+    applyMeasure(state.usage, e, Date.now());
+    afterChange($);
+    return r;
+  });
+
+  // Each tool call, timed. Passed through untouched: never denied, never changed.
+  on("tool.call", async ($, e, next) => {
+    let key = null;
+    try { key = toolStarted(state.usage, { tool: e.tool, agentId: e.agentId, input: e, at: Date.now() }); sysChanged($); }
+    catch { /* the call matters more than its timing */ }
+    let r;
+    try {
+      r = await next(e);
+      return r;
+    } finally {
+      try {
+        toolEnded(state.usage, key, { at: Date.now(), isError: !r || !!r.isError || !!r.deny });
+        sysChanged($);
+        // A push or a new PR: the Git room catches up once GitHub has.
+        if (e.tool === "Bash" && PUSHED.test(String(e.command ?? ""))) {
+          (async () => { await $.clock.sleep(8_000); await refreshGit($); })().catch(() => {});
+        }
+      } catch { /* as above */ }
+    }
+  }).catch(($, e, next) => next(e));   // pass through: replays the call's own result
+
+  on("agent.spawn", async ($, e, next) => {
+    const r = await next(e);
+    if (r?.agentId) {
+      agentSpawned(state.usage, { id: r.agentId, type: e.subagentType || (e.isTeammate ? "teammate" : "agent"), description: e.description, parentId: e.parentAgentId, at: Date.now() });
+      sysChanged($);
+    }
+    return r;
+  }).catch(($, e, next) => next(e));
 
   on("ui.close", ($, e, next) => {
     if (e.id === PANE_ID) {
       state.paneFocused = false;
+      state.paneShown = false;
       state.dividerAt.clear();
       $.ui.invalidate("ui.render");
     }

@@ -26,9 +26,12 @@ export async function localStackUp() {
 
 // One bridge process. Keeps every NDJSON event it printed.
 export class Bridge {
-  constructor(name, { url = LOCAL_URL, configDir } = {}) {
+  // `url: null` starts it without a server (heartbeats only); `sessionsDir`
+  // shares the sessions' heartbeat folder between bridges.
+  constructor(name, { url = LOCAL_URL, configDir, sessionsDir } = {}) {
     this.name = name;
     this.url = url;
+    this.sessionsDir = sessionsDir;
     this.configDir = configDir ?? mkdtempSync(join(tmpdir(), `sq-${name}-`));
     this.socketDir = mkdtempSync("/tmp/sqs-");    // short: socket paths max ~100 bytes
     this.token = randomBytes(16).toString("hex");
@@ -39,18 +42,17 @@ export class Bridge {
 
   start() {
     this.events = [];
-    this.child = spawn(process.execPath, [BRIDGE], {
-      env: {
-        ...process.env,
-        SQUAD_BRIDGE_TOKEN: this.token,
-        SQUAD_SUPABASE_URL: this.url,
-        SQUAD_SUPABASE_KEY: LOCAL_KEY,
-        SQUAD_CONFIG_DIR: this.configDir,
-        SQUAD_SOCKET_DIR: this.socketDir,
-        SQUAD_REFRESH_MS: "2000",   // notice deleted rooms quickly
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const env = {
+      ...process.env,
+      SQUAD_BRIDGE_TOKEN: this.token,
+      SQUAD_SUPABASE_URL: this.url ?? "",
+      SQUAD_SUPABASE_KEY: this.url ? LOCAL_KEY : "",
+      SQUAD_CONFIG_DIR: this.configDir,
+      SQUAD_SOCKET_DIR: this.socketDir,
+      SQUAD_REFRESH_MS: "2000",   // notice deleted rooms quickly
+    };
+    if (this.sessionsDir) env.SQUAD_SESSIONS_DIR = this.sessionsDir;
+    this.child = spawn(process.execPath, [BRIDGE], { env, stdio: ["ignore", "pipe", "pipe"] });
     this.exited = new Promise((r) => this.child.on("exit", (code, signal) => r({ code, signal })));
     let buf = "";
     this.child.stdout.setEncoding("utf8").on("data", (chunk) => {

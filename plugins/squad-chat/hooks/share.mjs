@@ -65,8 +65,12 @@ export function lineCount(body) {
   return String(body).split("\n").length;
 }
 
-// "diff · 3 files +42 −7", "code · ts · 12 lines".
+// A built-in room's snapshot is a code snippet tagged with the room's name.
+export const SNAPSHOT_ICONS = { usage: "📊", git: "⎇", agents: "⟡" };
+
+// "diff · 3 files +42 −7", "code · ts · 12 lines", "📊 Usage · opus-5.5 · 1h12m".
 export function snippetTitle({ kind, lang, body }) {
+  if (kind === "code" && SNAPSHOT_ICONS[lang]) return `${SNAPSHOT_ICONS[lang]} ${String(body).split("\n")[0].slice(0, 60)}`;
   if (kind === "diff") {
     const { files, added, removed } = diffStats(body);
     const where = files ? `${files} file${files === 1 ? "" : "s"} ` : "";

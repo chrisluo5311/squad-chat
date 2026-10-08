@@ -6,8 +6,9 @@
 // `say(text)`, the answer: $.ui.log for slash commands (shown, never sent to
 // the model), the pane's notice line for the input box.
 
-import { state, currentRoom } from "./state.mjs";
+import { state, currentRoom, activeView, SYS_ROOMS } from "./state.mjs";
 import { lastCodeBlock, looksLikeDiff, snippetTitle, findSecret, tooBig, displayLines } from "./share.mjs";
+import { snapshotText } from "./sysviews.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
 // sign-in codes, room passcodes.
@@ -134,6 +135,18 @@ export async function dnd(args, say, setDnd) {
   return say(DND_MODES[mode]);
 }
 
+// "/chat rooms usage,git": which built-in rooms have tabs. "all" or "none" too.
+// `save(list)` keeps the choice.
+export async function sysRooms(args, say, save) {
+  const arg = String(args ?? "").trim().toLowerCase();
+  if (!arg) return say(`Built-in rooms: ${state.sysRooms.join(", ") || "none"}. Change with /chat rooms usage,git,agents (or all, or none).`);
+  const list = arg === "all" ? [...SYS_ROOMS] : arg === "none" ? [] : arg.split(/[\s,]+/).filter(Boolean);
+  const unknown = list.filter((x) => !SYS_ROOMS.includes(x));
+  if (unknown.length) return say(`No built-in room called ${unknown.join(", ")}. They are usage, git and agents.`);
+  await save(SYS_ROOMS.filter((x) => list.includes(x)));
+  return say(state.sysRooms.length ? `Built-in rooms: ${state.sysRooms.join(", ")}.` : "Built-in rooms hidden.");
+}
+
 const SHARE_HOLD_MS = 120_000;   // a preview waits this long for a send
 
 // "/chat-share" (what's selected, or the last code block in Claude's reply),
@@ -168,12 +181,14 @@ export async function share(call, args, say, sources) {
   if (!room) return say("Join a room first: /room <name> <passcode>");
 
   let snippet;
-  if (verb === "diff") {
+  if (SYS_ROOMS.includes(verb)) {
+    snippet = { kind: "code", lang: verb, body: snapshotText(verb) };
+  } else if (verb === "diff") {
     const body = String(await sources.diff(rest.join(" ")) ?? "").replace(/\n$/, "");
     if (!body.trim()) return say(rest.length ? `No uncommitted changes in ${rest.join(" ")}.` : "No uncommitted changes to share.");
     snippet = { kind: "diff", lang: "diff", body };
   } else if (verb) {
-    return say(`Use ${c} [#room], ${c} diff [path] [#room], ${c} send or ${c} cancel.`);
+    return say(`Use ${c} [#room], ${c} diff [path] [#room], ${c} usage|git|agents [#room], ${c} send or ${c} cancel.`);
   } else {
     const selected = String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
     if (selected.trim()) snippet = looksLikeDiff(selected) ? { kind: "diff", lang: "diff", body: selected } : { kind: "code", lang: null, body: selected };
@@ -238,14 +253,34 @@ function requireSignedIn() {
   }
 }
 
+function showView(view, say, setView) {
+  if (!state.sysRooms.includes(view)) return say(`The ${view} room is hidden. Bring it back with /chat rooms all.`);
+  return setView?.(view);
+}
+
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents] [#room] · /usage · /git · /agents · /chat · /logout · anything else is a message";
+
 // The pane's input box: commands, the sign-in steps, or a message.
-export async function paneInput(call, value, say, { setDnd, sources } = {}) {
+// `setView(id)` shows a built-in room ("chat" for the chat), `refreshGit()`
+// fetches the Git room again.
+export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
+  const view = activeView();
+  if (view === "git" && /^r(efresh)?$/i.test(text)) return refreshGit?.();
   const m = /^\/([\w-]+)\s*([\s\S]*)$/.exec(text);
   if (m) {
     const [, cmd, args] = m;
     switch (cmd) {
+      case "usage": case "git": case "agents": return showView(cmd, say, setView);
+      case "chat": {
+        // "/chat git" typed here does what it does at the prompt.
+        const [sub, ...more] = args.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        if (!sub || sub === "chat") return setView?.("chat");
+        if (SYS_ROOMS.includes(sub)) return showView(sub, say, setView);
+        if (sub === "dnd") return dnd(more.join(" "), say, setDnd);
+        return say("Here, /chat takes usage, git, agents or dnd. Type it at the prompt for the rest.");
+      }
       case "room": return room(call, args, say);
       case "who": return who(say);
       case "login": case "chat-login": return login(call, args, say);
@@ -254,10 +289,11 @@ export async function paneInput(call, value, say, { setDnd, sources } = {}) {
       case "say": return sendMessage(call, args, say);
       case "dnd": return dnd(args, say, setDnd);
       case "share": return share(call, args, say, sources);
-      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff] [#room] · /logout · anything else is a message");
+      case "help": return say(HELP);
       default: return say(`Unknown command /${cmd}. Try /help.`);
     }
   }
+  if (view !== "chat") return say(`This is the ${view} room: type a command (/help), or pick a chat room to talk.`);
   // The pane itself shows each sign-in step, so only errors (thrown) need words.
   if (state.auth === "signed_out" || state.auth === "code_sent") return login(call, text, () => {});
   return sendMessage(call, text, say);

@@ -56,6 +56,7 @@
       <a href="#usage">Usage</a>
       <ul>
         <li><a href="#first-run">First run</a></li>
+        <li><a href="#built-in-rooms">Built-in rooms</a></li>
         <li><a href="#commands">Commands</a></li>
         <li><a href="#layouts">Layouts</a></li>
         <li><a href="#two-accounts-on-one-computer">Two accounts on one computer</a></li>
@@ -88,6 +89,7 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 * **Your own server.** Each group of friends runs its own free Supabase project. There is no central service and no account with us.
 * **Private rooms.** Rooms are joined with a passcode, and the database only shows a room's messages to its members.
 * **Survives bad networks.** After a dropped connection, a closed laptop or a crashed process, it reconnects by itself and fetches exactly the messages you missed.
+* **Built-in rooms for your session.** Next to the chat rooms, the Usage, Git and Agents tabs show context fill, cost, rate limits and tool timings, your pull requests and CI, and every Claude Code session's subagents as they work. They need no server and no sign-in.
 * **Fits any terminal.** Docked beside the transcript in a wide terminal, compact above the prompt in a narrow one, and a one-line summary when the pane is closed.
 
 It is a Claude Code mod: a plugin of function hooks, plus a small Node process that holds the connection to Supabase. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit.
@@ -206,6 +208,71 @@ Until a server is set, the pane says so and shows these steps.
   <img src="docs/screenshots/sign-in.png" alt="The sign-in card: step 1 of 2, enter your email" width="100%">
 </div>
 
+<br />
+
+### Built-in rooms
+
+Three tabs sit before your chat rooms: **◔ Usage**, **⎇ Git** and **⟡ Agents**. They need no server and no sign-in, and nothing in them leaves your computer unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail.
+
+Open one with `/chat usage`, `/chat git` or `/chat agents`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+
+#### ◔ Usage
+
+How this session is using Claude, updated as it works:
+
+* **Context, 5-hour and 7-day.** How full the context window is (press **Context** for what fills it), and how much of each rate-limit window you've used, with when it resets.
+* **Spend.** What the session has cost, the rate per hour, a sparkline of the last hour, the tokens used and how many came from the prompt cache.
+* **Tools.** For each tool, the typical time (p50), the slow time (p95), how many calls and how many failed.
+* **Subagents.** Each one Claude starts, what it's doing and which tool it uses most.
+
+<div align="center">
+  <img src="docs/assets/usage.gif" alt="The Usage room docked beside the conversation. Claude starts an Explore subagent and runs Bash and Read, and the room fills in: context and the 5-hour and 7-day meters, the spend tiles, each tool's p50 and p95 with calls and failures, and the subagent as it finishes." width="100%">
+  <sub>Claude starts a subagent and a few tools, and the Usage room fills in as they run.</sub>
+</div>
+
+<br />
+
+Above the prompt, the context reads as a forecast (☀ Clear, ☁ Cloudy, ☂ Showers, ☇ Storm, ↯ Compact soon) with a chart of the last turns and how much the last one added, then the 5-hour window and what you've spent:
+
+```
+◔ Usage │ ☀ Clear 12% 121k/1.0M ▅▆█ ▲+28k · 5-hour 18% · spent $0.88
+```
+
+#### ⎇ Git
+
+Where your branch stands on GitHub, read through the [`gh` CLI](https://cli.github.com) as you're already signed in:
+
+* **The branch.** Commits ahead and behind its remote (`↑2 ↓1`, or `local` before its first push) and how many files you've changed.
+* **This branch's pull request.** Its checks as they run, who approved, who's been asked to review, and whether it can merge.
+* **Pull requests, Actions, issues and alerts.** Open pull requests with the ones waiting for your review first, the latest run of each workflow, issues assigned to you and Dependabot alerts.
+* **Toasts** when checks fail or all pass, someone asks for your review, or your pull request is approved, merged or in conflict.
+
+It refreshes every minute while you look at it, every five minutes otherwise, and shortly after a `git push`. Type `r` in the pane to refresh now, and press ⧉ to copy a link.
+
+<div align="center">
+  <img src="docs/assets/git.gif" alt="The Git room for the squad-chat repository: the branch, PR #7 with its checks going from three passed and two running to all five passed, the merge state turning from blocked to mergeable, and the Actions runs finishing, refreshed with r." width="100%">
+  <sub>PR #7's checks finish while the room refreshes: blocked becomes mergeable.</sub>
+</div>
+
+<br />
+
+#### ⟡ Agents
+
+Every Claude Code session on this computer, in one place:
+
+* **Sessions.** Each one's folder, branch and model, and what it's doing right now: thinking, running a tool, waiting on an agent, or idle.
+* **Subagents as a tree** under the session that started them. Press ▾ to fold one.
+* **A live feed** of tool calls from all of them, with their times. The filter shows all sessions, only this one, or only failures.
+
+<div align="center">
+  <img src="docs/assets/agents.gif" alt="The Agents room with two sessions: this one waits on an Explore subagent while the other, in another repository, runs Bash commands one after another. The live feed interleaves both sessions' tool calls with their times." width="100%">
+  <sub>Two sessions at once: this one waits on a subagent while the other runs commands.</sub>
+</div>
+
+<br />
+
+To show the team, `/chat-share usage` (or `git`, `agents`) posts a snapshot of the room to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". `/chat rooms usage,git` picks which tabs you want, and `/chat rooms none` hides them all.
+
 ### Commands
 
 | Command | What it does |
@@ -226,8 +293,11 @@ Until a server is set, the pane says so and shows these steps.
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
+| `/chat usage` / `git` / `agents` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, or `all`, or `none` |
+| `/chat-share usage` / `git` / `agents` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/logout` and `/help` too, where the preview has **Send** and **Cancel** buttons. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview has **Send** and **Cancel** buttons. In the Git room, `r` refreshes. Type passcodes there: it never touches the conversation.
 
 #### Examples
 
@@ -247,6 +317,8 @@ Start a room and bring your friends in:
   <sub>Rooms from the prompt: join with a passcode, list, switch, post with /say, see who's online and pick a new name.</sub>
 </div>
 
+<br />
+
 Share code and diffs:
 
 ```
@@ -264,6 +336,8 @@ Share code and diffs:
   <sub>Sharing Claude's code block and an uncommitted diff: a preview first, then a card in the room.</sub>
 </div>
 
+<br />
+
 Stay focused:
 
 ```
@@ -278,6 +352,8 @@ Stay focused:
   <sub>Do not disturb: the band stays grey while sam writes, and one toast sums it up after.</sub>
 </div>
 
+<br />
+
 ### Layouts
 
 | Where | What you see |
@@ -285,11 +361,13 @@ Stay focused:
 | Docked (fullscreen, ≥ 110 columns) | Room tabs, a FRIENDS card, and the room's messages as bubbles: yours on the right, theirs on the left, grouped by sender, with date labels and a **new** line where you stopped reading |
 | Above the prompt (narrower) | The room, who's online, the last five messages and the input box |
 | Pane closed | One line: the room, who's online, unread count, the latest message and **Open** |
-| Status line | Unread counts per room, such as `💬 #team 3`, or `🔕 #team 3` during do not disturb |
+| Status line | Unread counts per room, such as `💬 #team 3`, or `🔕 #team 3` during do not disturb. The built-in rooms add `◔ 85%` when the context is nearly full and `✗ CI` when this branch's checks fail, and nothing otherwise. |
 
 <div align="center">
   <img src="docs/screenshots/band.png" alt="The one-line summary above the prompt while the pane is closed" width="100%">
 </div>
+
+<br />
 
 ### Two accounts on one computer
 
@@ -312,6 +390,7 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 * **What friends see.** Your display name (the name you picked, or the part of your email before the `@`) and whether you're online, or busy during do not disturb. Never your email.
 * **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you, and `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
 * **What sharing sends.** `/chat-share` reads your selection, Claude's replies or `git diff` on your own computer, and nothing leaves until you look at it and send it. If it looks like it holds an API key, a token, a private key or a secret from an env file, it says so and asks you to send twice. What you share is stored on your squad's server like any message.
+* **What the built-in rooms read.** The Usage and Agents rooms read this session's own figures from Claude Code: context, cost, rate limits, token counts, tool names and timings, and subagents. The Git room runs `git status` and `gh` in the session's folder as you. Nothing is sent anywhere, and no token is stored. To show other sessions, each session keeps a small heartbeat file in `/tmp/squad-chat-<uid>/sessions/`, readable only by you: the folder's name, branch, model, what it's doing, and the last few tool calls with a few words each (a command, a file's name, a search pattern). Anything that looks like a secret is masked. No prompts, replies or tool output go in. A heartbeat is removed when its session ends. Only `/chat-share usage|git|agents` sends any of it to a chat room, after you look at the preview.
 * **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message. A shared snippet may be up to 8000 characters and 200 lines, at most 3 a minute.
 
 <div align="center">
@@ -363,6 +442,11 @@ Sign-in emails land in the local mail UI at http://127.0.0.1:56424.
 | `plugins/squad-chat/hooks/state.mjs` | State built from the bridge's events |
 | `plugins/squad-chat/hooks/commands.mjs` | Slash commands and the pane's input box |
 | `plugins/squad-chat/hooks/views.mjs` | The docked pane, the compact pane and the band |
+| `plugins/squad-chat/hooks/sysviews.mjs` | The built-in rooms: Usage, Git and Agents |
+| `plugins/squad-chat/hooks/widgets.mjs` | Meters, sparklines, stat tiles, rows and the card stack the built-in rooms share |
+| `plugins/squad-chat/hooks/metrics.mjs` | This session's usage, tool timings and subagents |
+| `plugins/squad-chat/hooks/github.mjs` | The Git room's data, read through `git` and `gh` |
+| `plugins/squad-chat/hooks/sessions.mjs` | Heartbeats shared with the other sessions on this computer |
 | `plugins/squad-chat/hooks/theme.mjs` | Colors and glyphs |
 | `plugins/squad-chat/bridge/src/` | The Node bridge (bundled into `bridge/dist/bridge.mjs`) |
 | `plugins/squad-chat/tests/` | Mod tests |
@@ -424,6 +508,7 @@ One person per group does this, once. It fits in Supabase's free plan.
 - [x] Typing indicators
 - [x] Do not disturb, by hand or while Claude works
 - [x] Share code and diffs from your session
+- [x] Built-in Usage, Git and Agents rooms
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 
 See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for proposed features and known issues.
@@ -441,6 +526,8 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information
 * [Supabase](https://supabase.com), for auth, Postgres and Realtime
 * [Resend](https://resend.com) (optional), for delivering sign-in codes on servers that use email sign-in
 * [glowup](https://github.com/NovusEdge/glowup), whose classic pack inspired the palette and card layout
+* [token-weather](https://github.com/anthropics/claude-code-playground/tree/main/claude-code/mods/token-weather), whose context forecast the Usage band draws
+* [awesome-claude-code-mods](https://github.com/karanb192/awesome-claude-code-mods) and the mods listed there, which gave the built-in rooms their ideas: token-weather-usage, claude-flightdeck, hud and clawd-dash for Usage, cc-pr-tracker, github-issues and pr-pulse for Git, and agent-shell-watch, claude-agentpane and gsd-status for Agents
 * [Shields.io](https://shields.io) and [Hits](https://hits.sh), for the badges
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template), for this README's layout
 
