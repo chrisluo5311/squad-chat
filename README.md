@@ -242,6 +242,11 @@ Start a room and bring your friends in:
 /chat-name captain           show up as captain from now on
 ```
 
+<div align="center">
+  <img src="docs/assets/rooms.gif" alt="From the prompt: /room design pixels42 joins a friend's room, /room lists the rooms with an unread count, /room squad switches back, /say posts a message, /who shows who's online, and /chat-name captain changes the name. The pane then shows the conversation." width="100%">
+  <sub>Rooms from the prompt: join with a passcode, list, switch, post with /say, see who's online and pick a new name.</sub>
+</div>
+
 Share code and diffs:
 
 ```
@@ -253,6 +258,11 @@ Share code and diffs:
 /chat-share send             post what the preview showed
 /chat-share cancel           drop it
 ```
+
+<div align="center">
+  <img src="docs/assets/share.gif" alt="Claude writes a debounce helper. /chat-share shows a preview of its code block and /chat-share send posts it. /chat-share diff does the same for an uncommitted change. In the pane both appear as cards, the diff colored, and a friend replies." width="100%">
+  <sub>Sharing Claude's code block and an uncommitted diff: a preview first, then a card in the room.</sub>
+</div>
 
 Stay focused:
 
@@ -266,11 +276,6 @@ Stay focused:
 <div align="center">
   <img src="docs/assets/dnd.gif" alt="With /chat dnd on, the band above the prompt turns grey and shows a muted count while a friend writes, with no toast. After /chat dnd off, one toast sums up the missed messages and the pane shows them." width="100%">
   <sub>Do not disturb: the band stays grey while sam writes, and one toast sums it up after.</sub>
-</div>
-
-<div align="center">
-  <img src="docs/assets/share.gif" alt="Claude writes a debounce helper. /chat-share shows a preview of its code block and /chat-share send posts it. /chat-share diff does the same for an uncommitted change. In the pane both appear as cards, the diff colored, and a friend replies." width="100%">
-  <sub>Sharing Claude's code block and an uncommitted diff: a preview first, then a card in the room.</sub>
 </div>
 
 ### Layouts
