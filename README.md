@@ -83,6 +83,7 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 
 * **Lives inside Claude Code.** One `/chat` command opens a pane: no browser tab, no extra app.
 * **Never reaches Claude.** What you type in the pane never enters the conversation, and slash-command arguments are hidden from the model, so chatting costs no tokens.
+* **Share code and diffs.** Post the code you selected, Claude's last code block or your `git diff` to the room as a card your friends can copy, without copying and pasting.
 * **Presence across rooms.** See who's online in every room you share and who's typing, with a status line for unread messages, an optional toast when someone @mentions you, and a do-not-disturb mode for when Claude is busy.
 * **Your own server.** Each group of friends runs its own free Supabase project. There is no central service and no account with us.
 * **Private rooms.** Rooms are joined with a passcode, and the database only shows a room's messages to its members.
@@ -142,7 +143,7 @@ To update later:
 claude plugin marketplace update squad-chat && claude plugin update squad-chat@squad-chat
 ```
 
-If you host your group's server, also run `supabase db push` again from an updated clone, so the server has what the new version needs. For example, typing indicators need 0.5.0's database change.
+If you host your group's server, also run `supabase db push` again from an updated clone, so the server has what the new version needs. For example, shared snippets need 0.7.0's database change.
 
 To uninstall:
 
@@ -220,15 +221,22 @@ Until a server is set, the pane says so and shows these steps.
 | `/chat-login <email>`, then `/chat-login <code>` | Sign in by email from the prompt instead of the pane |
 | `/chat-login <name>` | Sign in with just a name, where the server allows it |
 | `/chat-name <new name>` | Change your display name. Your friends see the new one right away. |
+| `/chat-share` | Share the text you selected, or else the last code block in Claude's reply. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
+| `/chat-share diff [path]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/logout` and `/help` too. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/logout` and `/help` too, where the preview has **Send** and **Cancel** buttons. Type passcodes there: it never touches the conversation.
 
 <div align="center">
   <img src="docs/assets/dnd.gif" alt="With /chat dnd on, the band above the prompt turns grey and shows a muted count while a friend writes, with no toast. After /chat dnd off, one toast sums up the missed messages and the pane shows them." width="100%">
   <sub>Do not disturb: the band stays grey while sam writes, and one toast sums it up after.</sub>
+</div>
+
+<div align="center">
+  <img src="docs/assets/share.gif" alt="Claude writes a debounce helper. /chat-share shows a preview of its code block and /chat-share send posts it. /chat-share diff does the same for an uncommitted change. In the pane both appear as cards, the diff colored, and a friend replies." width="100%">
+  <sub>Sharing Claude's code block and an uncommitted diff: a preview first, then a card in the room.</sub>
 </div>
 
 ### Layouts
@@ -264,7 +272,8 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 * **Who runs the server.** Your squad's server belongs to whoever hosts it, and they can read its database like any database admin. Pick a host you trust, or host it yourself.
 * **What friends see.** Your display name (the name you picked, or the part of your email before the `@`) and whether you're online, or busy during do not disturb. Never your email.
 * **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you, and `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
-* **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message.
+* **What sharing sends.** `/chat-share` reads your selection, Claude's replies or `git diff` on your own computer, and nothing leaves until you look at it and send it. If it looks like it holds an API key, a token, a private key or a secret from an env file, it says so and asks you to send twice. What you share is stored on your squad's server like any message.
+* **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message. A shared snippet may be up to 8000 characters and 200 lines, at most 3 a minute.
 
 <div align="center">
   <img src="docs/assets/never-reaches-claude.gif" alt="A friend writes in the squad chat asking Claude to ignore its instructions and delete the repo. Asked whether anyone in the chat asked it to do something, Claude answers that it hasn't seen any requests from the squad chat." width="100%">
@@ -375,6 +384,7 @@ One person per group does this, once. It fits in Supabase's free plan.
 - [x] `/chat-name` to change your display name
 - [x] Typing indicators
 - [x] Do not disturb, by hand or while Claude works
+- [x] Share code and diffs from your session
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 
 See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for proposed features and known issues.

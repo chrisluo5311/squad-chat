@@ -21,6 +21,14 @@ const MAX_KICK_GAP_MS = 30_000;
 const TYPING_SEND_MS = 2_000;    // send "typing" at most this often per room
 const TYPING_TTL_MS = 5_000;     // someone stops "typing" this long after their last one
 const NAME = /^[A-Za-z0-9_-]{1,24}$/;
+// Messages are chat text, or a snippet shared from a session: code or a diff.
+const KINDS = new Set(["text", "code", "diff"]);
+const LANG = /^[a-z0-9+#._-]{1,20}$/;
+const MAX_TEXT = 500, MAX_SNIPPET = 8000, MAX_SNIPPET_LINES = 200;
+const COLS = "id, room_id, user_id, body, created_at, kind, lang";
+const OLD_COLS = "id, room_id, user_id, body, created_at";   // a server without snippets yet
+const MISSING_COLUMN = new Set(["42703", "PGRST204"]);
+const OLD_SERVER = "this server can't take snippets yet: whoever hosts it needs to run `supabase db push` from squad-chat 0.7.0";
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -68,6 +76,7 @@ export class Chat {
     this.friendsLoading = null;
     this.leftAt = new Map();        // user id → when presence last saw them leave
     this.busy = false;              // do not disturb: roommates see us as busy
+    this.oldSchema = false;         // the server predates snippets (no kind/lang columns)
 
     // A refresh token that stops working (revoked, signed out elsewhere)
     // ends the session. Don't call Supabase from inside this callback.
@@ -425,23 +434,33 @@ export class Chat {
   // reconnect: everything after the newest id we've seen (with a small
   // overlap; duplicates are dropped by id).
   async backfill(room) {
-    const cols = "id, room_id, user_id, body, created_at";
     if (room.lastSeenId === 0) {
-      const { data, error } = await this.sb.from("messages").select(cols)
-        .eq("room_id", room.id).order("id", { ascending: false }).limit(HISTORY);
+      const { data, error } = await this.selectMessages((q) => q
+        .eq("room_id", room.id).order("id", { ascending: false }).limit(HISTORY));
       if (error) throw fail(error, "could not load history");
       await this.enqueue(room, data.reverse(), { backfill: true, count: false });   // already in the unread count
       return;
     }
     let after = Math.max(0, room.lastSeenId - BACKFILL_OVERLAP);
     for (;;) {
-      const { data, error } = await this.sb.from("messages").select(cols)
-        .eq("room_id", room.id).gt("id", after).order("id", { ascending: true }).limit(BACKFILL_PAGE);
+      const { data, error } = await this.selectMessages((q) => q
+        .eq("room_id", room.id).gt("id", after).order("id", { ascending: true }).limit(BACKFILL_PAGE));
       if (error) throw fail(error, "could not catch up");
       await this.enqueue(room, data, { backfill: true, count: true });
       if (data.length < BACKFILL_PAGE) return;
       after = data[data.length - 1].id;
     }
+  }
+
+  // A server that hasn't run the snippets migration has no kind and lang:
+  // ask again without them, and keep to plain text from then on.
+  async selectMessages(build) {
+    let res = await build(this.sb.from("messages").select(this.oldSchema ? OLD_COLS : COLS));
+    if (res.error && !this.oldSchema && MISSING_COLUMN.has(res.error.code)) {
+      this.oldSchema = true;
+      res = await build(this.sb.from("messages").select(OLD_COLS));
+    }
+    return res;
   }
 
   // `count`: these may be news to the person (live, or caught up after a
@@ -472,6 +491,8 @@ export class Chat {
             user: this.names.get(row.user_id) ?? "someone",
             mine: row.user_id === this.user?.id,
             body: row.body,
+            kind: row.kind ?? "text",
+            lang: row.lang ?? null,
             at: row.created_at,
           },
         });
@@ -500,13 +521,25 @@ export class Chat {
     if (old && old !== name) this.emit({ type: "name", user_id: id, name });
   }
 
-  async send(text, roomRef) {
+  // A chat message, or with `kind` "code" or "diff" a snippet: up to 8000
+  // characters and 200 lines, its indentation kept.
+  async send(text, roomRef, { kind = "text", lang } = {}) {
     const room = this.room(roomRef);
-    const body = String(text ?? "").trim();
-    if (!body) throw new HttpError(400, "empty message");
-    if (body.length > 500) throw new HttpError(400, "messages are limited to 500 characters");
-    const { data, error } = await this.sb.from("messages").insert({ room_id: room.id, body })
-      .select("id, room_id, user_id, body, created_at").single();
+    if (!KINDS.has(kind)) throw new HttpError(400, 'kind is "text", "code" or "diff"');
+    const snippet = kind !== "text";
+    const body = snippet ? String(text ?? "").replace(/^(\s*\n)+/, "").trimEnd() : String(text ?? "").trim();
+    if (!body.trim()) throw new HttpError(400, snippet ? "nothing to share" : "empty message");
+    if (!snippet && body.length > MAX_TEXT) throw new HttpError(400, `messages are limited to ${MAX_TEXT} characters`);
+    if (snippet && body.length > MAX_SNIPPET) throw new HttpError(400, `snippets are limited to ${MAX_SNIPPET} characters`);
+    if (snippet && body.split("\n").length > MAX_SNIPPET_LINES) throw new HttpError(400, `snippets are limited to ${MAX_SNIPPET_LINES} lines`);
+    if (snippet && this.oldSchema) throw new HttpError(400, OLD_SERVER);
+    const row = { room_id: room.id, body, ...(snippet ? { kind, ...(LANG.test(lang ?? "") ? { lang } : {}) } : {}) };
+    const { data, error } = await this.sb.from("messages").insert(row).select(this.oldSchema ? OLD_COLS : COLS).single();
+    if (error && MISSING_COLUMN.has(error.code) && !this.oldSchema) {   // once: then it's another problem
+      this.oldSchema = true;
+      if (snippet) throw new HttpError(400, OLD_SERVER);
+      return this.send(text, roomRef);
+    }
     if (error) throw fail(error, "could not send");
     await this.enqueue(room, [data], { backfill: false, count: true });   // show it now; the realtime copy is dropped as a duplicate
     return { id: data.id };

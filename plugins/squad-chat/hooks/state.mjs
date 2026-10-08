@@ -27,6 +27,7 @@ export const state = {
   dnd: "off",             // do not disturb: off | on | auto (while Claude works), kept in $.store
   working: false,         // a long Claude turn is running (what "auto" waits for)
   missed: { messages: 0, mentions: 0 },   // what came in while quiet, for the summary
+  pendingShare: null,     // a snippet shown for a look before /share send
   dividerAt: new Map(),   // room id → read marker when the pane last caught up: the "new" line
   ended: false,
 };
@@ -141,7 +142,7 @@ export function applyEvent(event) {
       const room = state.rooms.find((r) => r.id === m.room);
       if (room && typeof event.unread === "number") room.unread = event.unread;
       const seen = m.room === state.current && state.paneFocused;
-      const mentioned = event.counted && !seen && mentions(m.body, state.user?.name);
+      const mentioned = event.counted && !seen && (!m.kind || m.kind === "text") && mentions(m.body, state.user?.name);
       if (isQuiet()) {
         // Nothing pops up now: count it for the summary instead.
         if (event.counted && !seen) state.missed.messages++;

@@ -3,12 +3,13 @@ import { test, expect, mock } from 'claude-code/testing'
 // The bridge, faked beneath the plugin: `node --version` answers, the spawned
 // child prints whatever the test pushes, and control requests are recorded and
 // answered from `replies`.
-function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, unknown> } = {}) {
+function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, unknown>, git = '' } = {}) {
   const lines: string[] = []
   let wake: (() => void) | null = null
   const calls: { path: string; body: any }[] = []
   const spawned: any[] = []
   const replies: Record<string, (body: any) => [number, any]> = {}
+  const runs: { argv: string[]; init: any }[] = []
 
   // The harness never starts a session on its own: answer what the plugin's
   // session.start leans on, and `start($)` raises it.
@@ -16,9 +17,11 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   mock.store(on, store)
   on('session.start', async () => ({ cwd: '/' }))
   on('command.register', async (_$: any, e: any) => ({ value: { command: e.name } }))
-  on('process.run', async () => ({
-    value: { exitCode: 0, stdout: `${node}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
-  }))
+  on('process.run', async (_$: any, e: any) => {
+    runs.push({ argv: [...e.argv], init: e.init })
+    const stdout = e.argv[0] === 'git' ? git : `${node}\n`
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
   on('process.spawn', async function* (_$: any, e: any) {
     spawned.push(e)
     for (;;) {
@@ -36,6 +39,7 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
 
   return {
     clock,
+    runs,
     calls,
     replies,
     spawned,
@@ -505,4 +509,178 @@ test('busy friends show as busy in the FRIENDS card and in /who', SLOW, async ($
   await ui.unmount()
   await $.command.run({ command: 'who' })
   expect(logs).toContain('◐ bob (busy)  #lobby')
+})
+
+// Slash-command answers are notices: collect them, one per line.
+function recordLogs(on: any) {
+  const logs: string[] = []
+  on('ui.log', (_$: any, e: any) => { logs.push(e.text ?? e); return { value: undefined } })
+  return logs
+}
+
+test('/share shows the selected text first, then /share send posts it as code', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  on('ui.selection', () => ({ value: { text: '\n  const total = 1\n  return total\n' } }))
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+
+  await $.command.run({ command: 'chat-share', args: '' })
+  expect(logs).toContain('Ready to share to #lobby: code · 2 lines')
+  expect(logs).toContain('  │   const total = 1')
+  expect(bridge.calls.some((c) => c.path === '/send')).toBe(false)   // nothing goes out yet
+
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: '  const total = 1\n  return total', room: LOBBY.id, kind: 'code' } })
+  expect(logs.at(-1)).toBe('Shared to #lobby.')
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(logs.at(-1)).toBe('Nothing waiting to share. Start with /chat-share or /chat-share diff.')
+})
+
+test('/share without a selection takes the last code block of Claude\'s reply', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  on('ui.selection', () => ({ value: undefined }))
+  on('session.messages', () => ({ value: [
+    { role: 'user', text: 'write it in two languages', toolUses: [] },
+    { role: 'assistant', text: 'Sure:\n```ts\nexport const a = 1\n```\nand\n```py title=a.py\nprint(1)\n```\nDone.', toolUses: [] },
+    { role: 'user', text: 'thanks', toolUses: [] },
+  ] }))
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  await $.command.run({ command: 'chat-share', args: '' })
+  expect(logs).toContain('Ready to share to #lobby: code · py · 1 line')
+  await $.command.run({ command: 'chat-share', args: 'cancel' })
+  expect(logs.at(-1)).toBe('Dropped it.')
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(bridge.calls.some((c) => c.path === '/send')).toBe(false)
+})
+
+const DIFF = [
+  'diff --git a/.env b/.env',
+  'index 1111111..2222222 100644',
+  '--- a/.env',
+  '+++ b/.env',
+  '@@ -1 +1 @@',
+  '-PORT=3000',
+  '+OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwx',
+].join('\n') + '\n'
+
+test('/share diff runs git in the session folder, and a likely secret takes a second send', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  on('session.cwd', () => ({ value: '/work/app' }))
+  const bridge = fakeBridge(on, { git: DIFF })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+
+  await $.command.run({ command: 'chat-share', args: 'diff .env' })
+  const git = bridge.runs.find((r) => r.argv[0] === 'git')!
+  expect(git.argv).toEqual(['git', 'diff', 'HEAD', '--no-color', '--no-ext-diff', '--', '.env'])
+  expect(git.init.cwd).toBe('/work/app')
+  expect(logs).toContain('Ready to share to #lobby: diff · 1 file +1 −1')
+  expect(logs).toContain('⚠ It looks like it has an API key. Check it before you send.')
+
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(logs.at(-1)).toBe('This looks like it has an API key. Run /chat-share send again to post it anyway, or /chat-share cancel.')
+  expect(bridge.calls.some((c) => c.path === '/send')).toBe(false)
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: DIFF.trimEnd(), room: LOBBY.id, kind: 'diff', lang: 'diff' } })
+})
+
+test('/share refuses what is too big, and says what to do instead', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  on('ui.selection', () => ({ value: { text: Array.from({ length: 201 }, (_, i) => `line ${i}`).join('\n') } }))
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  await $.command.run({ command: 'chat-share', args: '' })
+  expect(logs.at(-1)).toBe('Too big to share: that\'s 201 lines, more than 200. Select a smaller part.')
+})
+
+test('snippets show as cards with a Copy button; the pane previews before sending', SLOW, async ($, on) => {
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
+  on('ui.selection', () => ({ value: { text: 'npm run build' } }))
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(msg(1, 'bob', '-old line\n+new line', { kind: 'diff', lang: 'diff' }))
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '📎 diff · +1 −1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '+new line' })).toBeDefined()
+  await ui.press({ key: 'copy' })
+  expect(copied).toEqual(['-old line\n+new line'])
+  await ui.unmount()
+
+  // git's header lines give way to the file's name; Copy still takes them.
+  bridge.emit(msg(2, 'bob', 'diff --git a/src/a.ts b/src/a.ts\nindex 1..2 100644\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,4 +1,3 @@\n far away\n close by\n-x\n--- an old comment\n+y', { kind: 'diff', lang: 'diff' }))
+  await settle()
+  const ui2 = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui2.find({ type: 'Text', text: '📎 diff · 1 file +1 −2' })).toBeDefined()
+  expect(await ui2.find({ type: 'Text', text: '▸ src/a.ts' })).toBeDefined()
+  expect(await ui2.find({ type: 'Text', text: '--- an old comment' })).toBeDefined()
+  expect(await ui2.find({ type: 'Text', text: ' close by' })).toBeDefined()   // one unchanged line of context
+  expect(await ui2.find({ type: 'Text', text: ' far away' })).toBeUndefined()
+  expect(await ui2.find({ type: 'Text', text: /^index / })).toBeUndefined()
+  await ui2.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+
+  await ui.input({ key: 'compose', text: '/share' })
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()
+  await ui.press({ key: 'send' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: 'npm run build', room: LOBBY.id, kind: 'code' } })
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a snippet reads as its title in the band, and never counts as an @mention', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on, { store: { notify: true } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(news(1, msg(1, 'bob', 'ping("@me")', { kind: 'code', lang: 'js' })))
+  await settle()
+  expect(seen.toasts).toEqual([])
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '📎 code · js · 1 line' })).toBeDefined()
+  await band.unmount()
+})
+
+test('a snippet too tall for the space left shows fewer lines instead of leaving a gap', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  const long = Array.from({ length: 20 }, (_, i) => `const line${i} = ${i}`).join('\n')
+  bridge.emit(msg(1, 'me', long, { kind: 'code', lang: 'ts' }), msg(2, 'bob', 'nice'), msg(3, 'bob', 'stealing it'))
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '📎 code · ts · 20 lines' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'const line0 = 0' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^… \d+ more lines$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stealing it' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('two snippets in a row: when the first can\'t shrink enough, the second keeps a header', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  const long = Array.from({ length: 20 }, (_, i) => `const line${i} = ${i}`).join('\n')
+  bridge.emit(
+    msg(1, 'me', long, { kind: 'code', lang: 'ts' }),
+    msg(2, 'me', '@@ -1,2 +1,2 @@\n keep\n-old\n+new', { kind: 'diff', lang: 'diff' }),
+    msg(3, 'bob', 'nice'), msg(4, 'bob', 'really nice'), msg(5, 'bob', 'stealing it'),
+  )
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '📎 diff · +1 −1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '+new' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'you' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stealing it' })).toBeDefined()
+  await ui.unmount()
 })

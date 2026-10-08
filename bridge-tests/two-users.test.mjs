@@ -175,6 +175,24 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
     assert.ok(!alice.events.some((e) => e.type === "typing" && e.users.length), "nobody sees themselves typing");
   });
 
+  it("shares code and diffs, indentation kept, within their limits", async () => {
+    const code = "\n\n  if (ready) {\n    ship();\n  }\n";
+    const sent = await alice.ok("POST", "/send", { text: code, room: room.id, kind: "code", lang: "ts" });
+    const got = await bob.waitFor((e) => e.type === "message" && e.message.id === sent.id, 10_000, "alice's snippet");
+    assert.equal(got.message.kind, "code");
+    assert.equal(got.message.lang, "ts");
+    assert.equal(got.message.body, "  if (ready) {\n    ship();\n  }");
+
+    const diff = await alice.ok("POST", "/send", { text: "-old\n+new", room: room.id, kind: "diff", lang: "rm -rf /" });
+    const gotDiff = await bob.waitFor((e) => e.type === "message" && e.message.id === diff.id, 10_000, "alice's diff");
+    assert.equal(gotDiff.message.kind, "diff");
+    assert.equal(gotDiff.message.lang, null, "a tag that isn't a short word is dropped");
+
+    assert.equal((await alice.call("POST", "/send", { text: "x".repeat(8001), room: room.id, kind: "code" })).status, 400);
+    assert.equal((await alice.call("POST", "/send", { text: "x\n".repeat(201), room: room.id, kind: "diff" })).status, 400);
+    assert.equal((await alice.call("POST", "/send", { text: "hi", room: room.id, kind: "image" })).status, 400);
+  });
+
   it("shows do not disturb as busy, and back again", async () => {
     const aliceId = (await alice.ok("GET", "/state")).user.id;
     const busyIn = (e) => e.type === "presence" && e.room === room.id && e.online.some((u) => u.user_id === aliceId && u.busy);

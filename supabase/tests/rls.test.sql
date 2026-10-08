@@ -121,6 +121,29 @@ select throws_ok(format($$ insert into public.room_members (room_id, user_id) va
 select throws_ok($$ update public.room_members set room_id = gen_random_uuid() $$, '42501', null,
   'cannot move a membership to another room');
 
+-- snippets: longer than a chat message, but bounded, and at most 3 a minute
+select lives_ok($$ insert into public.messages (room_id, body, kind, lang)
+                   values (tests.room('lobby'), repeat('x', 600), 'code', 'ts') $$,
+  'a code snippet may be longer than a chat message');
+select throws_ok($$ insert into public.messages (room_id, body) values (tests.room('lobby'), repeat('x', 501)) $$,
+  '23514', null, 'a chat message is still at most 500 characters');
+select throws_ok($$ insert into public.messages (room_id, body, kind) values (tests.room('lobby'), repeat('x', 8001), 'code') $$,
+  '23514', null, 'a snippet is at most 8000 characters');
+select throws_ok($$ insert into public.messages (room_id, body, kind) values (tests.room('lobby'), repeat(E'x\n', 200) || 'x', 'diff') $$,
+  '23514', null, 'a snippet is at most 200 lines');
+select throws_ok($$ insert into public.messages (room_id, body, kind) values (tests.room('lobby'), 'hi', 'image') $$,
+  '23514', null, 'unknown kinds are rejected');
+select throws_ok($$ insert into public.messages (room_id, body, kind, lang) values (tests.room('lobby'), 'x', 'code', 'rm -rf') $$,
+  '23514', null, 'a language tag is a short word');
+select lives_ok($$ insert into public.messages (room_id, body, kind) values (tests.room('lobby'), E'+a\n-b', 'diff') $$,
+  'a second snippet');
+select lives_ok($$ insert into public.messages (room_id, body, kind) values (tests.room('lobby'), 'y', 'code') $$,
+  'a third snippet');
+select throws_ok($$ insert into public.messages (room_id, body, kind) values (tests.room('lobby'), 'z', 'code') $$,
+  '54000', null, 'a fourth snippet within a minute is refused');
+select lives_ok($$ insert into public.messages (room_id, body) values (tests.room('lobby'), 'text still goes') $$,
+  'chat messages are not held back by the snippet limit');
+
 -- read markers: own row only
 update public.room_members set last_read_id = 7 where user_id = tests.uid('bob');
 update public.room_members set last_read_id = 99 where user_id = tests.uid('alice');

@@ -9,6 +9,7 @@
 
 import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet } from "./state.mjs";
 import { theme, nameColor, glyph } from "./theme.mjs";
+import { snippetTitle, oneLine, displayLines } from "./share.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
 
@@ -106,11 +107,42 @@ function messageRows(list, width, dividerAt) {
     const sameGroup = prev && !newDay && !isNew && prev.user_id === m.user_id
       && Date.parse(m.at) - Date.parse(prev.at) < GROUP_GAP_MS;
     if (!sameGroup) rows.push({ kind: "head", key: `h${m.id}`, m, height: 2 });   // a blank row, then the header
-    const bubble = bubbleWidth(m.body, width);
-    rows.push({ kind: "body", key: `m${m.id}`, m, bubble, height: rowsFor(m.body, bubble - 2) });
+    if (m.kind === "code" || m.kind === "diff") {
+      const lines = snippetLines(m.body, m.kind);
+      const gap = sameGroup ? 1 : 0;   // a blank row from the message above
+      rows.push({ kind: "snippet", key: `m${m.id}`, m, ...lines, gap, height: gap + 1 + lines.shown.length + (lines.more ? 1 : 0) });
+    } else {
+      const bubble = bubbleWidth(m.body, width);
+      rows.push({ kind: "body", key: `m${m.id}`, m, bubble, height: rowsFor(m.body, bubble - 2) });
+    }
     prev = m;
   }
   return rows;
+}
+
+// A snippet shows its first lines, one terminal row each (never wrapped, so
+// its height is known), and how many more there are. Copy takes it all.
+const SNIPPET_ROWS = 8;
+function snippetLines(body, kind = "code", max = SNIPPET_ROWS) {
+  const all = displayLines(body, kind);
+  return { shown: all.slice(0, max), more: Math.max(0, all.length - max) };
+}
+
+function diffColor(line) {
+  if (line.startsWith("▸ ")) return theme.muted;
+  if (line.startsWith("@@")) return theme.sky;
+  if (line.startsWith("+")) return theme.online;
+  if (line.startsWith("-")) return theme.error;
+  return theme.theirText;
+}
+
+// The snippet's lines on a dark fill, diffs colored line by line.
+function snippetBody(els, { kind, shown, more }) {
+  const { Text } = els;
+  return [
+    ...shown.map((line, i) => Text({ key: `l${i}`, wrap: "truncate-end", color: kind === "diff" ? diffColor(line) : theme.theirText, children: line || " " })),
+    ...(more ? [Text({ key: "more", color: theme.muted, children: `… ${more} more line${more === 1 ? "" : "s"}` })] : []),
+  ];
 }
 
 // The newest rows that fit in `capacity` terminal rows, never starting
@@ -118,19 +150,52 @@ function messageRows(list, width, dividerAt) {
 function fitRows(rows, capacity) {
   const shown = [];
   let used = 0;
-  for (let i = rows.length - 1; i >= 0; i--) {
+  let i = rows.length - 1;
+  for (; i >= 0; i--) {
     if (used + rows[i].height > capacity && shown.length) break;
     used += rows[i].height;
     shown.unshift(rows[i]);
   }
+  // A snippet that would open the view without its sender's header (it, or
+  // the header, didn't fit) shows fewer lines under a header instead of
+  // leaving the space empty. First the snippet that didn't fit, else the one
+  // that lost its header.
+  const shrink = (at) => {
+    const row = rows[at];
+    let room = capacity - used;
+    if (shown[0] === row) room += row.height;
+    const own = rows[at - 1]?.kind === "head";
+    const head = own ? rows[at - 1] : { kind: "head", key: `h${row.m.id}-cut`, m: row.m, height: 2 };
+    const gap = own ? row.gap : 0;   // a header of its own sits right above it
+    const all = displayLines(row.m.body, row.m.kind);
+    const lines = room - head.height - gap - 1;   // below its title
+    const fit = all.length <= lines ? all.length : lines - 1;   // keep a row for "… more"
+    if (fit < 2) return false;
+    if (shown[0] === row) { shown.shift(); used -= row.height; }
+    const more = all.length - fit;
+    const cut = { ...row, gap, shown: all.slice(0, fit), more, height: gap + 1 + fit + (more ? 1 : 0) };
+    shown.unshift(head, cut);
+    used += head.height + cut.height;
+    return true;
+  };
+  if (!(i >= 0 && rows[i].kind === "snippet" && shrink(i)) && shown[0]?.kind === "snippet" && shown.length > 1) shrink(i + 1);
   // Don't open on a group that has lost its header: start at the next one.
-  while (shown.length > 1 && shown[0].kind === "body") shown.shift();
+  while (shown.length > 1 && (shown[0].kind === "body" || shown[0].kind === "snippet")) shown.shift();
   return shown;
 }
 
-function drawRow(els, row, width) {
-  const { Box, Text } = els;
+function drawRow(els, row, width, onCopy) {
+  const { Box, Text, Button } = els;
   switch (row.kind) {
+    case "snippet":
+      // Full width whoever sent it: code reads left to right.
+      return Box({ key: row.key, flexShrink: 0, flexDirection: "column", paddingX: 1, marginTop: row.gap, backgroundColor: theme.theirBubble, children: [
+        Box({ key: "head", flexDirection: "row", justifyContent: "space-between", gap: 1, children: [
+          Text({ key: "t", bold: true, color: theme.amber, wrap: "truncate-end", children: `📎 ${snippetTitle(row.m)}` }),
+          onCopy ? Button({ key: "copy", plain: true, label: "Copy", onPress: (press) => onCopy(row.m.body, press?.surface) }) : null,
+        ].filter(Boolean) }),
+        ...snippetBody(els, { kind: row.m.kind, shown: row.shown, more: row.more }),
+      ] });
     case "day":
       return Box({ key: row.key, flexShrink: 0, justifyContent: "center", children: [
         Text({ key: "t", color: theme.muted, children: `${glyph.rule.repeat(3)} ${row.text} ${glyph.rule.repeat(3)}` }),
@@ -328,20 +393,22 @@ function dockView(els, props, handlers) {
     used += 1 + friends.height;
 
     const n = notice(els);
-    const tail = 3 + 1 + (n ? rowsFor(state.notice, width) : 0);   // input box + hints + notice
+    const pending = shareCard(els, handlers);
+    const tail = 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // input box + hints + notice + preview
     // The card's border and head, and one row the dock reserves (its close mark).
     const capacity = Math.max(3, bodyRows - used - tail - 3 - 1);
     const here = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
     const list = roomMessages();
     const rows = fitRows(messageRows(list, width - 4, state.dividerAt?.get(room.id) ?? 0), capacity);
     const body = list.length
-      ? rows.map((r) => drawRow(els, r, width - 4))   // inside the card's border and padding
+      ? rows.map((r) => drawRow(els, r, width - 4, handlers.onCopy))   // inside the card's border and padding
       : [Text({ key: "empty", color: theme.muted, children: "No messages yet. Say hi!" })];
     parts.push(card(els, {
       key: "room", title: `#${room.slug}`, titleColor: theme.accent,
       meta: here ? `${here} here` : "just you", metaColor: here ? theme.online : theme.muted,
       children: body, grow: true,
     }));
+    if (pending) parts.push(pending.node);
     if (n) parts.push(n);
     if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused));
     const typing = typingText(room.id);
@@ -356,6 +423,25 @@ function dockView(els, props, handlers) {
 
   // Fill the dock's height so the input sits at the bottom.
   return Box({ flexDirection: "column", height: bodyRows, children: parts });
+}
+
+// A snippet waiting for a look before it goes out, with Send and Cancel.
+const PREVIEW_ROWS = 5;
+function shareCard(els, handlers) {
+  const p = state.pendingShare;
+  if (!p || Date.now() > p.until) return null;
+  const { Box, Text, Button } = els;
+  const lines = snippetLines(p.body, p.kind, PREVIEW_ROWS);
+  const children = [
+    Box({ key: "code", flexDirection: "column", paddingX: 1, backgroundColor: theme.theirBubble, children: snippetBody(els, { kind: p.kind, ...lines }) }),
+    p.secret ? Text({ key: "secret", color: theme.warn, wrap: "truncate-end", children: `⚠ looks like it has ${p.secret}` }) : null,
+    Box({ key: "actions", flexDirection: "row", gap: 2, children: [
+      Button({ key: "send", label: `Send to #${p.slug}`, variant: "primary", onPress: () => handlers.onShare?.("send") }),
+      Button({ key: "cancel", label: "Cancel", onPress: () => handlers.onShare?.("cancel") }),
+    ] }),
+  ].filter(Boolean);
+  const height = 3 + lines.shown.length + (lines.more ? 1 : 0) + (p.secret ? 1 : 0) + 1;
+  return { node: card(els, { key: "share", title: "SHARE?", titleColor: theme.amber, meta: snippetTitle(p), children }), height };
 }
 
 // Above the prompt: as little as reads well.
@@ -388,11 +474,15 @@ function inlineView(els, props, handlers) {
         Box({ key: "n", flexShrink: 0, children: [
           Text({ key: "t", bold: true, color: m.mine ? theme.you : nameColor(m.user_id), children: name.padEnd(nameWidth) }),
         ] }),
-        Text({ key: "b", wrap: "truncate-end", children: m.body }),
+        Text({ key: "b", wrap: "truncate-end", children: oneLine(m) }),
       ] }));
     }
     const typing = typingText(room.id);
     if (typing) parts.push(typingLine(els, typing));
+    const p = state.pendingShare;
+    if (p && Date.now() <= p.until) {
+      parts.push(Text({ key: "share", color: theme.amber, wrap: "truncate-end", children: `📎 ${snippetTitle(p)} for #${p.slug}: /share send or /share cancel` }));
+    }
   } else {
     parts.push(titleBar(els));
     parts.push(setupCard(els, width));
@@ -444,7 +534,7 @@ export function bandView(els, props, { onOpen }) {
     } else if (last) {
       bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
       bits.push(fixed("who", displayName(last), { bold: true, color: last.mine ? theme.you : nameColor(last.user_id) }));
-      bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", children: last.body })] }));
+      bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", children: oneLine(last) })] }));
     }
   }
   return Box({ flexDirection: "row", children: [

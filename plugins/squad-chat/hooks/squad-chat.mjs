@@ -8,7 +8,7 @@
 //   views.mjs     the pane
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, sendMessage, paneInput } from "./commands.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 
 const PANE_ID = "squad-chat";
@@ -192,6 +192,46 @@ async function setDnd($, mode) {
   quietChanged($);
 }
 
+// ---------------------------------------------------------------- sharing snippets
+
+// What /chat-share reads from the session: the mouse selection, Claude's replies,
+// and `git diff` in the session's folder. Reading only: nothing is added to
+// the conversation.
+function shareSources($, { inPane = false } = {}) {
+  return {
+    inPane,
+    // Claude Code 2.1.287 has no selection to read: share the last code block.
+    selection: async () => { try { return (await $.ui.selection())?.text; } catch { return undefined; } },
+    messages: () => $.session.messages(),
+    diff: async (path) => {
+      const cwd = await $.session.cwd();
+      const argv = ["git", "diff", "HEAD", "--no-color", "--no-ext-diff", "--", ...(path ? [path] : [])];
+      const r = await $.process.run(argv, { cwd, timeoutMs: 15_000 });
+      if (r.exitCode !== 0) throw new Error(`git diff: ${r.stderr.trim().split("\n")[0] || `exit ${r.exitCode}`}`);
+      if (r.isStdoutTruncated) throw new Error(`Too big to share. Share one file with ${inPane ? "/share" : "/chat-share"} diff <path>.`);
+      return r.stdout;
+    },
+  };
+}
+
+// The preview card's Send and Cancel: like typing "/share send" in the box,
+// without touching what's typed there.
+async function shareFromPane($, verb) {
+  const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
+  try {
+    await share((path, body) => callBridge($, path, body), verb, say, shareSources($, { inPane: true }));
+  } catch (err) {
+    say(err?.message ?? String(err));
+  }
+  $.ui.invalidate("ui.render");
+}
+
+async function copySnippet($, text, surface) {
+  const r = await $.ui.copy({ text, ...(surface ? { surface } : {}) });
+  state.notice = r?.isCopied ? "Copied." : `Couldn't copy${r?.reason ? `: ${r.reason}` : ""}.`;
+  $.ui.invalidate("ui.render");
+}
+
 // Tell the bridge the current room is read up to its newest message. Runs
 // when the pane has the keyboard and when the person sends from it.
 let marking = false;
@@ -248,7 +288,7 @@ async function submitFromPane($, value) {
   lastTypingPing = 0;
   $.ui.invalidate("ui.render");
   try {
-    await paneInput((path, body) => callBridge($, path, body), value, say, { setDnd: (mode) => setDnd($, mode) });
+    await paneInput((path, body) => callBridge($, path, body), value, say, { setDnd: (mode) => setDnd($, mode), sources: shareSources($, { inPane: true }) });
     state.dividerAt.clear();   // they've replied: everything above is read
     await markRead($);         // they're looking at the room they just wrote in
   } catch (err) {
@@ -284,16 +324,26 @@ async function answer($, fn) {
   return {};
 }
 
+const COMMANDS = [
+  { name: "chat", description: "squad-chat: open the chat pane (notify: toast @mentions, dnd: do not disturb)", argumentHint: "[notify on|off | dnd on|off|auto]" },
+  { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
+  { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
+  { name: "who", description: "squad-chat: who's online" },
+  { name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>" },
+  { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, or your diff to the room", argumentHint: "[diff [path] | send | cancel]" },
+  { name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>" },
+  { name: "chat-logout", description: "squad-chat: sign out on this computer" },
+];
+
 export function register(on, options) {
   on("session.start", async ($, e, next) => {
     const r = await next(e);
-    await $.command.register({ name: "chat", description: "squad-chat: open the chat pane (notify: toast @mentions, dnd: do not disturb)", argumentHint: "[notify on|off | dnd on|off|auto]", immediate: true });
-    await $.command.register({ name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>", immediate: true });
-    await $.command.register({ name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>", immediate: true });
-    await $.command.register({ name: "who", description: "squad-chat: who's online", immediate: true });
-    await $.command.register({ name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>", immediate: true });
-    await $.command.register({ name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>", immediate: true });
-    await $.command.register({ name: "chat-logout", description: "squad-chat: sign out on this computer", immediate: true });
+    // One by one: a name Claude Code refuses (one of its own, say) costs that
+    // command, not the chat.
+    for (const command of COMMANDS) {
+      try { await $.command.register({ ...command, immediate: true }); }
+      catch (err) { $.ui.log(`squad-chat: /${command.name} unavailable: ${err?.message ?? err}`, { to: "debug" }); }
+    }
     state.notify = (await $.store.get("notify")) === true;
     const savedDnd = await $.store.get("dnd");
     state.dnd = ["on", "off", "auto"].includes(savedDnd) ? savedDnd : "off";
@@ -322,6 +372,7 @@ export function register(on, options) {
     if (!String(e.args ?? "").trim()) await openPane($);
     await login(call, e.args, say);
   }));
+  on("command.run", { command: "chat-share" }, ($, e) => answer($, (call, say) => share(call, e.args, say, shareSources($))));
   on("command.run", { command: "chat-name" }, ($, e) => answer($, (call, say) => rename(call, e.args, say)));
   on("command.run", { command: "chat-logout" }, ($) => answer($, (call, say) => logout(call, say)));
 
@@ -334,6 +385,8 @@ export function register(on, options) {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void selectRoom($, id); },
+      onShare: (verb) => { void shareFromPane($, verb); },
+      onCopy: (text, surface) => { void copySnippet($, text, surface); },
     });
   });
 

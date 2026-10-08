@@ -22123,6 +22123,15 @@ var MAX_KICK_GAP_MS = 3e4;
 var TYPING_SEND_MS = 2e3;
 var TYPING_TTL_MS = 5e3;
 var NAME = /^[A-Za-z0-9_-]{1,24}$/;
+var KINDS = /* @__PURE__ */ new Set(["text", "code", "diff"]);
+var LANG = /^[a-z0-9+#._-]{1,20}$/;
+var MAX_TEXT = 500;
+var MAX_SNIPPET = 8e3;
+var MAX_SNIPPET_LINES = 200;
+var COLS = "id, room_id, user_id, body, created_at, kind, lang";
+var OLD_COLS = "id, room_id, user_id, body, created_at";
+var MISSING_COLUMN = /* @__PURE__ */ new Set(["42703", "PGRST204"]);
+var OLD_SERVER = "this server can't take snippets yet: whoever hosts it needs to run `supabase db push` from squad-chat 0.7.0";
 var HttpError = class extends Error {
   constructor(status, message) {
     super(message);
@@ -22167,6 +22176,7 @@ var Chat = class {
     this.friendsLoading = null;
     this.leftAt = /* @__PURE__ */ new Map();
     this.busy = false;
+    this.oldSchema = false;
     this.sb.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT" && this.user) setTimeout(() => this.reset("signed out"), 0);
     });
@@ -22491,21 +22501,30 @@ var Chat = class {
   // reconnect: everything after the newest id we've seen (with a small
   // overlap; duplicates are dropped by id).
   async backfill(room) {
-    const cols = "id, room_id, user_id, body, created_at";
     if (room.lastSeenId === 0) {
-      const { data, error } = await this.sb.from("messages").select(cols).eq("room_id", room.id).order("id", { ascending: false }).limit(HISTORY);
+      const { data, error } = await this.selectMessages((q) => q.eq("room_id", room.id).order("id", { ascending: false }).limit(HISTORY));
       if (error) throw fail(error, "could not load history");
       await this.enqueue(room, data.reverse(), { backfill: true, count: false });
       return;
     }
     let after = Math.max(0, room.lastSeenId - BACKFILL_OVERLAP);
     for (; ; ) {
-      const { data, error } = await this.sb.from("messages").select(cols).eq("room_id", room.id).gt("id", after).order("id", { ascending: true }).limit(BACKFILL_PAGE);
+      const { data, error } = await this.selectMessages((q) => q.eq("room_id", room.id).gt("id", after).order("id", { ascending: true }).limit(BACKFILL_PAGE));
       if (error) throw fail(error, "could not catch up");
       await this.enqueue(room, data, { backfill: true, count: true });
       if (data.length < BACKFILL_PAGE) return;
       after = data[data.length - 1].id;
     }
+  }
+  // A server that hasn't run the snippets migration has no kind and lang:
+  // ask again without them, and keep to plain text from then on.
+  async selectMessages(build) {
+    let res = await build(this.sb.from("messages").select(this.oldSchema ? OLD_COLS : COLS));
+    if (res.error && !this.oldSchema && MISSING_COLUMN.has(res.error.code)) {
+      this.oldSchema = true;
+      res = await build(this.sb.from("messages").select(OLD_COLS));
+    }
+    return res;
   }
   // `count`: these may be news to the person (live, or caught up after a
   // reconnect), so others' messages past the read marker add to room.unread.
@@ -22535,6 +22554,8 @@ var Chat = class {
             user: this.names.get(row.user_id) ?? "someone",
             mine: row.user_id === this.user?.id,
             body: row.body,
+            kind: row.kind ?? "text",
+            lang: row.lang ?? null,
             at: row.created_at
           }
         });
@@ -22560,12 +22581,25 @@ var Chat = class {
     this.names.set(id, name);
     if (old && old !== name) this.emit({ type: "name", user_id: id, name });
   }
-  async send(text, roomRef) {
+  // A chat message, or with `kind` "code" or "diff" a snippet: up to 8000
+  // characters and 200 lines, its indentation kept.
+  async send(text, roomRef, { kind = "text", lang } = {}) {
     const room = this.room(roomRef);
-    const body = String(text ?? "").trim();
-    if (!body) throw new HttpError(400, "empty message");
-    if (body.length > 500) throw new HttpError(400, "messages are limited to 500 characters");
-    const { data, error } = await this.sb.from("messages").insert({ room_id: room.id, body }).select("id, room_id, user_id, body, created_at").single();
+    if (!KINDS.has(kind)) throw new HttpError(400, 'kind is "text", "code" or "diff"');
+    const snippet = kind !== "text";
+    const body = snippet ? String(text ?? "").replace(/^(\s*\n)+/, "").trimEnd() : String(text ?? "").trim();
+    if (!body.trim()) throw new HttpError(400, snippet ? "nothing to share" : "empty message");
+    if (!snippet && body.length > MAX_TEXT) throw new HttpError(400, `messages are limited to ${MAX_TEXT} characters`);
+    if (snippet && body.length > MAX_SNIPPET) throw new HttpError(400, `snippets are limited to ${MAX_SNIPPET} characters`);
+    if (snippet && body.split("\n").length > MAX_SNIPPET_LINES) throw new HttpError(400, `snippets are limited to ${MAX_SNIPPET_LINES} lines`);
+    if (snippet && this.oldSchema) throw new HttpError(400, OLD_SERVER);
+    const row = { room_id: room.id, body, ...snippet ? { kind, ...LANG.test(lang ?? "") ? { lang } : {} } : {} };
+    const { data, error } = await this.sb.from("messages").insert(row).select(this.oldSchema ? OLD_COLS : COLS).single();
+    if (error && MISSING_COLUMN.has(error.code) && !this.oldSchema) {
+      this.oldSchema = true;
+      if (snippet) throw new HttpError(400, OLD_SERVER);
+      return this.send(text, roomRef);
+    }
     if (error) throw fail(error, "could not send");
     await this.enqueue(room, [data], { backfill: false, count: true });
     return { id: data.id };
@@ -22713,7 +22747,7 @@ function onlineList(room) {
 }
 
 // src/bridge.mjs
-var MAX_BODY = 16 * 1024;
+var MAX_BODY = 64 * 1024;
 var env = process.env;
 var token = env.SQUAD_BRIDGE_TOKEN;
 function emit(event) {
@@ -22758,7 +22792,7 @@ var routes = {
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),
   "POST /room/leave": (b) => chat.leave(b.room).then(() => ({ ok: true })),
   "POST /room/delete": (b) => chat.deleteRoom(b.room),
-  "POST /send": (b) => chat.send(b.text, b.room),
+  "POST /send": (b) => chat.send(b.text, b.room, { kind: b.kind, lang: b.lang }),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
   "POST /status": (b) => chat.setStatus(b.status),
