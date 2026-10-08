@@ -52,12 +52,12 @@ Two rules of the mod runtime shape the code:
 
 `supabase/migrations/` holds the schema:
 
-* **Tables:** `profiles` (display name from the email's local part, made unique), `rooms` (bcrypt passcode hash, never readable by clients), `room_members` (read markers), `messages` and `presence_heartbeats`.
+* **Tables:** `profiles` (display name from the email's local part, made unique), `rooms` (bcrypt passcode hash, never readable by clients), `room_members` (read markers), `messages` (each `text`, or a shared `code` or `diff` snippet with an optional language tag) and `presence_heartbeats`.
 * **Access:** RLS on every table, column-level grants to `authenticated` only, nothing for `anon`. You see a room, its members and its messages only while you are a member.
 * **Accounts:** a profile is created for every new user, named after the email's local part, or for an anonymous account after the name it picked (made unique with `-2`, `-3`, …).
 * **Joining:** only through `join_room(slug, passcode)`, which creates the room if it doesn't exist and locks a caller out for 15 minutes after 5 wrong passcodes. Privileged helpers live in an unexposed `private` schema.
 * **Deleting:** only the room's creator can delete it, and its members and messages go with it.
-* **Limits:** a trigger caps each user at 10 messages per 10 seconds. `pg_cron` deletes messages older than 30 days.
+* **Limits:** a chat message is at most 500 characters, a snippet 8000 characters and 200 lines. A trigger caps each user at 10 messages per 10 seconds, and at 3 snippets a minute. `pg_cron` deletes messages older than 30 days.
 * **Renaming:** people may change only their own display name, and names stay unique.
 * **Realtime:** private `room:<uuid>` channels. Policies on `realtime.messages` let only members receive a room's channel, track presence on it, or broadcast on it (typing indicators). New messages arrive through `postgres_changes`, filtered by the table's own RLS.
 
@@ -86,6 +86,7 @@ Things that took a while to get right:
 * **Presence.** Online means present in any room's channel, or a heartbeat newer than that person's last presence leave. Without that rule, a recent heartbeat kept someone "online" for minutes after they quit.
 * **Typing.** Keystrokes in the pane reach the bridge at most every 2 seconds, and the bridge broadcasts at most that often per room. Receivers show someone as typing until their message arrives or 5 seconds pass. The broadcast carries only a user id, and the name comes from the receiver's own records, so nobody can type under a made-up name.
 * **Do not disturb.** The mod decides when it holds: switched on, or `auto` and a Claude turn has run past 30 seconds (`turn.start`, then `turn.complete` of the main turn, not a subagent's). It tells the bridge through `/status`, and the bridge adds `status: "busy"` to what it tracks on every room channel, so roommates see it through presence at once. A restarted bridge starts out available, so the mod sends it again after sign-in.
+* **Snippets.** `/chat-share` reads the session on the mod's side (`$.ui.selection()`, `$.session.messages()`, or `git diff HEAD` through `$.process.run` in the session's folder) and only reads it: nothing is added to the conversation. It shows a preview first and checks for likely secrets. The bridge sends it with `kind` `code` or `diff`, keeping indentation. A server that hasn't run the snippets migration has no `kind` or `lang` column: the bridge notices the missing column, reads messages without them, and refuses snippets with a hint to run `supabase db push`, so chat keeps working. The slash command is `/chat-share` because Claude Code has a `/share` of its own. Commands are registered one at a time, so a name Claude Code refuses costs only that command.
 * **Renaming.** A new name goes to the database, then out through presence, so roommates see it at once. The bridge tells the mod when a known name changes, and the pane relabels messages already on screen.
 
 `dist/bridge.mjs` is one file bundled by esbuild and committed, so installing the plugin needs no `npm install`.

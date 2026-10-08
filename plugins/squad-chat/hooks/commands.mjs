@@ -7,10 +7,11 @@
 // the model), the pane's notice line for the input box.
 
 import { state, currentRoom } from "./state.mjs";
+import { lastCodeBlock, looksLikeDiff, snippetTitle, findSecret, tooBig, displayLines } from "./share.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
 // sign-in codes, room passcodes.
-export const PRIVATE_ARGS = new Set(["say", "room", "chat-login"]);
+export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share"]);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE = /^\d[\d\s]{4,12}\d$/;
@@ -133,6 +134,78 @@ export async function dnd(args, say, setDnd) {
   return say(DND_MODES[mode]);
 }
 
+const SHARE_HOLD_MS = 120_000;   // a preview waits this long for a send
+
+// "/chat-share" (what's selected, or the last code block in Claude's reply),
+// "/chat-share diff [path]", then "/chat-share send" or "/chat-share cancel".
+// In the pane's box it's "/share" (Claude Code's own /share is taken).
+// Nothing goes out without a look first. `sources` reads the session: selection(),
+// messages() and diff(path), each from the hooks module.
+export async function share(call, args, say, sources) {
+  const [verb, ...rest] = String(args ?? "").trim().split(/\s+/).filter(Boolean);
+  const c = sources.inPane ? "/share" : "/chat-share";
+  requireSignedIn();
+  if (verb === "cancel") {
+    const had = state.pendingShare;
+    state.pendingShare = null;
+    return say(had ? "Dropped it." : "Nothing waiting to share.");
+  }
+  if (verb === "send") return sendShare(call, say, c);
+  if (!currentRoom()) return say("Join a room first: /room <name> <passcode>");
+
+  let snippet;
+  if (verb === "diff") {
+    const body = String(await sources.diff(rest.join(" ")) ?? "").replace(/\n$/, "");
+    if (!body.trim()) return say(rest.length ? `No uncommitted changes in ${rest.join(" ")}.` : "No uncommitted changes to share.");
+    snippet = { kind: "diff", lang: "diff", body };
+  } else if (verb) {
+    return say(`Use ${c}, ${c} diff [path], ${c} send or ${c} cancel.`);
+  } else {
+    const selected = String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
+    if (selected.trim()) snippet = looksLikeDiff(selected) ? { kind: "diff", lang: "diff", body: selected } : { kind: "code", lang: null, body: selected };
+    else {
+      const block = lastCodeBlock(await sources.messages());
+      if (!block?.body.trim()) return say(`Select some text first, or ask Claude for some code. ${c} diff shares your uncommitted changes.`);
+      snippet = { kind: "code", ...block };
+    }
+  }
+  const big = tooBig(snippet.body);
+  if (big) return say(`Too big to share: ${big}.${snippet.kind === "diff" ? ` Share one file with ${c} diff <path>.` : " Select a smaller part."}`);
+
+  const room = currentRoom();
+  const secret = findSecret(snippet.body);
+  state.pendingShare = { ...snippet, room: room.id, slug: room.slug, secret, confirmed: false, until: Date.now() + SHARE_HOLD_MS };
+  // The pane draws its own preview card: say only what needs saying.
+  if (sources.inPane) return secret ? say(`⚠ It looks like it has ${secret}. Check it before you send.`) : undefined;
+  const preview = displayLines(snippet.body, snippet.kind).slice(0, 3).map((l) => `  │ ${l.slice(0, 100)}`);
+  return say([
+    `Ready to share to #${room.slug}: ${snippetTitle(snippet)}`,
+    ...preview,
+    ...(secret ? [`⚠ It looks like it has ${secret}. Check it before you send.`] : []),
+    `${c} send to post it, ${c} cancel to drop it.`,
+  ].join("\n"));
+}
+
+async function sendShare(call, say, c) {
+  const p = state.pendingShare;
+  if (!p || Date.now() > p.until) {
+    state.pendingShare = null;
+    return say(`Nothing waiting to share. Start with ${c} or ${c} diff.`);
+  }
+  if (!state.rooms.some((r) => r.id === p.room)) {
+    state.pendingShare = null;
+    return say(`You're no longer in #${p.slug}.`);
+  }
+  // A likely secret takes a second send.
+  if (p.secret && !p.confirmed) {
+    p.confirmed = true;
+    return say(`This looks like it has ${p.secret}. Run ${c} send again to post it anyway, or ${c} cancel.`);
+  }
+  await call("/send", { text: p.body, room: p.room, kind: p.kind, ...(p.lang ? { lang: p.lang } : {}) });
+  state.pendingShare = null;
+  return say(`Shared to #${p.slug}.`);
+}
+
 export async function sendMessage(call, text, say) {
   const body = String(text ?? "").trim();
   if (!body) return;
@@ -153,7 +226,7 @@ function requireSignedIn() {
 }
 
 // The pane's input box: commands, the sign-in steps, or a message.
-export async function paneInput(call, value, say, { setDnd } = {}) {
+export async function paneInput(call, value, say, { setDnd, sources } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
   const m = /^\/([\w-]+)\s*([\s\S]*)$/.exec(text);
@@ -167,7 +240,8 @@ export async function paneInput(call, value, say, { setDnd } = {}) {
       case "name": case "chat-name": return rename(call, args, say);
       case "say": return sendMessage(call, args, say);
       case "dnd": return dnd(args, say, setDnd);
-      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /logout · anything else is a message");
+      case "share": return share(call, args, say, sources);
+      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff] · /logout · anything else is a message");
       default: return say(`Unknown command /${cmd}. Try /help.`);
     }
   }

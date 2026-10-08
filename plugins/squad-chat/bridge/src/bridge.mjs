@@ -22,7 +22,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chat, HttpError } from "./chat.mjs";
 
-const MAX_BODY = 16 * 1024;
+const MAX_BODY = 64 * 1024;   // a snippet is up to 8000 characters
 
 const env = process.env;
 const token = env.SQUAD_BRIDGE_TOKEN;
@@ -77,7 +77,7 @@ const routes = {
   "POST /room/select": (b) => (chat.selectRoom(b.room), { ok: true }),
   "POST /room/leave": (b) => chat.leave(b.room).then(() => ({ ok: true })),
   "POST /room/delete": (b) => chat.deleteRoom(b.room),
-  "POST /send": (b) => chat.send(b.text, b.room),
+  "POST /send": (b) => chat.send(b.text, b.room, { kind: b.kind, lang: b.lang }),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
   "POST /status": (b) => chat.setStatus(b.status),
