@@ -144,8 +144,20 @@ export function sparkline(values, width = values.length) {
 
 // ---------------------------------------------------------------- elements
 
+// A column `width` cells wide, the text cut to fit and, with `right`, set
+// against the column's right edge. The Box holds the width, not padding
+// spaces, so columns line up where text is drawn in a proportional font (the
+// desktop) as they do in the terminal.
+export function col(els, key, text, width, { right = false, box = {}, ...style } = {}) {
+  const { Box, Text } = els;
+  return Box({ key, width, flexShrink: 0, justifyContent: right ? "flex-end" : "flex-start", ...box, children: [
+    Text({ key: "t", wrap: "truncate-end", ...style, children: clip(text, width) }),
+  ] });
+}
+
 // One labeled meter row: `Context   ━━━━━━━╸━━━━━  62%  124k/200k`.
-// `width` is the row's width in cells.
+// `width` is the row's width in cells. The bar gives way first, so the
+// numbers at the end always show.
 export const LABEL_W = 10;
 export function meter(els, { key, label, pct, width, right = "", color, rightColor, onPress }) {
   const { Box, Text, Button } = els;
@@ -156,12 +168,14 @@ export function meter(els, { key, label, pct, width, right = "", color, rightCol
   const known = Number.isFinite(pct);
   return Box({ key, flexDirection: "row", children: [
     onPress
-      ? Box({ key: "label", width: LABEL_W, flexShrink: 0, children: [Button({ key: "press", plain: true, label: fit(label, LABEL_W - 1), onPress })] })
-      : Text({ key: "label", color: theme.muted, children: fit(label, LABEL_W) }),
-    Text({ key: "fill", color: tint, children: fill }),
-    Text({ key: "track", color: theme.muted, children: track }),
-    Text({ key: "pct", bold: true, color: known ? tint : theme.muted, children: fit(known ? `${Math.round(pct)}%` : "–", 5, { right: true }) }),
-    rightW ? Text({ key: "right", color: rightColor ?? theme.muted, children: ` ${fit(right, rightW)}` }) : null,
+      ? Box({ key: "label", width: LABEL_W, flexShrink: 0, children: [Button({ key: "press", plain: true, label: clip(label, LABEL_W - 1), onPress })] })
+      : col(els, "label", label, LABEL_W, { color: theme.muted }),
+    Box({ key: "bar", flexDirection: "row", width: barW, flexShrink: 1, minWidth: 0, overflow: "hidden", children: [
+      Text({ key: "fill", color: tint, wrap: "truncate-end", children: fill }),
+      Text({ key: "track", color: theme.muted, wrap: "truncate-end", children: track }),
+    ] }),
+    col(els, "pct", known ? `${Math.round(pct)}%` : "–", 5, { right: true, bold: true, color: known ? tint : theme.muted }),
+    rightW ? col(els, "right", right, rightW, { color: rightColor ?? theme.muted, box: { marginLeft: 1 } }) : null,
   ].filter(Boolean) });
 }
 
@@ -169,8 +183,8 @@ export function meter(els, { key, label, pct, width, right = "", color, rightCol
 export function statTile(els, { key, value, sub, color, width }) {
   const { Box, Text } = els;
   return Box({ key, flexDirection: "column", width, flexShrink: 0, children: [
-    Text({ key: "v", bold: true, color, children: fit(value, width - 1) }),
-    Text({ key: "s", color: theme.muted, children: fit(sub, width - 1) }),
+    Text({ key: "v", bold: true, color, wrap: "truncate-end", children: clip(value, width - 1) }),
+    Text({ key: "s", color: theme.muted, wrap: "truncate-end", children: clip(sub, width - 1) }),
   ] });
 }
 
@@ -189,28 +203,34 @@ export function pill(els, key, text, color, extra = {}) {
 // Pieces of one row, left to right, each { text, color, bold, grow } or
 // { node }. The piece marked `grow` takes the space left and is cut to fit;
 // the others keep their size, so a status at the end of a row always shows.
+// One with `width` is a column of that many cells (`right` to right-align).
 export function line(els, key, pieces) {
   const { Box, Text } = els;
-  return Box({ key, flexDirection: "row", children: pieces.filter(Boolean).map((p, i) => (p.grow
+  return Box({ key, flexDirection: "row", children: pieces.filter(Boolean).map((p, i) => (p.width != null
+    ? col(els, `p${i}`, p.text, p.width, { right: p.right, color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic })
+    : p.grow
     ? Box({ key: `p${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, children: p.text })] })
     : Box({ key: `p${i}`, flexShrink: 0, children: [p.node ?? Text({ key: "t", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, backgroundColor: p.bg, children: p.text })] }))) });
 }
 
-// Cards in priority order, as many as the height allows. What doesn't fit is
-// named on one muted line, so the person knows a taller pane shows more.
+// Cards in priority order, as many as the height allows, a row apart so
+// their frames don't run together. What doesn't fit is named on one muted
+// line, so the person knows a taller pane shows more.
 // Each card is { node, height, name }; `capacity` is the rows there are.
+export const CARD_GAP = 1;
 export function stackCards(els, cards, capacity) {
-  const { Text } = els;
+  const { Box, Text } = els;
   const shown = [];
   const hidden = [];
   let used = 0;
   for (const c of cards.filter(Boolean)) {
-    if (!hidden.length && used + c.height <= capacity) { shown.push(c); used += c.height; }
+    const need = c.height + (shown.length ? CARD_GAP : 0);
+    if (!hidden.length && used + need <= capacity) { shown.push(c); used += need; }
     else hidden.push(c.name);
   }
   // The footer needs a row: give up the last card shown if there isn't one.
   if (hidden.length && used + 1 > capacity && shown.length > 1) hidden.unshift(shown.pop().name);
-  const nodes = shown.map((c) => c.node);
+  const nodes = shown.flatMap((c, i) => (i ? [Box({ key: `gap-${c.name}`, height: CARD_GAP, flexShrink: 0 }), c.node] : [c.node]));
   if (hidden.length) nodes.push(Text({ key: "more", color: theme.muted, wrap: "truncate-end", children: `+ ${hidden.join(" · ")}  (a taller pane shows them)` }));
   return nodes;
 }
