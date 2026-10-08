@@ -264,13 +264,14 @@ async function markRead($) {
   }
 }
 
-// When the room tabs change (join, leave, switch), the pane's focus ring
-// leaves the input box, and what the person types next falls through to the
-// prompt: it would go to Claude. After a room change they started in the
-// pane, wait for the new tabs to be drawn, then put the ring back on the box.
+// When the tabs change (join, leave, switch a room or a built-in room), the
+// pane's focus ring leaves the input box, and what the person types next
+// falls through to the prompt: it would go to Claude. After a change they
+// started in the pane, wait for the new tabs to be drawn, then put the ring
+// back on the box.
 async function keepFocusAcrossRoomChange($, before) {
   for (let waited = 0; waited < 2000; waited += 50) {
-    if (state.current !== before.current || state.rooms.length !== before.count) break;
+    if (state.current !== before.current || state.rooms.length !== before.count || state.view !== before.view) break;
     await $.clock.sleep(50);
   }
   await $.clock.sleep(80);   // let the new tree draw first
@@ -292,7 +293,7 @@ function typingPing($, value) {
 
 async function submitFromPane($, value) {
   const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
-  const before = { current: state.current, count: state.rooms.length };
+  const before = { current: state.current, count: state.rooms.length, view: state.view };
   state.draft = "";
   state.notice = "";
   lastTypingPing = 0;
@@ -309,13 +310,13 @@ async function submitFromPane($, value) {
   } catch (err) {
     say(err?.message ?? String(err));
   }
-  if (/^\/room\b/.test(String(value).trim())) {
+  if (/^\/room\b/.test(String(value).trim()) || state.view !== before.view) {
     try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
   }
 }
 
 async function selectRoom($, id) {
-  const before = { current: state.current, count: state.rooms.length };
+  const before = { current: state.current, count: state.rooms.length, view: state.view };
   try {
     await callBridge($, "/room/select", { room: id });
   } catch (err) {
@@ -407,7 +408,7 @@ function beat($, force) {
 function liveNow() {
   const u = state.usage;
   if (u.activity.state !== "idle" || runningCalls(u).length || agentCounts(u).running) return true;
-  if (activeView() === "agents") return state.sessions.some((s) => s.activity?.state && s.activity.state !== "idle");
+  if (activeView() === "agents") return state.sessions.some((s) => (s.activity?.state && s.activity.state !== "idle") || (s.agents ?? []).length);
   if (activeView() === "git") return state.git.runs.some((r) => r.status !== "completed");
   return false;
 }
@@ -526,7 +527,13 @@ export function register(on, options) {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void (async () => { if (state.view !== "chat") await setView($, "chat"); await selectRoom($, id); })(); },
-      onSelectView: (view) => { void setView($, view); },
+      onSelectView: (view) => {
+        void (async () => {
+          const before = { current: state.current, count: state.rooms.length, view: state.view };
+          await setView($, view);
+          try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
+        })();
+      },
       onShare: (verb) => { void shareFromPane($, verb); },
       onCopy: (text, surface) => { void copySnippet($, text, surface); },
       onRefresh: () => { void refreshGit($); },

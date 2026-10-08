@@ -41,7 +41,7 @@ export function beatKey(hb) {
 // the rest by when they last did something.
 export function orderSessions(own, others) {
   const list = [own, ...others.filter((s) => s && s.id !== own?.id)].filter(Boolean);
-  const busy = (s) => (s.activity?.state && s.activity.state !== "idle" ? 1 : 0);
+  const busy = (s) => ((s.activity?.state && s.activity.state !== "idle") || (s.agents ?? []).some((a) => !["completed", "failed", "killed"].includes(a.status)) ? 1 : 0);
   return list.sort((a, b) => (a === own ? -1 : b === own ? 1 : 0) || busy(b) - busy(a) || (b.activity?.since ?? 0) - (a.activity?.since ?? 0));
 }
 

@@ -770,6 +770,9 @@ test('built-in rooms have tabs even signed out; the chat tab brings the sign-in 
 })
 
 test('switching to a built-in room and back keeps the chat room you were in', SLOW, async ($, on) => {
+  // The pane taking the keyboard back: ui.open with focus (then ui.focus on the box).
+  const focused: string[] = []
+  on('ui.open', (_$: any, e: any) => { if (e.focus) focused.push(e.id); return { value: { isPlaced: true } } })
   const bridge = fakeBridge(on)
   await bridge.start($)
   signedIn(bridge)
@@ -778,6 +781,8 @@ test('switching to a built-in room and back keeps the chat room you were in', SL
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
   await ui.input({ key: 'compose', text: '/agents' })
   expect(await ui.find({ type: 'Text', text: 'SESSIONS' })).toBeDefined()
+  for (let i = 0; i < 4; i++) { await bridge.clock.advance(100); await settle() }   // the new tabs draw, then the ring comes back
+  expect(focused).toContain('squad-chat')   // the pane keeps the keyboard: the next line doesn't go to Claude
   expect(await ui.find({ type: 'Text', text: 'hi there' })).toBeUndefined()
   await ui.input({ key: 'compose', text: 'hello?' })   // not a message here
   expect(bridge.calls.some((c) => c.path === '/send')).toBe(false)

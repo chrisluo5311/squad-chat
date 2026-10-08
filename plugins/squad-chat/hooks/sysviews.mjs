@@ -389,19 +389,27 @@ function allSessions() {
   return orderSessions(state.self, state.sessions);
 }
 
+// Subagents of a session still at work.
+const liveAgents = (s) => (s.agents ?? []).filter((a) => !isEnded(a.status)).length;
+// A session is busy while its turn runs or any of its agents does: a turn
+// can end with a background agent still at work.
+const sessionBusy = (s) => (s.activity?.state && s.activity.state !== "idle") || liveAgents(s) > 0;
+
 function activityPieces(s, now) {
   const a = s.activity ?? { state: "idle" };
+  const live = liveAgents(s);
   const since = a.since ? now - a.since : 0;
   const tail = [s.cost != null ? fmtUsd(s.cost) : null, s.context != null ? `ctx ${Math.round(s.context)}%` : null].filter(Boolean).join(" · ");
   const head = a.state === "tool" ? { text: `running ${a.tool} · ${fmtDur(since)}`, color: theme.agents }
     : a.state === "thinking" ? { text: `thinking · ${fmtDur(since)}`, color: theme.agents }
-      : { text: `idle${a.since ? ` ${age(a.since, now)}` : ""}`, color: theme.muted };
+      : live ? { text: `waiting on ${live} agent${live === 1 ? "" : "s"}`, color: theme.agents }
+        : { text: `idle${a.since ? ` ${age(a.since, now)}` : ""}`, color: theme.muted };
   return [{ text: "  " }, head, tail ? { text: ` · ${tail}`, color: theme.muted, grow: true } : { text: "", grow: true }];
 }
 
 function sessionRows(els, s, handlers, now, maxAgents) {
   const here = s.id === state.sessionId;
-  const busy = s.activity?.state && s.activity.state !== "idle";
+  const busy = sessionBusy(s);
   const color = nameColor(s.id);
   const folded = state.collapsed.has(s.id);
   const agents = s.agents ?? [];
@@ -541,7 +549,7 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
   for (const s of list.slice(0, 4)) {
     const live = (s.agents ?? []).filter((a) => !isEnded(a.status)).length;
     parts.push(line(els, `s-${s.id}`, [
-      { text: `${s.activity?.state !== "idle" ? "●" : "○"} `, color: s.activity?.state !== "idle" ? nameColor(s.id) : theme.muted },
+      { text: `${sessionBusy(s) ? "●" : "○"} `, color: sessionBusy(s) ? nameColor(s.id) : theme.muted },
       { text: `${fit(s.project, 14)} `, bold: true, color: nameColor(s.id) },
       ...activityPieces(s, now).slice(1),
       live ? { text: ` ⟡${live}`, color: theme.agents } : null,
@@ -686,7 +694,7 @@ export function snapshotText(view, now = Date.now()) {
     for (const r of g.runs.slice(0, 3)) out.push(`${runGlyph(r, now).g} ${r.name} · ${r.branch} · ${r.status === "completed" ? age(r.updatedAt, now) : "running"}`);
   } else {
     for (const s of allSessions()) {
-      out.push(`${s.activity?.state !== "idle" ? "●" : "○"} ${s.project}${s.branch ? ` (${s.branch})` : ""} · ${shortModel(s.model)} · ${s.activity?.state ?? "idle"}${s.cost != null ? ` · ${fmtUsd(s.cost)}` : ""}`);
+      out.push(`${sessionBusy(s) ? "●" : "○"} ${s.project}${s.branch ? ` (${s.branch})` : ""} · ${shortModel(s.model)} · ${s.activity?.state ?? "idle"}${s.cost != null ? ` · ${fmtUsd(s.cost)}` : ""}`);
       for (const a of s.agents ?? []) out.push(`   ${isEnded(a.status) ? (a.status === "completed" ? "✓" : "✗") : "◐"} ${a.type}: ${clip(a.description, 40)}${a.top ? ` (${a.top})` : ""}`);
     }
   }
