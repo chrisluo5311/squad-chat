@@ -2,7 +2,13 @@
 // variables start over on every reload; the bridge restarts with it and
 // replays what the state needs (auth, rooms, recent history).
 
+import { createUsage } from "./metrics.mjs";
+import { emptyGit } from "./github.mjs";
+
 export const MAX_MESSAGES = 100;   // per room
+
+// The built-in rooms, in tab order. They need no server and no sign-in.
+export const SYS_ROOMS = ["usage", "git", "agents"];
 
 export const state = {
   bridge: "starting",     // starting | ready | restarting | unavailable | unconfigured
@@ -22,6 +28,7 @@ export const state = {
   notice: "",             // last error or hint, shown in the pane
   draft: "",              // what's typed in the pane's input box, kept across redraws
   paneFocused: false,     // the pane holds the keyboard: messages there count as read
+  paneShown: false,       // the pane is drawn (the Git room polls faster then)
   notify: false,          // toast @mentions (/chat notify on), kept in $.store
   mention: null,          // newest unseen message that @mentions me, until toasted
   dnd: "off",             // do not disturb: off | on | auto (while Claude works), kept in $.store
@@ -29,8 +36,24 @@ export const state = {
   missed: { messages: 0, mentions: 0 },   // what came in while quiet, for the summary
   pendingShare: null,     // a snippet shown for a look before /share send
   dividerAt: new Map(),   // room id → read marker when the pane last caught up: the "new" line
+  // The built-in rooms.
+  view: "chat",           // chat | usage | git | agents: what the pane shows, kept in $.store
+  sysRooms: [...SYS_ROOMS],   // which built-in rooms have tabs (/chat rooms), kept in $.store
+  usage: createUsage(),   // this session's numbers (metrics.mjs)
+  git: emptyGit(),        // the Git room's snapshot (github.mjs)
+  sessionId: null,
+  self: null,             // this session's latest heartbeat (sessions.mjs)
+  sessions: [],           // other sessions' heartbeats, from the bridge
+  feedFilter: "all",      // the Agents room's feed: all | here | errors
+  collapsed: new Set(),   // sessions whose agent trees are folded in the Agents room
   ended: false,
 };
+
+// What the pane shows: a built-in room, or the chat (a hidden room's tab
+// falls back to the chat).
+export function activeView() {
+  return state.view !== "chat" && state.sysRooms.includes(state.view) ? state.view : "chat";
+}
 
 export function currentRoom() {
   return state.rooms.find((r) => r.id === state.current) ?? null;
@@ -57,13 +80,24 @@ export function isQuiet() {
 }
 
 // The status line: unread counts, or nothing. While quiet, a 🔕 says so.
+// The built-in rooms add a word only when something needs a look: context
+// nearly full, or this branch's checks failing.
 export function statusText() {
-  if (state.auth !== "signed_in") return undefined;
+  const extra = sysStatus();
+  if (state.auth !== "signed_in") return extra || undefined;
   const unread = state.rooms.filter((r) => r.unread > 0);
   const counts = unread.map((r) => `#${r.slug} ${r.unread}`).join(" · ");
-  if (isQuiet()) return `🔕 ${counts || "do not disturb"}`;
-  if (!unread.length) return undefined;
-  return `💬 ${counts}`;
+  if (isQuiet()) return [`🔕 ${counts || "do not disturb"}`, extra].filter(Boolean).join(" · ");
+  if (!unread.length) return extra || undefined;
+  return [`💬 ${counts}`, extra].filter(Boolean).join(" · ");
+}
+
+function sysStatus() {
+  const bits = [];
+  const ctx = state.usage.context?.percent;
+  if (state.sysRooms.includes("usage") && ctx >= 80) bits.push(`◔ ${Math.round(ctx)}%`);
+  if (state.sysRooms.includes("git") && state.git.status === "ok" && state.git.pr?.checks.fail) bits.push("✗ CI");
+  return bits.join(" · ");
 }
 
 // "💬 Missed 5 messages · 1 @mention", or "" for nothing. Short enough for
@@ -105,8 +139,10 @@ function addMessage(m) {
 export function applyEvent(event) {
   switch (event.type) {
     case "ready":
-      state.bridge = "ready";
       state.socket = event.socket;
+      // Without a server the bridge runs for the Agents room's heartbeats alone.
+      if (event.chat === false) return true;
+      state.bridge = "ready";
       state.detail = "";
       return true;
     case "auth":
@@ -167,6 +203,9 @@ export function applyEvent(event) {
       return true;
     case "status":
       state.roomStatus.set(event.room, event.status);
+      return true;
+    case "sessions":
+      state.sessions = (event.sessions ?? []).filter((x) => x?.id && x.id !== state.sessionId);
       return true;
     case "error":
       if (event.code === "unconfigured") {

@@ -74,8 +74,9 @@ Two ways to sign in, both through Supabase Auth:
 
 `plugins/squad-chat/bridge/src/`:
 
-* `bridge.mjs`: the process. Control API over the Unix socket (`/login/name`, `/login/start`, `/login/verify`, `/logout`, `/name`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/typing`, `/status`, `/read`, `/who`, `/state`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `typing`, `name`, `friends`, `status`, `error`), and the parent watch.
+* `bridge.mjs`: the process. Control API over the Unix socket (`/login/name`, `/login/start`, `/login/verify`, `/logout`, `/name`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/typing`, `/status`, `/read`, `/who`, `/state`, `/sessions/beat`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `typing`, `name`, `friends`, `status`, `sessions`, `error`), and the parent watch. Without a server configured it still starts, for the heartbeats alone: it reports `unconfigured`, its `ready` says `chat: false`, and the chat routes answer 503.
 * `chat.mjs`: everything Supabase. Sign-in with the emailed code, rooms, one private channel per room, catch-up, unread counts, heartbeats and the friends list.
+* `sessions.mjs`: the heartbeat board for the Agents room (see [Built-in rooms](#built-in-rooms)).
 * `file-storage.mjs`: the session file, `~/.config/squad-chat/session.json`, written `0600` through a temp file and a rename.
 
 Things that took a while to get right:
@@ -91,10 +92,20 @@ Things that took a while to get right:
 
 `dist/bridge.mjs` is one file bundled by esbuild and committed, so installing the plugin needs no `npm install`.
 
+## Built-in rooms
+
+The Usage, Git and Agents tabs are drawn by the mod from what it can read on this computer. They add no tables and need no sign-in.
+
+* **Usage.** `session.measure` pushes context, rate limits and cost whenever they move, and `$.session.usage()` reads them when the room opens (with `breakdown: "summary"` for the context breakdown, estimated locally at no cost). `turn.complete` resolves with each turn's token usage, the main loop's and every subagent's, which gives the cache hit ratio. A `tool.call` hook times each call around `next(e)` and passes the result through unchanged. It never denies a call, and its `.catch` replays the call's own result. `agent.spawn` and `$.agent.list()` give the subagents and their status. All of it lives in `metrics.mjs` as plain data.
+* **Git.** `github.mjs` runs `git status --porcelain=v2 --branch` and a handful of `gh … --json` calls in parallel through `$.process.run` in the session's folder, as the person is already signed in to `gh`. It polls every minute while the room is on show and every five minutes otherwise, and once more a few seconds after a `git push` or `gh pr create` goes through the Bash tool. A failed refresh keeps the last snapshot, marked stale. Comparing two snapshots gives the toasts: checks failing, a review asked of you, your PR approved, merged or in conflict.
+* **Agents.** Each session's mod builds a heartbeat (`sessions.mjs`): folder name, branch, model, what it's doing, its subagent tree and its last dozen tool calls, each summarized in a few words with secret-looking text masked. It posts it to its bridge at most once a second while things change, and every ten seconds otherwise. The bridge writes it to `/tmp/squad-chat-<uid>/sessions/<session id>.json` (folder `0700`, file `0600`, through a temp file and a rename), watches the folder, and sends the mod a `sessions` event with every live heartbeat. A file is dropped when its bridge's pid is gone or it hasn't been written for 30 seconds, and a bridge deletes its own file when it shuts down. The folder sits beside the sockets, not in the config folder, so sessions under different `SQUAD_CONFIG_DIR`s still see each other.
+* **Drawing.** `sysviews.mjs` builds each room from the same rounded card as the chat, with `widgets.mjs` for eighth-block meters, sparklines, stat tiles and rows whose fixed parts never shrink. `stackCards` places cards by priority in the height the dock has and names the ones that didn't fit. One loop in the mod ticks every second: a redraw while something runs (spinners and timers), the subagents' status, the heartbeat and the Git poll.
+
 ## Tests
 
 | Suite | Runs | Covers |
 |---|---|---|
 | `supabase/tests/rls.test.sql` | `supabase test db` | Access control, limits, cascades (pgTAP) |
 | `bridge-tests/` | `npm test` in `plugins/squad-chat/bridge` | Two users, two real bridges, local Supabase: sign-in, passcodes, presence, messages, a network drop through a cuttable proxy, restarts, unread, deleting rooms, `kill -9` |
-| `plugins/squad-chat/tests/` | `claude plugin test ./plugins/squad-chat` | The mod against a fake bridge: sign-in, views, band, status line, read markers, mentions, tabs, room commands, room text never reaching the model |
+| `bridge-tests/sessions.test.mjs` | the same `npm test`, no Supabase needed | Two bridges without a server sharing heartbeats, a dead session dropped, refusing bad heartbeats, cleaning up on shutdown |
+| `plugins/squad-chat/tests/` | `claude plugin test ./plugins/squad-chat` | The mod against a fake bridge: sign-in, views, band, status line, read markers, mentions, tabs, room commands, room text never reaching the model, and the built-in rooms (usage figures, tool timing passed through untouched, `gh` results and toasts, other sessions, snapshots) |

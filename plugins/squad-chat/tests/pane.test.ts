@@ -3,7 +3,8 @@ import { test, expect, mock } from 'claude-code/testing'
 // The bridge, faked beneath the plugin: `node --version` answers, the spawned
 // child prints whatever the test pushes, and control requests are recorded and
 // answered from `replies`.
-function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, unknown>, git = '' } = {}) {
+type Run = { exitCode: number; stdout?: string; stderr?: string }
+function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, unknown>, git = '', gh = null as null | ((argv: string[]) => Run) } = {}) {
   const lines: string[] = []
   let wake: (() => void) | null = null
   const calls: { path: string; body: any }[] = []
@@ -19,6 +20,10 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   on('command.register', async (_$: any, e: any) => ({ value: { command: e.name } }))
   on('process.run', async (_$: any, e: any) => {
     runs.push({ argv: [...e.argv], init: e.init })
+    if (gh && (e.argv[0] === 'gh' || (e.argv[0] === 'git' && (e.argv[1] === 'status' || e.argv[1] === 'rev-list')))) {
+      const r = gh([...e.argv])
+      return { value: { stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false, ...r } }
+    }
     const stdout = e.argv[0] === 'git' ? git : `${node}\n`
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -713,4 +718,298 @@ test('/chat-share #room shares to another room you are in, never one you are not
   expect(logs.at(-1)).toBe('Pick one room to share to.')
   await $.command.run({ command: 'chat-share', args: 'send #design' })
   expect(logs.at(-1)).toBe('Pick the room when you start: /chat-share #design or /chat-share diff #design.')
+})
+
+// ---------------------------------------------------------------- built-in rooms
+
+const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString()
+const check = (conclusion: string | null) => (conclusion ? { status: 'COMPLETED', conclusion } : { status: 'IN_PROGRESS' })
+
+// A repository on GitHub as `gh` answers for it. `pr` is this branch's PR.
+function fakeGh(pr: () => any) {
+  return (argv: string[]): Run => {
+    const a = argv.join(' ')
+    const ok = (data: unknown) => ({ exitCode: 0, stdout: typeof data === 'string' ? data : JSON.stringify(data) })
+    if (a.startsWith('git status')) return ok('# branch.head feature\n# branch.upstream origin/feature\n# branch.ab +2 -0\n1 .M N... 100644 100644 100644 a b src/x.ts\n')
+    if (a.startsWith('gh repo view')) return ok({ nameWithOwner: 'acme/app', url: 'https://github.com/acme/app' })
+    if (a.startsWith('gh api user')) return ok('me\n')
+    if (a.startsWith('gh pr view')) return pr() ? ok(pr()) : { exitCode: 1, stderr: 'no pull requests found for branch "feature"' }
+    if (a.includes('review-requested:@me')) return ok([{ number: 6 }])
+    if (a.startsWith('gh pr list')) return ok([
+      { number: 6, title: 'Polling mode for the desktop app', author: { login: 'ann' }, statusCheckRollup: [check('SUCCESS')], updatedAt: iso(3_600_000), url: 'https://github.com/acme/app/pull/6' },
+      { number: 7, title: 'Fix band width', author: { login: 'sam' }, statusCheckRollup: [check('FAILURE')], updatedAt: iso(7_200_000), url: 'https://github.com/acme/app/pull/7' },
+    ])
+    if (a.startsWith('gh run list')) return ok([{ databaseId: 1, workflowName: 'ci', headBranch: 'feature', status: 'in_progress', createdAt: iso(60_000), updatedAt: iso(1_000), url: 'u' }])
+    if (a.startsWith('gh issue list')) return ok([{ number: 12, title: 'Pane flickers on resize', labels: [{ name: 'bug' }], updatedAt: iso(3_600_000), url: 'u' }])
+    if (a.startsWith('gh api repos/')) return { exitCode: 1, stderr: 'HTTP 403: Resource not accessible' }
+    return { exitCode: 1, stderr: `unexpected: ${a}` }
+  }
+}
+
+const branchPr = (checks: any[]) => ({
+  number: 5, title: 'Built-in rooms', state: 'OPEN', isDraft: false, url: 'https://github.com/acme/app/pull/5', author: { login: 'me' },
+  headRefName: 'feature', reviewDecision: 'REVIEW_REQUIRED', statusCheckRollup: checks, updatedAt: iso(60_000),
+  mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviews: [{ author: { login: 'alice' }, state: 'APPROVED' }], reviewRequests: [{ login: 'bob' }],
+})
+
+test('built-in rooms have tabs even signed out; the chat tab brings the sign-in back', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1 }, { type: 'auth', state: 'signed_out', user: null })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'SIGN IN' })).toBeDefined()
+  await ui.press({ key: 'sys-usage' })
+  expect(await ui.find({ type: 'Text', text: ' ◔ Usage ' })).toBeDefined()     // the tab on show, filled
+  expect(await ui.find({ type: 'Text', text: 'USAGE' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Waiting for the first reply from Claude…' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'SIGN IN' })).toBeUndefined()
+  await ui.press({ key: 'tab-chat' })
+  expect(await ui.find({ type: 'Text', text: 'SIGN IN' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('switching to a built-in room and back keeps the chat room you were in', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, { id: 'r-dev', slug: 'dev', last_read_id: 0, unread: 0 }] }, msg(1, 'bob', 'hi there'))
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await ui.input({ key: 'compose', text: '/agents' })
+  expect(await ui.find({ type: 'Text', text: 'SESSIONS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'hi there' })).toBeUndefined()
+  await ui.input({ key: 'compose', text: 'hello?' })   // not a message here
+  expect(bridge.calls.some((c) => c.path === '/send')).toBe(false)
+  expect(await ui.find({ type: 'Text', text: /This is the agents room/ })).toBeDefined()
+  await ui.input({ key: 'compose', text: '/chat git' })            // as typed at the prompt, typed in the box
+  expect(await ui.find({ type: 'Text', text: ' ⎇ Git ' })).toBeDefined()
+  await ui.input({ key: 'compose', text: '/chat' })
+  expect(await ui.find({ type: 'Text', text: 'hi there' })).toBeDefined()
+  await ui.input({ key: 'compose', text: '/usage' })
+  await ui.press({ key: `tab-${LOBBY.id}` })
+  expect(await ui.find({ type: 'Text', text: 'hi there' })).toBeDefined()
+  expect(bridge.calls.at(-1)).toEqual({ path: '/room/select', body: { room: LOBBY.id } })
+  await ui.unmount()
+})
+
+test('Usage room: context, limits, spend, cache, tool timings and subagents', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
+  on('turn.complete', () => ({ text: '', usage: { input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' } }))
+  on('tool.call', () => ({ result: { stdout: 'ok' }, text: 'ok' }))
+  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'a1' }))
+  on('agent.list', () => ({ value: [{ id: 'a1', description: 'map the repo', type: 'Explore', status: 'running' }] }))
+  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+
+  await $.session.measure({ context: { tokens: 170_000, window: 200_000, percent: 85 }, rateLimits: [{ kind: 'five_hour', percentUsed: 36 }], cost: { usd: 4.21 }, changed: ['context', 'rateLimits', 'cost'] })
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  const r = await $.tool.call({ tool: 'Bash', command: 'npm test' } as any)
+  expect(r).toEqual({ result: { stdout: 'ok' }, text: 'ok' })   // passed through untouched
+  await $.agent.spawn({ tool_use_id: 'tu1', prompt: 'look around', description: 'map the repo', subagentType: 'Explore', parentModel: 'claude-opus-5-5', background: false, fork: false } as any)
+  await settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: ' 85%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /170k\/200k/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^5-hour/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^7-day/ })).toBeDefined()          // always shown, even without a reading
+  expect(await ui.find({ type: 'Text', text: ' no data yet' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\$4\.21/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^90%/ })).toBeDefined()            // 9000 of 10000 input tokens from the cache
+  expect(await ui.find({ type: 'Text', text: /^12k/ })).toBeDefined()            // tokens in all
+  expect(await ui.find({ type: 'Text', text: /^Bash/ })).toBeDefined()           // the TOOLS card
+  expect(await ui.find({ type: 'Text', text: 'map the repo' })).toBeDefined()    // the SUBAGENTS card
+  expect(await ui.find({ type: 'Text', text: '1 running · 0 done' })).toBeDefined()
+  expect(seen.statuses.at(-1)).toBe('◔ 85%')                                       // nearly full: the status line says so
+  await ui.unmount()
+})
+
+test('Git room: branch, PR, reviews and checks from gh; a refresh that turns CI red toasts', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  on('session.cwd', () => ({ value: '/work/app' }))
+  let checks = [check('SUCCESS'), check(null)]
+  const bridge = fakeBridge(on, { gh: fakeGh(() => branchPr(checks)) })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const tall = { ...props('dock'), scroll: { offset: 0, bodyRows: 50 } }
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: tall })
+  await ui.press({ key: 'sys-git' })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'acme/app' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '⎇ feature' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '↑2' })).toBeDefined()               // pushed branch: ahead and behind its remote
+  expect(await ui.find({ type: 'Text', text: '↓0' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '● 1 changed' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'PR #5 · open' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓ alice' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '● bob' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /● you/ })).toBeDefined()            // #6 wants my review
+  expect(await ui.find({ type: 'Text', text: /✗ CI/ })).toBeDefined()             // #7's checks failed
+  expect(await ui.find({ type: 'Text', text: 'Pane flickers on resize' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'ISSUES & ALERTS' })).toBeDefined()
+  expect(bridge.runs.find((r) => r.argv[0] === 'gh')?.init?.cwd).toBe('/work/app')   // in the session's folder
+
+  checks = [check('SUCCESS'), check('FAILURE')]
+  await ui.input({ key: 'compose', text: 'r' })
+  await settle()
+  expect(seen.toasts).toContain('✗ Checks failed on #5')
+  expect(seen.statuses.at(-1)).toBe('✗ CI')
+  await ui.unmount()
+})
+
+test('Git room: says how to set up gh when it is missing', SLOW, async ($, on) => {
+  recordUi(on)
+  on('session.cwd', () => ({ value: '/work/app' }))
+  const bridge = fakeBridge(on, { gh: (argv) => {
+    if (argv[0] === 'gh') throw new Error('spawn gh ENOENT')
+    if (argv[1] === 'rev-list') return argv.at(-1) === 'origin/HEAD..HEAD' ? { exitCode: 128, stderr: 'unknown revision' } : { exitCode: 0, stdout: '3\n' }
+    return { exitCode: 0, stdout: '# branch.head feature\n1 .M N... 100644 100644 100644 a b x.ts\n' }   // never pushed: no upstream
+  } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  await $.command.run({ command: 'chat', args: 'git' })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /Install it \(brew install gh\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '⎇ feature' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '↑3 local' })).toBeDefined()   // commits past origin/main
+  await ui.unmount()
+
+  // The band says the same in one line.
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  const line = (await band.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
+  expect(line).toContain("feature · ↑3 local · ● 1 changed · gh isn't set up")
+  await band.unmount()
+})
+
+test('Agents room: lists the other sessions on this computer, and heartbeats to the bridge', SLOW, async ($, on) => {
+  on('session.id', () => ({ value: 'sess-here' }))
+  on('session.cwd', () => ({ value: '/work/squad-chat' }))
+  const bridge = fakeBridge(on, { store: { view: 'agents' } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'sessions', sessions: [
+    { id: 'sess-api', project: 'api-server', branch: 'main', model: 'claude-sonnet-5-5', activity: { state: 'tool', tool: 'Bash', since: Date.now() - 21_000 }, cost: 0.84, context: 31,
+      agents: [{ id: 'x1', type: 'Explore', description: 'find the routes', status: 'running', startedAt: Date.now() - 5_000, depth: 0, last: true, top: 'Grep ×3' }],
+      feed: [{ key: 'c1', tool: 'Bash', summary: 'npm test', at: Date.now() - 21_000, done: false }] },
+    { id: 'sess-here', project: 'stale copy of me', activity: { state: 'idle' }, agents: [], feed: [] },
+  ] })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'SESSIONS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'squad-chat' })).toBeDefined()      // this session, first
+  expect(await ui.find({ type: 'Text', text: ' (here)' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'api-server' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'find the routes' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'npm test' })).toBeDefined()        // the LIVE feed
+  expect(await ui.find({ type: 'Text', text: 'stale copy of me' })).toBeUndefined()   // our own comes from here, not the file
+  expect(await ui.find({ type: 'Text', text: '2 on this computer' })).toBeDefined()
+
+  await ui.press({ key: 'filter' })                                              // all → here
+  expect(await ui.find({ type: 'Text', text: 'npm test' })).toBeUndefined()
+
+  await bridge.clock.advance(1_000)
+  await settle()
+  const beat = bridge.calls.find((c) => c.path === '/sessions/beat')
+  expect(beat?.body?.id).toBe('sess-here')
+  expect(beat?.body?.project).toBe('squad-chat')
+  await ui.unmount()
+})
+
+test('/chat-share usage posts a snapshot of the room as a card', SLOW, async ($, on) => {
+  const logs: string[] = []
+  on('ui.log', (_$: any, e: any) => { logs.push(e.text ?? e); return { value: undefined } })
+  on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  await $.session.measure({ context: { tokens: 50_000, window: 200_000, percent: 25 }, rateLimits: [], cost: { usd: 1.5 }, changed: ['context', 'cost'] })
+  await $.command.run({ command: 'chat-share', args: 'usage' })
+  expect(logs.some((l) => /^Ready to share to #lobby: 📊 Usage/.test(l))).toBe(true)
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  const sent = bridge.calls.at(-1)
+  expect(sent?.path).toBe('/send')
+  expect(sent?.body.kind).toBe('code')
+  expect(sent?.body.lang).toBe('usage')
+  expect(sent?.body.text).toMatch(/^Usage/)
+  expect(sent?.body.text).toMatch(/Context\s+━+/)
+  expect(sent?.body.text).toMatch(/\$1\.50/)
+})
+
+test('/chat rooms picks which built-in rooms have tabs', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms git' })
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ key: 'sys-git' })).toBeDefined()
+  expect(await ui.find({ key: 'sys-usage' })).toBeUndefined()
+  await ui.unmount()
+  await $.command.run({ command: 'chat', args: 'rooms none' })
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ key: 'sys-git' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('band: a built-in room shows its one-line summary above the prompt', SLOW, async ($, on) => {
+  recordUi(on)
+  // What Claude Code answers once turns run (read after each main-loop turn).
+  let usage: any = null
+  on('session.usage', () => (usage ? { value: usage } : { value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+  on('turn.complete', () => ({ text: '' }))
+  on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
+  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1 }, { type: 'auth', state: 'signed_out', user: null })
+  await settle()
+  // Before any reply: nothing measured, nothing spent.
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: 'waiting for the first reply' })).toBeDefined()
+  await ui.unmount()
+
+  await $.session.measure({
+    context: { tokens: 50_000, window: 200_000, percent: 25 },
+    rateLimits: [{ kind: 'seven_day', percentUsed: 37 }, { kind: 'five_hour', percentUsed: 90 }],
+    cost: { usd: 1.5 }, changed: ['context', 'rateLimits', 'cost'],
+  })
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◔ Usage' })).toBeDefined()
+  const texts = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
+  expect(texts).toContain('☁ Cloudy 25% 50k/200k · 5-hour 90% · spent $1.50')   // the context as a forecast
+  expect(texts).not.toContain('7-day')                                              // the room has it; the band stays short
+  await ui.unmount()
+
+  // The 5-hour window just reset: Claude Code reports only the 7-day one. It still shows.
+  await $.session.measure({ context: { tokens: 50_000, window: 200_000, percent: 25 }, rateLimits: [{ kind: 'seven_day', percentUsed: 37 }], cost: { usd: 1.5 }, changed: ['rateLimits'] })
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  const reset = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
+  expect(reset).toContain('· 5-hour – ·')
+  await ui.unmount()
+
+  // After main-loop turns, a chart of the context per turn and the last turn's growth.
+  usage = { startedAt: 0, context: { tokens: 150_000, window: 200_000, percent: 75 }, rateLimits: [{ kind: 'five_hour', percentUsed: 40 }], cost: { usd: 2 } }
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  await settle()
+  await $.turn.complete({ turnId: 't2', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  await settle()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  const after = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
+  expect(after).toContain('☇ Storm 75% 150k/200k')
+  expect(after).toContain('· 5-hour 40% · spent $2.00')
+  await ui.unmount()
+
+  // A narrow band keeps the forecast, the 5-hour window and the spend.
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...bandProps, bodyColumns: 60 } })
+  const narrow = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
+  expect(narrow).toContain('☇ Storm 75% · 5-hour 40% · spent $2.00')
+  await ui.unmount()
 })

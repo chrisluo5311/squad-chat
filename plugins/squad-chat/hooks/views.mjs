@@ -2,14 +2,18 @@
 // follows $ only within the hooks module's own file).
 //
 // Docked (fullscreen, wide terminal):
-//   title bar · room tabs · FRIENDS card · room card with grouped messages ·
-//   input box · key hints
+//   title bar · tabs (built-in rooms, then chat rooms) · FRIENDS card ·
+//   room card with grouped messages · input box · key hints
+// A built-in room (Usage, Git, Agents) takes the space under the tabs with
+// its own cards (sysviews.mjs).
 // Inline (above the prompt): one header line, the last few messages, input.
 // Band (pane not up): one line with an Open button.
 
-import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView } from "./state.mjs";
 import { theme, nameColor, glyph } from "./theme.mjs";
 import { snippetTitle, oneLine, displayLines } from "./share.mjs";
+import { cells, rowsFor } from "./widgets.mjs";
+import { SYS, sysDock, sysInline, sysBandPieces, sysBadge } from "./sysviews.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
 
@@ -50,33 +54,6 @@ function connection() {
 
 function displayName(m) {
   return m.mine ? "you" : m.user;
-}
-
-// Terminal cells a string takes: wide characters (CJK, most emoji) take two.
-function cells(str) {
-  let n = 0;
-  for (const ch of str) n += /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]|\p{Extended_Pictographic}/u.test(ch) ? 2 : 1;
-  return n;
-}
-
-// Rows a text takes when word-wrapped at `width`, the way the terminal wraps.
-function rowsFor(text, width) {
-  width = Math.max(10, width);
-  let rows = 0;
-  for (const para of String(text).split("\n")) {
-    let line = 0;
-    rows++;
-    for (const word of para.split(/(\s+)/)) {
-      const w = cells(word);
-      if (!w) continue;
-      if (line + w <= width) { line += w; continue; }
-      if (/^\s+$/.test(word)) { line = 0; rows++; continue; }
-      rows += line > 0 ? 1 : 0;
-      line = w % width || (w > 0 ? width : 0);
-      rows += Math.max(0, Math.ceil(w / width) - 1);
-    }
-  }
-  return Math.max(1, rows);
 }
 
 // ---------------------------------------------------------------- messages
@@ -261,20 +238,62 @@ function titleBar(els) {
   ] });
 }
 
-// Rooms as tabs: the current one filled with the accent, the others pressable.
-function roomTabs(els, onSelectRoom) {
+// The tabs: built-in rooms first, each in its own color, then a thin rule
+// and the chat rooms. The tab on show is filled with its color; the others
+// are pressable and carry a badge when something there is worth a glance.
+function roomTabs(els, handlers) {
   const { Box, Text, Button } = els;
-  return Box({ key: "tabs", flexDirection: "row", flexWrap: "wrap", columnGap: 1, children: state.rooms.map((r) => {
-    if (r.id === state.current) {
-      return Text({ key: `tab-${r.id}`, bold: true, color: theme.onAccent, backgroundColor: theme.accent, children: ` #${r.slug} ` });
+  const view = activeView();
+  const tabs = [];
+  for (const id of state.sysRooms) {
+    const meta = SYS[id];
+    const badge = view === id ? null : sysBadge(id);
+    if (view === id) {
+      tabs.push(Text({ key: `sys-${id}`, bold: true, color: theme.onAccent, backgroundColor: meta.color, children: ` ${meta.icon} ${meta.label} ` }));
+      continue;
     }
-    const tab = Button({ key: `tab-${r.id}`, plain: true, label: ` #${r.slug}`, dimColor: !r.unread, onPress: () => onSelectRoom(r.id) });
-    if (!r.unread) return tab;
-    return Box({ key: `tabbox-${r.id}`, flexDirection: "row", gap: 1, children: [
-      tab,
-      Text({ key: "badge", bold: true, color: theme.amber, children: String(r.unread) }),
-    ] });
-  }) });
+    const tab = Button({ key: `sys-${id}`, plain: true, label: ` ${meta.icon} ${meta.label}`, dimColor: !badge, onPress: () => handlers.onSelectView?.(id) });
+    tabs.push(badge ? Box({ key: `sysbox-${id}`, flexDirection: "row", gap: 1, children: [tab, Text({ key: "badge", bold: true, color: badge.color, children: badge.text })] }) : tab);
+  }
+  const chatTabs = [];
+  if (state.auth === "signed_in" && state.rooms.length) {
+    for (const r of state.rooms) {
+      if (r.id === state.current && view === "chat") {
+        chatTabs.push(Text({ key: `tab-${r.id}`, bold: true, color: theme.onAccent, backgroundColor: theme.accent, children: ` #${r.slug} ` }));
+        continue;
+      }
+      const tab = Button({ key: `tab-${r.id}`, plain: true, label: ` #${r.slug}`, dimColor: !r.unread, onPress: () => handlers.onSelectRoom(r.id) });
+      chatTabs.push(r.unread
+        ? Box({ key: `tabbox-${r.id}`, flexDirection: "row", gap: 1, children: [tab, Text({ key: "badge", bold: true, color: theme.amber, children: String(r.unread) })] })
+        : tab);
+    }
+  } else if (state.sysRooms.length) {
+    // Signed out or no room yet: one tab back to the chat's own screens.
+    chatTabs.push(view === "chat"
+      ? Text({ key: "tab-chat", bold: true, color: theme.onAccent, backgroundColor: theme.accent, children: " # chat " })
+      : Button({ key: "tab-chat", plain: true, dimColor: true, label: " # chat", onPress: () => handlers.onSelectView?.("chat") }));
+  }
+  const rule = tabs.length && chatTabs.length ? [Text({ key: "rule", color: theme.muted, children: glyph.bar })] : [];
+  return Box({ key: "tabs", flexDirection: "row", flexWrap: "wrap", columnGap: 1, children: [...tabs, ...rule, ...chatTabs] });
+}
+
+// How many rows the tabs take at `width`: they wrap like words.
+function tabRows(width) {
+  const view = activeView();
+  const widths = state.sysRooms.map((id) => {
+    const badge = view === id ? null : sysBadge(id);
+    return cells(` ${SYS[id].icon} ${SYS[id].label}${view === id ? " " : ""}`) + (badge ? 1 + cells(badge.text) : 0);
+  });
+  if (widths.length) widths.push(1);   // the rule
+  if (state.auth === "signed_in" && state.rooms.length) {
+    for (const r of state.rooms) widths.push(cells(` #${r.slug} `) + (r.unread ? 1 + String(r.unread).length : 0));
+  } else if (state.sysRooms.length) widths.push(8);
+  let rows = 1;
+  let used = 0;
+  for (const w of widths) {
+    if (used && used + 1 + w > width) { rows++; used = w; } else used += (used ? 1 : 0) + w;
+  }
+  return rows;
 }
 
 function friendsCard(els, width) {
@@ -320,7 +339,14 @@ function notice(els) {
 }
 
 // What the input box is for right now.
+const SYS_INPUT = {
+  usage: { placeholder: "/git · /agents · /share usage · /help", label: "run" },
+  git: { placeholder: "r to refresh · /share git · /help", label: "run" },
+  agents: { placeholder: "/usage · /git · /share agents · /help", label: "run" },
+};
 function inputMode() {
+  const view = activeView();
+  if (view !== "chat") return SYS_INPUT[view];
   if (state.bridge !== "ready") return null;
   if (state.auth === "signed_out") return { placeholder: "you@example.com, or a name", label: "continue" };
   if (state.auth === "code_sent") return { placeholder: "8-digit code from the email", label: "sign in" };
@@ -379,15 +405,25 @@ function dockView(els, props, handlers) {
   const bodyRows = props.scroll?.bodyRows || 30;
   const room = currentRoom();
   const mode = inputMode();
+  const view = activeView();
   const parts = [titleBar(els)];
   let used = 1;
 
-  if (state.auth === "signed_in" && state.rooms.length) {
-    parts.push(roomTabs(els, handlers.onSelectRoom));
-    used += 1;
+  if (state.sysRooms.length || (state.auth === "signed_in" && state.rooms.length)) {
+    parts.push(roomTabs(els, handlers));
+    used += tabRows(width);
   }
 
-  if (state.auth === "signed_in" && room) {
+  if (view !== "chat") {
+    const n = notice(els);
+    const tail = 3 + 1 + (n ? rowsFor(state.notice, width) : 0);   // input box + hints + notice
+    const capacity = Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
+    parts.push(...sysDock(els, view, width, capacity, handlers));
+    parts.push(Box({ key: "spacer", flexGrow: 1 }));
+    if (n) parts.push(n);
+    parts.push(inputBox(els, mode, handlers, props.isFocused));
+    parts.push(hints(els, SYS_HINTS[view]));
+  } else if (state.auth === "signed_in" && room) {
     const friends = friendsCard(els, width);
     parts.push(friends.node);
     used += 1 + friends.height;
@@ -425,6 +461,12 @@ function dockView(els, props, handlers) {
   return Box({ flexDirection: "column", height: bodyRows, children: parts });
 }
 
+const SYS_HINTS = {
+  usage: "Context ▸ breaks it down · /share usage posts a snapshot",
+  git: "↻ or r refreshes · ⧉ copies a link · /share git",
+  agents: "▾ folds a session · all ▾ filters the feed · /share agents",
+};
+
 // A snippet waiting for a look before it goes out, with Send and Cancel.
 const PREVIEW_ROWS = 5;
 function shareCard(els, handlers) {
@@ -451,9 +493,12 @@ function inlineView(els, props, handlers) {
   const room = currentRoom();
   const mode = inputMode();
   const conn = connection();
+  const view = activeView();
   const parts = [];
 
-  if (state.auth === "signed_in" && room) {
+  if (view !== "chat") {
+    parts.push(...sysInline(els, view, width, handlers));
+  } else if (state.auth === "signed_in" && room) {
     const names = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).map((u) => u.name);
     parts.push(Box({ key: "header", flexDirection: "row", justifyContent: "space-between", children: [
       Box({ key: "left", flexDirection: "row", gap: 1, flexShrink: 1, children: [
@@ -507,6 +552,21 @@ function inlineView(els, props, handlers) {
 // narrow, or the pane closed): room, who's online, unread, the latest message.
 export function bandView(els, props, { onOpen }) {
   const { Box, Text, Button } = els;
+  const view = activeView();
+  if (view !== "chat") {
+    const meta = SYS[view];
+    return Box({ flexDirection: "row", children: [
+      Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: [
+        Box({ key: "room", flexShrink: 0, children: [Text({ key: "t", bold: true, color: meta.color, children: `${meta.icon} ${meta.label}` })] }),
+        Box({ key: "sep", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: glyph.bar })] }),
+        Box({ key: "msg", flexDirection: "row", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: sysBandPieces(view, Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16)).map((p, i) => (
+          Box({ key: `p${i}`, flexShrink: 0, children: [Text({ key: "t", color: p.color, bold: p.bold, children: p.text })] }))) }),
+      ] }),
+      Box({ key: "open-box", flexShrink: 0, marginLeft: 1, children: [
+        Button({ key: "open", label: "Open", variant: "primary", onPress: onOpen }),
+      ] }),
+    ] });
+  }
   const room = currentRoom();
   const here = (state.online.get(room?.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
   const unreadHere = room.unread ?? 0;

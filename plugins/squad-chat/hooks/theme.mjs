@@ -19,7 +19,19 @@ export const theme = {
   muted: "subtle",         // meta text: times, counts, hints
   warn: "#E2B86B",
   error: "#E06C75",
+  // The built-in rooms, each with its own color from the same warm palette:
+  // its tab, its card titles and its meters' fill.
+  usage: "#7FB6E2",        // sky
+  git: "#6CC070",          // leaf
+  agents: "#C8A2E0",       // lilac
 };
+
+// Green, amber or red for how full something is (a percent, 0-100).
+export function level(pct) {
+  if (pct >= 85) return theme.error;
+  if (pct >= 60) return theme.amber;
+  return theme.online;
+}
 
 // Warm, distinct name colors for friends. Sky blue is kept for "you", and
 // coral for your bubbles, so neither appears here.

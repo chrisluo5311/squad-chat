@@ -4396,8 +4396,8 @@ var require_RealtimeChannel = __commonJS({
       }
       /** @internal */
       _notThisChannelEvent(event, ref) {
-        const { close, error, leave, join: join3 } = constants_1.CHANNEL_EVENTS;
-        const events = [close, error, leave, join3];
+        const { close, error, leave, join: join4 } = constants_1.CHANNEL_EVENTS;
+        const events = [close, error, leave, join4];
         return ref && events.includes(event) && ref !== this.joinPush.ref;
       }
       /** @internal */
@@ -13906,9 +13906,9 @@ var require_main3 = __commonJS({
 
 // src/bridge.mjs
 import { createServer } from "node:http";
-import { mkdirSync as mkdirSync2, rmSync as rmSync2, chmodSync as chmodSync2 } from "node:fs";
+import { mkdirSync as mkdirSync3, rmSync as rmSync3, chmodSync as chmodSync3 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join as join2 } from "node:path";
+import { join as join3 } from "node:path";
 
 // node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -22746,6 +22746,86 @@ function onlineList(room) {
   return [...room.online].map(([user_id, name]) => ({ user_id, name, ...room.busy.has(user_id) ? { busy: true } : {} }));
 }
 
+// src/sessions.mjs
+import { mkdirSync as mkdirSync2, chmodSync as chmodSync2, writeFileSync as writeFileSync2, renameSync as renameSync2, readdirSync, readFileSync as readFileSync2, statSync, rmSync as rmSync2, watch } from "node:fs";
+import { join as join2 } from "node:path";
+var ID = /^[A-Za-z0-9_-]{1,100}$/;
+var MAX_BEAT = 32 * 1024;
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, reportMs = 1e4, debounceMs = 250 }) {
+  mkdirSync2(dir, { recursive: true, mode: 448 });
+  chmodSync2(dir, 448);
+  let ownId = null;
+  let timer = null;
+  function read() {
+    const now = Date.now();
+    const out = [];
+    let names = [];
+    try {
+      names = readdirSync(dir).filter((n) => n.endsWith(".json"));
+    } catch {
+      return out;
+    }
+    for (const name of names) {
+      const file = join2(dir, name);
+      try {
+        const age = now - statSync(file).mtimeMs;
+        const data = JSON.parse(readFileSync2(file, "utf8"));
+        if (age > staleMs || !Number.isInteger(data.pid) || !alive(data.pid)) {
+          rmSync2(file, { force: true });
+          continue;
+        }
+        out.push(data);
+      } catch {
+      }
+    }
+    return out;
+  }
+  function report() {
+    clearTimeout(timer);
+    timer = null;
+    emit2({ type: "sessions", sessions: read() });
+  }
+  function schedule() {
+    if (!timer) timer = setTimeout(report, debounceMs);
+  }
+  let watcher = null;
+  try {
+    watcher = watch(dir, schedule);
+  } catch {
+  }
+  const interval = setInterval(report, reportMs);
+  return {
+    // This session's heartbeat, written whole (a temporary file, then renamed).
+    beat(hb) {
+      if (!hb || !ID.test(String(hb.id ?? ""))) throw Object.assign(new Error("a heartbeat needs an id"), { status: 400 });
+      const text = JSON.stringify({ ...hb, pid });
+      if (text.length > MAX_BEAT) throw Object.assign(new Error("heartbeat too large"), { status: 413 });
+      if (ownId && ownId !== hb.id) rmSync2(join2(dir, `${ownId}.json`), { force: true });
+      ownId = hb.id;
+      const file = join2(dir, `${hb.id}.json`);
+      const tmp = `${file}.${pid}.tmp`;
+      writeFileSync2(tmp, text, { mode: 384 });
+      renameSync2(tmp, file);
+      schedule();
+    },
+    report,
+    close() {
+      watcher?.close();
+      clearInterval(interval);
+      clearTimeout(timer);
+      if (ownId) rmSync2(join2(dir, `${ownId}.json`), { force: true });
+    }
+  };
+}
+
 // src/bridge.mjs
 var MAX_BODY = 64 * 1024;
 var env = process.env;
@@ -22761,25 +22841,32 @@ if (!token) {
   emit({ type: "error", message: "SQUAD_BRIDGE_TOKEN is not set" });
   process.exit(2);
 }
-if (!env.SQUAD_SUPABASE_URL || !env.SQUAD_SUPABASE_KEY) {
-  emit({ type: "error", code: "unconfigured", message: "no server configured" });
-  process.exit(3);
-}
-var configDir = env.SQUAD_CONFIG_DIR || join2(env.XDG_CONFIG_HOME || join2(homedir(), ".config"), "squad-chat");
-var socketDir = env.SQUAD_SOCKET_DIR || join2(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
-mkdirSync2(socketDir, { recursive: true, mode: 448 });
-chmodSync2(socketDir, 448);
-var socketPath = join2(socketDir, `${process.pid}.sock`);
-rmSync2(socketPath, { force: true });
-var chat = new Chat({
+var configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
+if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
+var configDir = env.SQUAD_CONFIG_DIR || join3(env.XDG_CONFIG_HOME || join3(homedir(), ".config"), "squad-chat");
+var socketDir = env.SQUAD_SOCKET_DIR || join3(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
+mkdirSync3(socketDir, { recursive: true, mode: 448 });
+chmodSync3(socketDir, 448);
+var socketPath = join3(socketDir, `${process.pid}.sock`);
+rmSync3(socketPath, { force: true });
+var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
   key: env.SQUAD_SUPABASE_KEY,
   configDir,
   emit,
   log,
   debug: env.SQUAD_DEBUG === "1"
-});
-var routes = {
+}) : null;
+var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join3(socketDir, "sessions"), emit });
+var localRoutes = {
+  "GET /ping": () => ({ ok: true, pid: process.pid }),
+  "POST /sessions/beat": (b) => (board.beat(b), { ok: true }),
+  "POST /shutdown": () => {
+    setTimeout(() => shutdown(0), 0);
+    return { ok: true };
+  }
+};
+var chatRoutes = {
   "GET /ping": () => ({ ok: true, pid: process.pid }),
   "GET /state": () => chat.snapshot(),
   "GET /who": () => ({ friends: chat.user ? chat.friendList() : [] }),
@@ -22795,11 +22882,7 @@ var routes = {
   "POST /send": (b) => chat.send(b.text, b.room, { kind: b.kind, lang: b.lang }),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
-  "POST /status": (b) => chat.setStatus(b.status),
-  "POST /shutdown": () => {
-    setTimeout(() => shutdown(0), 0);
-    return { ok: true };
-  }
+  "POST /status": (b) => chat.setStatus(b.status)
 };
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -22822,8 +22905,9 @@ var server = createServer(async (req, res) => {
     res.end(JSON.stringify(body));
   };
   if (req.headers["x-squad-token"] !== token) return reply(401, { error: "bad token" });
-  const route = routes[`${req.method} ${req.url}`];
-  if (!route) return reply(404, { error: "not found" });
+  const name = `${req.method} ${req.url}`;
+  const route = localRoutes[name] ?? (chat ? chatRoutes[name] : null);
+  if (!route) return chatRoutes[name] ? reply(503, { error: "no server configured" }) : reply(404, { error: "not found" });
   try {
     const raw = req.method === "POST" ? await readBody(req) : "";
     let body = {};
@@ -22834,7 +22918,7 @@ var server = createServer(async (req, res) => {
     }
     reply(200, await route(body) ?? { ok: true });
   } catch (err) {
-    if (err instanceof HttpError) return reply(err.status, { error: err.message });
+    if (err instanceof HttpError || Number.isInteger(err?.status)) return reply(err.status, { error: err.message });
     log(err?.stack ?? String(err));
     reply(500, { error: "something went wrong in the chat bridge (details in the debug log)" });
   }
@@ -22843,10 +22927,11 @@ var stopping = false;
 async function shutdown(code) {
   if (stopping) return;
   stopping = true;
-  clearInterval(watch);
+  clearInterval(watch2);
   server.close();
-  rmSync2(socketPath, { force: true });
-  await chat.shutdown().catch(() => {
+  rmSync3(socketPath, { force: true });
+  board.close();
+  await chat?.shutdown().catch(() => {
   });
   process.exit(code);
 }
@@ -22854,11 +22939,12 @@ process.on("SIGTERM", () => shutdown(0));
 process.on("SIGINT", () => shutdown(0));
 process.on("unhandledRejection", (err) => log(`unhandled: ${err?.stack ?? err}`));
 var parent = process.ppid;
-var watch = setInterval(() => {
+var watch2 = setInterval(() => {
   if (process.ppid !== parent) shutdown(0);
 }, 5e3);
 server.listen(socketPath, () => {
-  chmodSync2(socketPath, 384);
-  emit({ type: "ready", socket: socketPath, pid: process.pid });
-  chat.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
+  chmodSync3(socketPath, 384);
+  emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
+  board.report();
+  chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
 });

@@ -1,5 +1,7 @@
 // squad-chat bridge: a Node child of the mod that holds the Supabase
-// connection (the mod runtime has no WebSocket).
+// connection (the mod runtime has no WebSocket), and shares this session's
+// heartbeat with the other sessions on the computer (the Agents room).
+// Without a server it still runs, for the heartbeats alone.
 //
 //   events  → stdout, one JSON object per line (NDJSON)
 //   control ← HTTP on a private Unix socket; every request carries
@@ -7,10 +9,11 @@
 //
 // Environment:
 //   SQUAD_BRIDGE_TOKEN   required, per-run secret shared with the mod
-//   SQUAD_SUPABASE_URL   required: the squad's Supabase project
-//   SQUAD_SUPABASE_KEY   required: its publishable (anon) key
+//   SQUAD_SUPABASE_URL   the squad's Supabase project (no chat without it)
+//   SQUAD_SUPABASE_KEY   its publishable (anon) key
 //   SQUAD_CONFIG_DIR     session + prefs (default ~/.config/squad-chat)
 //   SQUAD_SOCKET_DIR     where the socket goes (default /tmp/squad-chat-<uid>)
+//   SQUAD_SESSIONS_DIR   the sessions' heartbeats (default <socket dir>/sessions)
 //   SQUAD_DEBUG=1        log Realtime traffic to stderr
 //   SQUAD_REFRESH_MS     how often to refresh friends and rooms (tests)
 //
@@ -21,6 +24,7 @@ import { mkdirSync, rmSync, chmodSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chat, HttpError } from "./chat.mjs";
+import { sessionBoard } from "./sessions.mjs";
 
 const MAX_BODY = 64 * 1024;   // a snippet is up to 8000 characters
 
@@ -38,10 +42,9 @@ if (!token) {
   emit({ type: "error", message: "SQUAD_BRIDGE_TOKEN is not set" });
   process.exit(2);
 }
-if (!env.SQUAD_SUPABASE_URL || !env.SQUAD_SUPABASE_KEY) {
-  emit({ type: "error", code: "unconfigured", message: "no server configured" });
-  process.exit(3);
-}
+// No server: no chat, but the heartbeats still run.
+const configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
+if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
 
 const configDir = env.SQUAD_CONFIG_DIR
   || join(env.XDG_CONFIG_HOME || join(homedir(), ".config"), "squad-chat");
@@ -53,18 +56,26 @@ chmodSync(socketDir, 0o700);
 const socketPath = join(socketDir, `${process.pid}.sock`);
 rmSync(socketPath, { force: true });
 
-const chat = new Chat({
+const chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
   key: env.SQUAD_SUPABASE_KEY,
   configDir,
   emit,
   log,
   debug: env.SQUAD_DEBUG === "1",
-});
+}) : null;
+
+const board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join(socketDir, "sessions"), emit });
 
 // ------------------------------------------------------------ control API
 
-const routes = {
+const localRoutes = {
+  "GET /ping": () => ({ ok: true, pid: process.pid }),
+  "POST /sessions/beat": (b) => (board.beat(b), { ok: true }),
+  "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },
+};
+
+const chatRoutes = {
   "GET /ping": () => ({ ok: true, pid: process.pid }),
   "GET /state": () => chat.snapshot(),
   "GET /who": () => ({ friends: chat.user ? chat.friendList() : [] }),
@@ -81,7 +92,6 @@ const routes = {
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
   "POST /status": (b) => chat.setStatus(b.status),
-  "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },
 };
 
 function readBody(req) {
@@ -103,15 +113,16 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(body));
   };
   if (req.headers["x-squad-token"] !== token) return reply(401, { error: "bad token" });
-  const route = routes[`${req.method} ${req.url}`];
-  if (!route) return reply(404, { error: "not found" });
+  const name = `${req.method} ${req.url}`;
+  const route = localRoutes[name] ?? (chat ? chatRoutes[name] : null);
+  if (!route) return chatRoutes[name] ? reply(503, { error: "no server configured" }) : reply(404, { error: "not found" });
   try {
     const raw = req.method === "POST" ? await readBody(req) : "";
     let body = {};
     try { body = raw ? JSON.parse(raw) : {}; } catch { throw new HttpError(400, "body is not JSON"); }
     reply(200, (await route(body)) ?? { ok: true });
   } catch (err) {
-    if (err instanceof HttpError) return reply(err.status, { error: err.message });
+    if (err instanceof HttpError || Number.isInteger(err?.status)) return reply(err.status, { error: err.message });
     // Anything else is a bug: the details go to stderr (the mod's debug log),
     // not into the answer.
     log(err?.stack ?? String(err));
@@ -128,7 +139,8 @@ async function shutdown(code) {
   clearInterval(watch);
   server.close();
   rmSync(socketPath, { force: true });
-  await chat.shutdown().catch(() => {});
+  board.close();
+  await chat?.shutdown().catch(() => {});
   process.exit(code);
 }
 process.on("SIGTERM", () => shutdown(0));
@@ -142,6 +154,7 @@ const watch = setInterval(() => { if (process.ppid !== parent) shutdown(0); }, 5
 
 server.listen(socketPath, () => {
   chmodSync(socketPath, 0o600);
-  emit({ type: "ready", socket: socketPath, pid: process.pid });
-  chat.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
+  emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
+  board.report();
+  chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
 });
