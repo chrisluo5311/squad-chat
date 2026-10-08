@@ -83,7 +83,7 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 
 * **Lives inside Claude Code.** One `/chat` command opens a pane: no browser tab, no extra app.
 * **Never reaches Claude.** What you type in the pane never enters the conversation, and slash-command arguments are hidden from the model, so chatting costs no tokens.
-* **Presence across rooms.** See who's online in every room you share and who's typing, with a status line for unread messages and an optional toast when someone @mentions you.
+* **Presence across rooms.** See who's online in every room you share and who's typing, with a status line for unread messages, an optional toast when someone @mentions you, and a do-not-disturb mode for when Claude is busy.
 * **Your own server.** Each group of friends runs its own free Supabase project. There is no central service and no account with us.
 * **Private rooms.** Rooms are joined with a passcode, and the database only shows a room's messages to its members.
 * **Survives bad networks.** After a dropped connection, a closed laptop or a crashed process, it reconnects by itself and fetches exactly the messages you missed.
@@ -222,8 +222,9 @@ Until a server is set, the pane says so and shows these steps.
 | `/chat-name <new name>` | Change your display name. Your friends see the new one right away. |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
+| `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/logout` and `/help` too. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/logout` and `/help` too. Type passcodes there: it never touches the conversation.
 
 ### Layouts
 
@@ -232,7 +233,7 @@ The pane's input box takes `/room`, `/who`, `/name`, `/logout` and `/help` too. 
 | Docked (fullscreen, ≥ 110 columns) | Room tabs, a FRIENDS card, and the room's messages as bubbles: yours on the right, theirs on the left, grouped by sender, with date labels and a **new** line where you stopped reading |
 | Above the prompt (narrower) | The room, who's online, the last five messages and the input box |
 | Pane closed | One line: the room, who's online, unread count, the latest message and **Open** |
-| Status line | Unread counts per room, such as `💬 #team 3` |
+| Status line | Unread counts per room, such as `💬 #team 3`, or `🔕 #team 3` during do not disturb |
 
 <div align="center">
   <img src="docs/screenshots/band.png" alt="The one-line summary above the prompt while the pane is closed" width="100%">
@@ -256,7 +257,7 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 * **What Claude reads from the room: nothing.** Your friends' messages, names and who's online are drawn in the pane, the band and the status line, and that's all. None of it goes into your prompts, the system prompt, tool results or the transcript, so a friend joking "delete the repo" can't turn into an instruction. A test sends exactly that kind of message and checks it never reaches the model.
 * **Who sees your messages.** Only members of the room. Access is enforced in the database with row-level security, and you become a member only with the room's passcode. Five wrong passcodes lock you out for 15 minutes.
 * **Who runs the server.** Your squad's server belongs to whoever hosts it, and they can read its database like any database admin. Pick a host you trust, or host it yourself.
-* **What friends see.** Your display name (the name you picked, or the part of your email before the `@`) and whether you're online. Never your email.
+* **What friends see.** Your display name (the name you picked, or the part of your email before the `@`) and whether you're online, or busy during do not disturb. Never your email.
 * **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you, and `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
 * **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message.
 
@@ -368,6 +369,7 @@ One person per group does this, once. It fits in Supabase's free plan.
 - [x] Bring your own server, with sign-in by name or by email code
 - [x] `/chat-name` to change your display name
 - [x] Typing indicators
+- [x] Do not disturb, by hand or while Claude works
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 
 See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for proposed features and known issues.

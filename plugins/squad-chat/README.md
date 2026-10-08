@@ -57,8 +57,9 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat-login <name>` | Sign in with just a name, where the server allows it |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
+| `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
 
-The pane's input box takes `/room`, `/who` and `/logout` too.
+The pane's input box takes `/room`, `/who`, `/dnd` and `/logout` too.
 
 ## Privacy
 
