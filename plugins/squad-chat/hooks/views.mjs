@@ -7,7 +7,7 @@
 // Inline (above the prompt): one header line, the last few messages, input.
 // Band (pane not up): one line with an Open button.
 
-import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet } from "./state.mjs";
 import { theme, nameColor, glyph } from "./theme.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
@@ -42,6 +42,7 @@ function connection() {
   const room = currentRoom();
   if (!room) return { color: theme.online, text: `${glyph.on} connected` };
   const status = state.roomStatus.get(room.id);
+  if (status === "SUBSCRIBED" && isQuiet()) return { color: theme.amber, text: `${glyph.busy} busy` };
   if (status === "SUBSCRIBED") return { color: theme.online, text: `${glyph.on} live` };
   return { color: theme.warn, text: `${glyph.off} ${status ? "reconnecting" : "joining"}` };
 }
@@ -216,13 +217,13 @@ function friendsCard(els, width) {
   const friends = state.friends;
   const online = friends.filter((f) => f.online).length;
   const chips = friends.map((f) => Box({ key: f.user_id, flexDirection: "row", children: [
-    Text({ key: "dot", color: f.online ? theme.online : theme.muted, children: `${f.online ? glyph.on : glyph.off} ` }),
-    Text({ key: "name", color: f.online ? undefined : theme.muted, children: f.name }),
+    Text({ key: "dot", color: f.busy ? theme.amber : f.online ? theme.online : theme.muted, children: `${f.busy ? glyph.busy : f.online ? glyph.on : glyph.off} ` }),
+    Text({ key: "name", color: f.online ? undefined : theme.muted, children: f.busy ? `${f.name} (busy)` : f.name }),
   ] }));
   const body = friends.length
     ? Box({ key: "list", flexDirection: "row", flexWrap: "wrap", columnGap: 2, children: chips })
     : Text({ key: "none", color: theme.muted, children: "Share a room's name and passcode to add friends." });
-  const textLen = friends.reduce((n, f) => n + f.name.length + 4, 0);
+  const textLen = friends.reduce((n, f) => n + f.name.length + (f.busy ? 7 : 0) + 4, 0);
   const height = 3 + (friends.length ? rowsFor("x".repeat(textLen), width - 4) : rowsFor("Share a room's name and passcode to add friends.", width - 4));
   return { node: card(els, { key: "friends", title: "FRIENDS", meta: `${online}/${friends.length} online`, marginTop: 1, children: [body] }), height };
 }
@@ -429,15 +430,22 @@ export function bandView(els, props, { onOpen }) {
     fixed("room", `${glyph.brand} #${room.slug}`, { bold: true, color: theme.accent }),
     fixed("online", live ? `${glyph.on} ${here}` : `${glyph.off} reconnecting`, { color: live ? (here ? theme.online : theme.muted) : theme.warn }),
   ];
-  if (unreadHere) bits.push(fixed("unread", ` ${unreadHere} new `, { bold: true, color: theme.onAccent, backgroundColor: theme.accent }));
-  if (unreadElsewhere) bits.push(fixed("elsewhere", `+${unreadElsewhere}`, { color: theme.muted }));
-  if (typing) {
-    bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
-    bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", color: theme.muted, italic: true, wrap: "truncate-end", children: typing })] }));
-  } else if (last) {
-    bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
-    bits.push(fixed("who", displayName(last), { bold: true, color: last.mine ? theme.you : nameColor(last.user_id) }));
-    bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", children: last.body })] }));
+  if (isQuiet()) {
+    // Do not disturb: counts stay, in grey, and no message text pulls the eye.
+    const n = unreadHere + unreadElsewhere;
+    bits.push(fixed("quiet", `${glyph.quiet} ${n ? `${n} new · ` : ""}do not disturb`, { color: theme.muted }));
+    bits.push(Box({ key: "msg", flexGrow: 1, children: [] }));
+  } else {
+    if (unreadHere) bits.push(fixed("unread", ` ${unreadHere} new `, { bold: true, color: theme.onAccent, backgroundColor: theme.accent }));
+    if (unreadElsewhere) bits.push(fixed("elsewhere", `+${unreadElsewhere}`, { color: theme.muted }));
+    if (typing) {
+      bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
+      bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", color: theme.muted, italic: true, wrap: "truncate-end", children: typing })] }));
+    } else if (last) {
+      bits.push(fixed("sep", glyph.bar, { color: theme.muted }));
+      bits.push(fixed("who", displayName(last), { bold: true, color: last.mine ? theme.you : nameColor(last.user_id) }));
+      bits.push(Box({ key: "msg", flexShrink: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", children: last.body })] }));
+    }
   }
   return Box({ flexDirection: "row", children: [
     Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: bits }),

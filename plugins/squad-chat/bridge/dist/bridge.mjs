@@ -22166,6 +22166,7 @@ var Chat = class {
     this.kickGap = 0;
     this.friendsLoading = null;
     this.leftAt = /* @__PURE__ */ new Map();
+    this.busy = false;
     this.sb.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT" && this.user) setTimeout(() => this.reset("signed out"), 0);
     });
@@ -22240,7 +22241,7 @@ var Chat = class {
     this.noteName(me.id, name);
     this.setAuth("signed_in");
     for (const room of this.rooms.values()) {
-      if (room.status === "SUBSCRIBED") room.channel.track({ user_id: me.id, name, at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+      if (room.status === "SUBSCRIBED") room.channel.track(this.presencePayload()).catch(() => {
       });
     }
     this.emitFriends();
@@ -22348,6 +22349,8 @@ var Chat = class {
       seen: /* @__PURE__ */ new Set(),
       online: /* @__PURE__ */ new Map(),
       // user id → name
+      busy: /* @__PURE__ */ new Set(),
+      // user ids whose presence says busy
       typing: /* @__PURE__ */ new Map(),
       // user id → timer that ends their "typing"
       typingSent: 0,
@@ -22451,7 +22454,7 @@ var Chat = class {
         if (room.online.size) this.presenceChanged(room, { clear: true });
         return;
       }
-      await channel.track({ user_id: me.id, name: me.name, at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+      await channel.track(this.presencePayload()).catch(() => {
       });
       await this.backfill(room).catch((e) => this.emit({ type: "error", message: `backfill failed: ${e.message}` }));
     });
@@ -22468,15 +22471,17 @@ var Chat = class {
   presenceChanged(room, { clear = false } = {}) {
     const before = new Set(room.online.keys());
     room.online.clear();
+    room.busy.clear();
     for (const [key, metas] of clear ? [] : Object.entries(room.channel.presenceState())) {
       const name = metas.at(-1)?.name;
       room.online.set(key, name ?? this.names.get(key) ?? "someone");
+      if (metas.at(-1)?.status === "busy") room.busy.add(key);
       this.noteName(key, name);
     }
     if (!clear) {
       for (const id of before) if (!room.online.has(id)) this.leftAt.set(id, Date.now());
     }
-    this.emit({ type: "presence", room: room.id, online: [...room.online].map(([user_id, name]) => ({ user_id, name })) });
+    this.emit({ type: "presence", room: room.id, online: onlineList(room) });
     const known = new Set(this.friends.map((f) => f.user_id));
     if ([...room.online.keys()].some((id) => id !== this.user?.id && !known.has(id))) this.refreshFriends();
     else this.emitFriends();
@@ -22638,8 +22643,11 @@ var Chat = class {
   // without a socket only send heartbeats) newer than their last presence leave.
   friendList() {
     const now = Date.now();
-    const present = /* @__PURE__ */ new Set();
-    for (const room of this.rooms.values()) for (const id of room.online.keys()) present.add(id);
+    const present = /* @__PURE__ */ new Set(), busy = /* @__PURE__ */ new Set();
+    for (const room of this.rooms.values()) {
+      for (const id of room.online.keys()) present.add(id);
+      for (const id of room.busy) busy.add(id);
+    }
     const recentBeat = (f) => {
       if (f.last_seen == null) return false;
       const beat = Date.parse(f.last_seen);
@@ -22649,8 +22657,24 @@ var Chat = class {
       user_id: f.user_id,
       name: this.names.get(f.user_id) ?? f.display_name,
       rooms: f.rooms,
-      online: present.has(f.user_id) || recentBeat(f)
+      online: present.has(f.user_id) || recentBeat(f),
+      ...present.has(f.user_id) && busy.has(f.user_id) ? { busy: true } : {}
     })).sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+  }
+  // What we track on every room channel. Status is only ever ours to set,
+  // and only "busy" or nothing.
+  presencePayload() {
+    const me = this.requireUser();
+    return { user_id: me.id, name: me.name, at: (/* @__PURE__ */ new Date()).toISOString(), ...this.busy ? { status: "busy" } : {} };
+  }
+  // Do not disturb on or off: roommates see it at once, through presence.
+  async setStatus(status) {
+    if (status !== "busy" && status !== "available") throw new HttpError(400, 'status is "busy" or "available"');
+    this.busy = status === "busy";
+    if (!this.user) return { status };
+    await Promise.all([...this.rooms.values()].filter((r) => r.status === "SUBSCRIBED").map((r) => r.channel.track(this.presencePayload()).catch(() => {
+    })));
+    return { status };
   }
   emitFriends() {
     if (this.user) this.emit({ type: "friends", friends: this.friendList() });
@@ -22668,7 +22692,7 @@ var Chat = class {
         last_read_id: r.lastReadId,
         last_seen_id: r.lastSeenId,
         unread: r.unread,
-        online: [...r.online].map(([user_id, name]) => ({ user_id, name }))
+        online: onlineList(r)
       })),
       friends: this.user ? this.friendList() : []
     };
@@ -22684,6 +22708,9 @@ var Chat = class {
     this.storage.setItem("prefs", JSON.stringify({ ...this.prefs(), ...patch }));
   }
 };
+function onlineList(room) {
+  return [...room.online].map(([user_id, name]) => ({ user_id, name, ...room.busy.has(user_id) ? { busy: true } : {} }));
+}
 
 // src/bridge.mjs
 var MAX_BODY = 16 * 1024;
@@ -22734,6 +22761,7 @@ var routes = {
   "POST /send": (b) => chat.send(b.text, b.room),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
+  "POST /status": (b) => chat.setStatus(b.status),
   "POST /shutdown": () => {
     setTimeout(() => shutdown(0), 0);
     return { ok: true };

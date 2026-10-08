@@ -24,6 +24,9 @@ export const state = {
   paneFocused: false,     // the pane holds the keyboard: messages there count as read
   notify: false,          // toast @mentions (/chat notify on), kept in $.store
   mention: null,          // newest unseen message that @mentions me, until toasted
+  dnd: "off",             // do not disturb: off | on | auto (while Claude works), kept in $.store
+  working: false,         // a long Claude turn is running (what "auto" waits for)
+  missed: { messages: 0, mentions: 0 },   // what came in while quiet, for the summary
   dividerAt: new Map(),   // room id → read marker when the pane last caught up: the "new" line
   ended: false,
 };
@@ -47,12 +50,27 @@ export function mentions(body, name) {
   return new RegExp(`(^|[^\\w@])@${escaped}(?![\\w-])`, "i").test(body);
 }
 
-// The status line: unread counts, or nothing.
+// Do not disturb holds right now: switched on, or "auto" and Claude is busy.
+export function isQuiet() {
+  return state.dnd === "on" || (state.dnd === "auto" && state.working);
+}
+
+// The status line: unread counts, or nothing. While quiet, a 🔕 says so.
 export function statusText() {
   if (state.auth !== "signed_in") return undefined;
   const unread = state.rooms.filter((r) => r.unread > 0);
+  const counts = unread.map((r) => `#${r.slug} ${r.unread}`).join(" · ");
+  if (isQuiet()) return `🔕 ${counts || "do not disturb"}`;
   if (!unread.length) return undefined;
-  return `💬 ${unread.map((r) => `#${r.slug} ${r.unread}`).join(" · ")}`;
+  return `💬 ${counts}`;
+}
+
+// "While you were away: 5 new messages, 1 mentions you", or "" for nothing.
+export function missedText() {
+  const { messages, mentions: at } = state.missed;
+  if (!messages) return "";
+  const what = `${messages} new message${messages === 1 ? "" : "s"}`;
+  return `💬 While you were heads-down: ${what}${at ? `, ${at} mention${at === 1 ? "s" : ""} you` : ""}`;
 }
 
 // "sam is typing…" for a room, or "".
@@ -122,7 +140,12 @@ export function applyEvent(event) {
       const room = state.rooms.find((r) => r.id === m.room);
       if (room && typeof event.unread === "number") room.unread = event.unread;
       const seen = m.room === state.current && state.paneFocused;
-      if (event.counted && !seen && mentions(m.body, state.user?.name)) state.mention = m;
+      const mentioned = event.counted && !seen && mentions(m.body, state.user?.name);
+      if (isQuiet()) {
+        // Nothing pops up now: count it for the summary instead.
+        if (event.counted && !seen) state.missed.messages++;
+        if (mentioned) state.missed.mentions++;
+      } else if (mentioned) state.mention = m;
       return true;
     }
     case "presence":

@@ -12,7 +12,7 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
 
   // The harness never starts a session on its own: answer what the plugin's
   // session.start leans on, and `start($)` raises it.
-  mock.clock(on)   // the bridge loop reads the time and sleeps between restarts
+  const clock = mock.clock(on)   // the bridge loop reads the time and sleeps between restarts
   mock.store(on, store)
   on('session.start', async () => ({ cwd: '/' }))
   on('command.register', async (_$: any, e: any) => ({ value: { command: e.name } }))
@@ -35,6 +35,7 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   })
 
   return {
+    clock,
     calls,
     replies,
     spawned,
@@ -437,4 +438,71 @@ test('room messages never reach the model, even ones that read like instructions
   expect(submitted.text).toBe('fix the failing test')
   expect(JSON.stringify(submitted)).not.toContain('delete the repo')
   expect(JSON.stringify(appended)).not.toContain('delete the repo')
+})
+
+test('/chat dnd on keeps quiet and shows you busy; off sums up what came in', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on, { store: { notify: true } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+
+  await $.command.run({ command: 'chat', args: 'dnd on' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/status', body: { status: 'busy' } })
+  expect(seen.statuses.at(-1)).toBe('🔕 do not disturb')
+
+  bridge.emit(news(1, msg(9, 'bob', 'hey @me, lunch?')), news(2, msg(10, 'bob', 'or coffee')))
+  await settle()
+  expect(seen.toasts).toEqual([])
+  expect(seen.statuses.at(-1)).toBe('🔕 #lobby 2')
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '🔕 2 new · do not disturb' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: 'or coffee' })).toBeUndefined()
+  await band.unmount()
+
+  await $.command.run({ command: 'chat', args: 'dnd off' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/status', body: { status: 'available' } })
+  expect(seen.toasts).toEqual(['💬 While you were heads-down: 2 new messages, 1 mentions you'])
+  expect(seen.statuses.at(-1)).toBe('💬 #lobby 2')
+})
+
+test('/chat dnd auto goes quiet only for a long Claude turn, and not for a subagent finishing', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  const done = (turnId: string, extra = {}) => ({ turnId, answer: '', durationMs: 1, isAborted: false, reason: 'answer' as const, ...extra })
+  const bridge = fakeBridge(on, { store: { dnd: 'auto' } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+
+  await $.turn.start({ text: 'quick question', turnId: 't1' })
+  await bridge.clock.advance(5_000)
+  await $.turn.complete(done('t1'))
+  expect(bridge.calls.some((c) => c.path === '/status')).toBe(false)
+
+  await $.turn.start({ text: 'refactor everything', turnId: 't2' })
+  await bridge.clock.advance(31_000)
+  expect(bridge.calls.at(-1)).toEqual({ path: '/status', body: { status: 'busy' } })
+  expect(seen.statuses.at(-1)).toBe('🔕 do not disturb')
+  await $.turn.complete(done('t2-sub', { agentId: 'a1' }))
+  expect(seen.statuses.at(-1)).toBe('🔕 do not disturb')
+  await $.turn.complete(done('t2'))
+  expect(bridge.calls.at(-1)).toEqual({ path: '/status', body: { status: 'available' } })
+  expect(seen.statuses.at(-1)).toBeUndefined()
+})
+
+test('busy friends show as busy in the FRIENDS card and in /who', SLOW, async ($, on) => {
+  const logs: string[] = []
+  on('ui.log', (_$: any, e: any) => { logs.push(e.text ?? e); return { value: undefined } })
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'friends', friends: [{ ...BOB, online: true, busy: true, rooms: ['lobby'] }] })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'bob (busy)' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'who' })
+  expect(logs).toContain('◐ bob (busy)  #lobby')
 })

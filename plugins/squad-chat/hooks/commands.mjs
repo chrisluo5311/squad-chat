@@ -113,9 +113,24 @@ async function manageRoom(call, action, ref, say) {
 export function who(say) {
   requireSignedIn();
   if (!state.friends.length) return say("No friends yet: people show up here once you share a room.");
-  const lines = state.friends.map((f) => `${f.online ? "●" : "○"} ${f.name}  ${f.rooms.map((s) => `#${s}`).join(" ")}`);
+  const lines = state.friends.map((f) => `${f.busy ? "◐" : f.online ? "●" : "○"} ${f.name}${f.busy ? " (busy)" : ""}  ${f.rooms.map((s) => `#${s}`).join(" ")}`);
   const n = state.friends.filter((f) => f.online).length;
   return say(`${n} of ${state.friends.length} online\n${lines.join("\n")}`);
+}
+
+const DND_MODES = {
+  on: "Do not disturb is on: no toasts, and your friends see you as busy. /chat dnd off to end it.",
+  off: "Do not disturb is off.",
+  auto: "Do not disturb turns on by itself while Claude works on something longer than 30 seconds.",
+};
+
+// "/chat dnd [on|off|auto]". `setDnd(mode)` keeps the choice and tells the room.
+export async function dnd(args, say, setDnd) {
+  const mode = String(args ?? "").trim().toLowerCase();
+  if (!mode) return say(`Do not disturb: ${state.dnd}. Change it with /chat dnd on, off or auto.`);
+  if (!(mode in DND_MODES)) return say("Use /chat dnd on, off or auto.");
+  await setDnd(mode);
+  return say(DND_MODES[mode]);
 }
 
 export async function sendMessage(call, text, say) {
@@ -138,7 +153,7 @@ function requireSignedIn() {
 }
 
 // The pane's input box: commands, the sign-in steps, or a message.
-export async function paneInput(call, value, say) {
+export async function paneInput(call, value, say, { setDnd } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
   const m = /^\/([\w-]+)\s*([\s\S]*)$/.exec(text);
@@ -151,7 +166,8 @@ export async function paneInput(call, value, say) {
       case "logout": case "chat-logout": return logout(call, say);
       case "name": case "chat-name": return rename(call, args, say);
       case "say": return sendMessage(call, args, say);
-      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /logout · anything else is a message");
+      case "dnd": return dnd(args, say, setDnd);
+      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /logout · anything else is a message");
       default: return say(`Unknown command /${cmd}. Try /help.`);
     }
   }

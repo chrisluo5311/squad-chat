@@ -36,6 +36,8 @@ export const glyph = {
   brand: "◆",
   on: "●",
   off: "○",
+  busy: "◐",
+  quiet: "🔕",
   prompt: "›",
   rule: "─",
   bar: "│",

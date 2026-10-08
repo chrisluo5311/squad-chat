@@ -175,6 +175,23 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
     assert.ok(!alice.events.some((e) => e.type === "typing" && e.users.length), "nobody sees themselves typing");
   });
 
+  it("shows do not disturb as busy, and back again", async () => {
+    const aliceId = (await alice.ok("GET", "/state")).user.id;
+    const busyIn = (e) => e.type === "presence" && e.room === room.id && e.online.some((u) => u.user_id === aliceId && u.busy);
+    const availableIn = (e) => e.type === "presence" && e.room === room.id && e.online.some((u) => u.user_id === aliceId && !u.busy);
+    assert.equal((await alice.call("POST", "/status", { status: "away" })).status, 400);
+
+    let after = since(bob);
+    assert.deepEqual(await alice.ok("POST", "/status", { status: "busy" }), { status: "busy" });
+    await bob.waitFor(after(busyIn), 10_000, "alice busy in presence");
+    await bob.waitFor(after((e) => e.type === "friends" && e.friends.some((f) => f.user_id === aliceId && f.busy)), 10_000, "alice busy in friends");
+
+    after = since(bob);
+    await alice.ok("POST", "/status", { status: "available" });
+    await bob.waitFor(after(availableIn), 10_000, "alice available again");
+    assert.ok(!(await bob.ok("GET", "/who")).friends.find((f) => f.user_id === aliceId).busy);
+  });
+
   it("renames: the room hears the new name, and names stay unique", async () => {
     assert.equal((await bob.call("POST", "/name", { name: `alice-${id}` })).status, 409);
     assert.equal((await bob.call("POST", "/name", { name: "has space" })).status, 400);

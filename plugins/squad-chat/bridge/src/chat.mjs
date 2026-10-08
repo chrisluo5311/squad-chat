@@ -67,6 +67,7 @@ export class Chat {
     this.kickGap = 0;
     this.friendsLoading = null;
     this.leftAt = new Map();        // user id → when presence last saw them leave
+    this.busy = false;              // do not disturb: roommates see us as busy
 
     // A refresh token that stops working (revoked, signed out elsewhere)
     // ends the session. Don't call Supabase from inside this callback.
@@ -151,7 +152,7 @@ export class Chat {
     this.noteName(me.id, name);
     this.setAuth("signed_in");
     for (const room of this.rooms.values()) {
-      if (room.status === "SUBSCRIBED") room.channel.track({ user_id: me.id, name, at: new Date().toISOString() }).catch(() => {});
+      if (room.status === "SUBSCRIBED") room.channel.track(this.presencePayload()).catch(() => {});
     }
     this.emitFriends();
     return { name };
@@ -267,6 +268,7 @@ export class Chat {
       unread: 0,
       seen: new Set(),
       online: new Map(),          // user id → name
+      busy: new Set(),            // user ids whose presence says busy
       typing: new Map(),          // user id → timer that ends their "typing"
       typingSent: 0,              // when we last told the room we're typing
       status: "joining",
@@ -384,7 +386,7 @@ export class Chat {
           if (room.online.size) this.presenceChanged(room, { clear: true });
           return;
         }
-        await channel.track({ user_id: me.id, name: me.name, at: new Date().toISOString() }).catch(() => {});
+        await channel.track(this.presencePayload()).catch(() => {});
         await this.backfill(room).catch((e) => this.emit({ type: "error", message: `backfill failed: ${e.message}` }));
       });
     room.channel = channel;
@@ -400,15 +402,17 @@ export class Chat {
   presenceChanged(room, { clear = false } = {}) {
     const before = new Set(room.online.keys());
     room.online.clear();
+    room.busy.clear();
     for (const [key, metas] of clear ? [] : Object.entries(room.channel.presenceState())) {
       const name = metas.at(-1)?.name;
       room.online.set(key, name ?? this.names.get(key) ?? "someone");
+      if (metas.at(-1)?.status === "busy") room.busy.add(key);
       this.noteName(key, name);
     }
     // Someone dropped out of a live channel: they left (unless it is our own
     // channel that dropped, `clear`). A newer heartbeat can bring them back.
     if (!clear) for (const id of before) if (!room.online.has(id)) this.leftAt.set(id, Date.now());
-    this.emit({ type: "presence", room: room.id, online: [...room.online].map(([user_id, name]) => ({ user_id, name })) });
+    this.emit({ type: "presence", room: room.id, online: onlineList(room) });
     // Someone new in the room isn't in the friends list yet: reload it.
     const known = new Set(this.friends.map((f) => f.user_id));
     if ([...room.online.keys()].some((id) => id !== this.user?.id && !known.has(id))) this.refreshFriends();
@@ -589,8 +593,11 @@ export class Chat {
   // without a socket only send heartbeats) newer than their last presence leave.
   friendList() {
     const now = Date.now();
-    const present = new Set();
-    for (const room of this.rooms.values()) for (const id of room.online.keys()) present.add(id);
+    const present = new Set(), busy = new Set();
+    for (const room of this.rooms.values()) {
+      for (const id of room.online.keys()) present.add(id);
+      for (const id of room.busy) busy.add(id);
+    }
     const recentBeat = (f) => {
       if (f.last_seen == null) return false;
       const beat = Date.parse(f.last_seen);
@@ -601,7 +608,26 @@ export class Chat {
       name: this.names.get(f.user_id) ?? f.display_name,
       rooms: f.rooms,
       online: present.has(f.user_id) || recentBeat(f),
+      ...(present.has(f.user_id) && busy.has(f.user_id) ? { busy: true } : {}),
     })).sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+  }
+
+  // What we track on every room channel. Status is only ever ours to set,
+  // and only "busy" or nothing.
+  presencePayload() {
+    const me = this.requireUser();
+    return { user_id: me.id, name: me.name, at: new Date().toISOString(), ...(this.busy ? { status: "busy" } : {}) };
+  }
+
+  // Do not disturb on or off: roommates see it at once, through presence.
+  async setStatus(status) {
+    if (status !== "busy" && status !== "available") throw new HttpError(400, 'status is "busy" or "available"');
+    this.busy = status === "busy";
+    if (!this.user) return { status };   // tracked once signed in
+    await Promise.all([...this.rooms.values()]
+      .filter((r) => r.status === "SUBSCRIBED")
+      .map((r) => r.channel.track(this.presencePayload()).catch(() => {})));
+    return { status };
   }
 
   emitFriends() {
@@ -617,7 +643,7 @@ export class Chat {
       current: this.current,
       rooms: [...this.rooms.values()].map((r) => ({
         id: r.id, slug: r.slug, status: r.status, last_read_id: r.lastReadId, last_seen_id: r.lastSeenId, unread: r.unread,
-        online: [...r.online].map(([user_id, name]) => ({ user_id, name })),
+        online: onlineList(r),
       })),
       friends: this.user ? this.friendList() : [],
     };
@@ -630,4 +656,8 @@ export class Chat {
   savePrefs(patch) {
     this.storage.setItem("prefs", JSON.stringify({ ...this.prefs(), ...patch }));
   }
+}
+
+function onlineList(room) {
+  return [...room.online].map(([user_id, name]) => ({ user_id, name, ...(room.busy.has(user_id) ? { busy: true } : {}) }));
 }

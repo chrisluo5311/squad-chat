@@ -80,6 +80,7 @@ const routes = {
   "POST /send": (b) => chat.send(b.text, b.room),
   "POST /read": (b) => chat.markRead(b.room, b.last_id),
   "POST /typing": (b) => chat.typing(b.room).then(() => ({ ok: true })),
+  "POST /status": (b) => chat.setStatus(b.status),
   "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },
 };
 

@@ -7,14 +7,15 @@
 //   commands.mjs  slash commands and the pane's input box
 //   views.mjs     the pane
 
-import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, sendMessage, paneInput } from "./commands.mjs";
+import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText } from "./state.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 
 const PANE_ID = "squad-chat";
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
 const TYPING_PING_MS = 2_000;
+const LONG_TURN_MS = 30_000;   // a Claude turn this long turns "auto" do not disturb on
 
 // ---------------------------------------------------------------- the bridge
 
@@ -83,6 +84,8 @@ async function runBridge($, options) {
           try { event = JSON.parse(line); }
           catch { $.ui.log(`squad-chat bridge: unparsable line: ${line.slice(0, 120)}`, { to: "debug" }); continue; }
           if (applyEvent(event)) afterChange($);
+          // A new or restarted bridge starts out available: tell it again.
+          if (event.type === "auth" && event.state === "signed_in" && isQuiet()) sendStatus($);
         }
       }
     } catch (err) {
@@ -160,6 +163,35 @@ function afterChange($) {
   }
 }
 
+// ---------------------------------------------------------------- do not disturb
+
+function sendStatus($) {
+  callBridge($, "/status", { status: isQuiet() ? "busy" : "available" })
+    .catch((err) => $.ui.log(`squad-chat: could not set status: ${err?.message ?? err}`, { to: "debug" }));
+}
+
+// Do not disturb may have started or ended: tell the room, and on the way
+// out sum up what came in meanwhile (a toast, for people who asked for them).
+let wasQuiet = false;
+function quietChanged($) {
+  const quiet = isQuiet();
+  if (quiet === wasQuiet) return;
+  wasQuiet = quiet;
+  if (state.auth === "signed_in") sendStatus($);
+  if (!quiet) {
+    const summary = missedText();
+    if (summary && state.notify) $.ui.toast(summary);
+    state.missed = { messages: 0, mentions: 0 };
+  }
+  afterChange($);
+}
+
+async function setDnd($, mode) {
+  state.dnd = mode;
+  await $.store.set("dnd", mode);
+  quietChanged($);
+}
+
 // Tell the bridge the current room is read up to its newest message. Runs
 // when the pane has the keyboard and when the person sends from it.
 let marking = false;
@@ -216,7 +248,7 @@ async function submitFromPane($, value) {
   lastTypingPing = 0;
   $.ui.invalidate("ui.render");
   try {
-    await paneInput((path, body) => callBridge($, path, body), value, say);
+    await paneInput((path, body) => callBridge($, path, body), value, say, { setDnd: (mode) => setDnd($, mode) });
     state.dividerAt.clear();   // they've replied: everything above is read
     await markRead($);         // they're looking at the room they just wrote in
   } catch (err) {
@@ -255,7 +287,7 @@ async function answer($, fn) {
 export function register(on, options) {
   on("session.start", async ($, e, next) => {
     const r = await next(e);
-    await $.command.register({ name: "chat", description: "squad-chat: open the chat pane (/chat notify on|off: toast @mentions)", argumentHint: "[notify on|off]", immediate: true });
+    await $.command.register({ name: "chat", description: "squad-chat: open the chat pane (notify: toast @mentions, dnd: do not disturb)", argumentHint: "[notify on|off | dnd on|off|auto]", immediate: true });
     await $.command.register({ name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>", immediate: true });
     await $.command.register({ name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>", immediate: true });
     await $.command.register({ name: "who", description: "squad-chat: who's online", immediate: true });
@@ -263,6 +295,9 @@ export function register(on, options) {
     await $.command.register({ name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>", immediate: true });
     await $.command.register({ name: "chat-logout", description: "squad-chat: sign out on this computer", immediate: true });
     state.notify = (await $.store.get("notify")) === true;
+    const savedDnd = await $.store.get("dnd");
+    state.dnd = ["on", "off", "auto"].includes(savedDnd) ? savedDnd : "off";
+    wasQuiet = isQuiet();   // already in effect: no summary for a reload
     if (!bridgeStarted) {
       bridgeStarted = true;
       void runBridge($, options);
@@ -271,7 +306,10 @@ export function register(on, options) {
   });
 
   on("command.run", { command: "chat" }, ($, e) => answer($, async (call, say) => {
-    const m = /^notify\s+(on|off)$/i.exec(String(e.args ?? "").trim());
+    const args = String(e.args ?? "").trim();
+    const d = /^dnd\b\s*(.*)$/i.exec(args);
+    if (d) return dnd(d[1], say, (mode) => setDnd($, mode));
+    const m = /^notify\s+(on|off)$/i.exec(args);
     if (!m) return openPane($);
     state.notify = m[1].toLowerCase() === "on";
     await $.store.set("notify", state.notify);
@@ -306,6 +344,31 @@ export function register(on, options) {
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
     return bandView($.ui.resolve(e), e.props ?? {}, { onOpen: () => { void openPane($); } });
+  });
+
+  // "auto" do not disturb: a turn still running after LONG_TURN_MS goes quiet
+  // until it completes. Short back-and-forth with Claude never flips it.
+  let turn = null;
+  on("turn.start", ($, e, next) => {
+    const id = e.turnId;
+    turn = id;
+    void (async () => {
+      await $.clock.sleep(LONG_TURN_MS);
+      if (turn !== id || state.dnd !== "auto") return;
+      state.working = true;
+      quietChanged($);
+    })();
+    return next(e);
+  });
+
+  on("turn.complete", ($, e, next) => {
+    if (e.agentId) return next(e);   // a subagent finished: the main turn goes on
+    turn = null;
+    if (state.working) {
+      state.working = false;
+      quietChanged($);
+    }
+    return next(e);
   });
 
   on("ui.close", ($, e, next) => {
