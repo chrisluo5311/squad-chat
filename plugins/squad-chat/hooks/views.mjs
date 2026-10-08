@@ -312,12 +312,17 @@ function friendsCard(els, width) {
   return { node: card(els, { key: "friends", title: "FRIENDS", meta: `${online}/${friends.length} online`, marginTop: 1, children: [body] }), height };
 }
 
-function inputBox(els, mode, { onSubmit, onInput }, focused) {
+// The terminal lights the frame while the pane holds the keyboard. The
+// desktop's field draws its own focus, and a tree that changed with focus
+// there made the box blink as focus moved, so it stays one color and the
+// field waits for a click instead of taking the focus on every draw.
+function inputBox(els, mode, { onSubmit, onInput }, focused, surface) {
   const { Box, Text, Input } = els;
-  return Box({ key: "compose-box", flexDirection: "row", borderStyle: "round", borderColor: focused ? theme.accent : theme.border, paddingX: 1, children: [
+  const terminal = surface !== "desktop";
+  return Box({ key: "compose-box", flexDirection: "row", marginTop: 1, flexShrink: 0, borderStyle: "round", borderColor: terminal && !focused ? theme.border : theme.accent, paddingX: 1, children: [
     Text({ key: "prompt", color: theme.accent, bold: true, children: `${glyph.prompt} ` }),
-    Box({ key: "field", flexGrow: 1, children: [
-      Input({ key: "compose", placeholder: mode.placeholder, submitLabel: mode.label, value: state.draft ?? "", autoFocus: true, onInput, onSubmit }),
+    Box({ key: "field", flexGrow: 1, minWidth: 0, children: [
+      Input({ key: "compose", placeholder: mode.placeholder, submitLabel: mode.label, value: state.draft ?? "", ...(terminal ? { autoFocus: true } : {}), onInput, onSubmit }),
     ] }),
   ] });
 }
@@ -416,12 +421,12 @@ function dockView(els, props, handlers) {
 
   if (view !== "chat") {
     const n = notice(els);
-    const tail = 3 + 1 + (n ? rowsFor(state.notice, width) : 0);   // input box + hints + notice
+    const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0);   // gap + input box + hints + notice
     const capacity = Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
     parts.push(...sysDock(els, view, width, capacity, handlers));
     parts.push(Box({ key: "spacer", flexGrow: 1 }));
     if (n) parts.push(n);
-    parts.push(inputBox(els, mode, handlers, props.isFocused));
+    parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface));
     parts.push(hints(els, SYS_HINTS[view]));
   } else if (state.auth === "signed_in" && room) {
     const friends = friendsCard(els, width);
@@ -430,9 +435,9 @@ function dockView(els, props, handlers) {
 
     const n = notice(els);
     const pending = shareCard(els, handlers);
-    const tail = 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // input box + hints + notice + preview
-    // The card's border and head, and one row the dock reserves (its close mark).
-    const capacity = Math.max(3, bodyRows - used - tail - 3 - 1);
+    const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
+    // The gap above the card, its border and head, and one row the dock reserves (its close mark).
+    const capacity = Math.max(3, bodyRows - used - tail - 1 - 3 - 1);
     const here = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
     const list = roomMessages();
     const rows = fitRows(messageRows(list, width - 4, state.dividerAt?.get(room.id) ?? 0), capacity);
@@ -440,20 +445,20 @@ function dockView(els, props, handlers) {
       ? rows.map((r) => drawRow(els, r, width - 4, handlers.onCopy))   // inside the card's border and padding
       : [Text({ key: "empty", color: theme.muted, children: "No messages yet. Say hi!" })];
     parts.push(card(els, {
-      key: "room", title: `#${room.slug}`, titleColor: theme.accent,
+      key: "room", title: `#${room.slug}`, titleColor: theme.accent, marginTop: 1,
       meta: here ? `${here} here` : "just you", metaColor: here ? theme.online : theme.muted,
       children: body, grow: true,
     }));
     if (pending) parts.push(pending.node);
     if (n) parts.push(n);
-    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused));
+    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface));
     const typing = typingText(room.id);
     parts.push(typing ? typingLine(els, typing) : hints(els, "enter send · esc back · /room · /who · /help"));
   } else {
     parts.push(setupCard(els, width));
     const n = notice(els);
     if (n) parts.push(n);
-    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused));
+    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface));
     if (mode) parts.push(hints(els, state.auth === "signed_in" ? "you can type /room right here" : "enter to continue · esc back"));
   }
 
@@ -482,8 +487,8 @@ function shareCard(els, handlers) {
       Button({ key: "cancel", label: "Cancel", onPress: () => handlers.onShare?.("cancel") }),
     ] }),
   ].filter(Boolean);
-  const height = 3 + lines.shown.length + (lines.more ? 1 : 0) + (p.secret ? 1 : 0) + 1;
-  return { node: card(els, { key: "share", title: "SHARE?", titleColor: theme.amber, meta: snippetTitle(p), children }), height };
+  const height = 1 + 3 + lines.shown.length + (lines.more ? 1 : 0) + (p.secret ? 1 : 0) + 1;   // the gap above it first
+  return { node: card(els, { key: "share", marginTop: 1, title: "SHARE?", titleColor: theme.amber, meta: snippetTitle(p), children }), height };
 }
 
 // Above the prompt: as little as reads well.
@@ -516,8 +521,8 @@ function inlineView(els, props, handlers) {
       const name = m.user_id === prevUser ? "" : displayName(m).slice(0, nameWidth);
       prevUser = m.user_id;
       parts.push(Box({ key: `m${m.id}`, flexDirection: "row", gap: 1, children: [
-        Box({ key: "n", flexShrink: 0, children: [
-          Text({ key: "t", bold: true, color: m.mine ? theme.you : nameColor(m.user_id), children: name.padEnd(nameWidth) }),
+        Box({ key: "n", width: nameWidth, flexShrink: 0, children: [
+          Text({ key: "t", bold: true, color: m.mine ? theme.you : nameColor(m.user_id), children: name }),
         ] }),
         Text({ key: "b", wrap: "truncate-end", children: oneLine(m) }),
       ] }));

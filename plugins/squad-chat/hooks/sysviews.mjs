@@ -9,7 +9,7 @@ import { state } from "./state.mjs";
 import { theme, level, nameColor } from "./theme.mjs";
 import {
   cells, clip, fit, fmtTokens, fmtUsd, fmtDur, fmtSpan, relTime, age, resetLabel,
-  bar, sparkline, meter, tiles, line, stackCards, LABEL_W,
+  bar, sparkline, meter, tiles, line, col, stackCards, CARD_GAP, LABEL_W,
 } from "./widgets.mjs";
 import {
   totalTokens, cacheRatio, burnRate, limitWindows, spendSeries, toolRows, agentTree, agentCounts, isEnded, topTool,
@@ -114,7 +114,7 @@ const TOOL_NUMS = TOOL_COLS.reduce((n, [, w]) => n + w, 0);
 const toolHeader = () => TOOL_COLS.map(([h, w]) => fit(h, w, { right: true })).join("");
 
 function toolsCard(els, w, max) {
-  const { Box, Text } = els;
+  const { Box } = els;
   const list = toolRows(state.usage).slice(0, max);
   const rows = [];
   if (!list.length) rows.push(muted(els, "none", "No tool calls yet."));
@@ -125,16 +125,21 @@ function toolsCard(els, w, max) {
   for (const t of list) {
     const fill = bar((t.total / top) * 100, barW).fill || "╸";   // even a quick tool gets a mark
     rows.push(Box({ key: `t-${t.name}`, flexDirection: "row", children: [
-      Text({ key: "n", children: fit(t.name, NAME) }),
-      Text({ key: "b", color: theme.usage, children: fit(fill, barW) }),
-      Text({ key: "p50", children: fit(fmtDur(t.p50), w50, { right: true }) }),
-      Text({ key: "p95", color: theme.muted, children: fit(fmtDur(t.p95), w95, { right: true }) }),
-      Text({ key: "c", children: fit(String(t.count), wCalls, { right: true }) }),
-      Text({ key: "e", bold: t.errors > 0, color: t.errors ? theme.error : theme.muted, children: fit(String(t.errors), wFail, { right: true }) }),
+      col(els, "n", clip(t.name, NAME - 1), NAME),
+      Box({ key: "b", width: barW, flexShrink: 1, minWidth: 0, overflow: "hidden", children: [
+        els.Text({ key: "t", color: theme.usage, wrap: "truncate-end", children: fill }),
+      ] }),
+      col(els, "p50", fmtDur(t.p50), w50, { right: true }),
+      col(els, "p95", fmtDur(t.p95), w95, { right: true, color: theme.muted }),
+      col(els, "c", String(t.count), wCalls, { right: true }),
+      col(els, "e", String(t.errors), wFail, { right: true, bold: t.errors > 0, color: t.errors ? theme.error : theme.muted }),
     ] }));
   }
   // The header ends at the card's right edge, as the rows do: each label sits over its column.
-  return sized("Tools", card(els, { key: "tools", title: "TOOLS", color: theme.usage, meta: list.length ? toolHeader() : "", rows }), rows.length);
+  const header = list.length
+    ? Box({ key: "meta", flexDirection: "row", flexShrink: 0, children: TOOL_COLS.map(([h, cw]) => col(els, h, h, cw, { right: true, color: theme.muted })) })
+    : null;
+  return sized("Tools", card(els, { key: "tools", title: "TOOLS", color: theme.usage, metaNode: header, rows }), rows.length);
 }
 
 function agentGlyph(status, now) {
@@ -151,7 +156,7 @@ function agentRow(els, key, a, { indent = "", now }) {
   return line(els, key, [
     indent ? { text: indent, color: theme.muted } : null,
     { text: `${st.g} `, color: st.color },
-    { text: `${fit(a.type, 9)} `, bold: true },
+    { text: clip(a.type, 9), width: 10, bold: true },
     { text: a.description, grow: true },
     { text: ` ${isEnded(a.status) ? "done" : fmtDur(took)}`, color: theme.muted },
     a.top ? { text: `  ${a.top}`, color: theme.muted } : null,
@@ -303,10 +308,11 @@ function prsCard(els, handlers, max, now) {
   const rows = list.slice(0, max).map((p) => {
     const pill = prPill(p, g);
     return line(els, `pr-${p.number}`, [
-      { text: fit(`#${p.number}`, 6), color: theme.muted },
+      { text: `#${p.number}`, width: 6, color: theme.muted },
       { text: p.title, grow: true },
-      { text: ` ${fit(pill.text, 10, { right: true })}`, color: pill.color },
-      { text: ` ${fit(age(p.updatedAt, now), 4, { right: true })} `, color: theme.muted },
+      { text: clip(pill.text, 10), width: 11, right: true, color: pill.color },
+      { text: clip(age(p.updatedAt, now), 4), width: 5, right: true, color: theme.muted },
+      { text: " " },
       copyButton(els, "copy", p.url, handlers),
     ]);
   });
@@ -331,7 +337,7 @@ function runsCard(els, handlers, max, now) {
     const when = r.status === "completed" ? age(r.updatedAt, now) : `${r.status === "queued" ? "queued" : "running"} ${fmtDur(now - r.startedAt)}`;
     return line(els, `run-${r.id}`, [
       { text: `${st.g} `, color: st.color },
-      { text: `${fit(r.name, 12)} `, bold: true },
+      { text: clip(r.name, 12), width: 13, bold: true },
       { text: r.branch, color: theme.muted, grow: true },
       { text: ` ${when} `, color: r.status === "completed" ? theme.muted : theme.amber },
       copyButton(els, "copy", r.url, handlers),
@@ -352,10 +358,11 @@ function issuesCard(els, handlers, max, now) {
   const rows = [];
   for (const i of g.issues.slice(0, max)) {
     rows.push(line(els, `is-${i.number}`, [
-      { text: fit(`#${i.number}`, 6), color: theme.muted },
+      { text: `#${i.number}`, width: 6, color: theme.muted },
       { text: i.title, grow: true },
       i.labels[0] ? { text: ` ${clip(i.labels[0], 12)}`, color: theme.agents } : null,
-      { text: ` ${fit(age(i.updatedAt, now), 4, { right: true })} `, color: theme.muted },
+      { text: clip(age(i.updatedAt, now), 4), width: 5, right: true, color: theme.muted },
+      { text: " " },
       copyButton(els, "copy", i.url, handlers),
     ]));
   }
@@ -460,8 +467,8 @@ function feedRow(els, f, w, now) {
   const end = f.done ? (f.isError ? { text: " ✗", color: theme.error } : { text: " ✓", color: theme.online }) : { text: ` ${spin(now)}`, color: theme.agents };
   return line(els, `f-${f.sessionId}-${f.key}`, [
     w >= 46 ? { text: `${clock} `, color: theme.muted } : null,
-    { text: `${fit(who, w >= 46 ? 11 : 9)} `, color: f.agent ? theme.muted : nameColor(f.sessionId) },
-    { text: `${fit(f.tool, 6)} `, bold: true },
+    { text: clip(who, w >= 46 ? 11 : 9), width: w >= 46 ? 12 : 10, color: f.agent ? theme.muted : nameColor(f.sessionId) },
+    { text: clip(f.tool, 6), width: 7, bold: true },
     { text: f.summary || "", color: theme.muted, grow: true },
     f.times > 1 ? { text: ` ×${f.times}`, color: theme.agents } : null,
     { text: ` ${f.done ? fmtDur(f.ms) : fmtDur(now - f.at)}`, color: f.done ? theme.muted : theme.agents },
@@ -479,7 +486,7 @@ function feedCard(els, w, rowsLeft, handlers, now) {
 
 function agentsDock(els, w, capacity, handlers, now) {
   const sessions = sessionsCard(els, handlers, Math.max(3, Math.floor((capacity - 4) * 0.55)), now);
-  const left = capacity - sessions.height - 3;
+  const left = capacity - sessions.height - CARD_GAP - 3;
   return stackCards(els, [sessions, feedCard(els, w, left, handlers, now)], capacity);
 }
 
@@ -513,7 +520,7 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
     const cache = cacheRatio(u);
     const running = agentCounts(u).running;
     parts.push(line(els, "spend", [
-      { text: fit("Spend", LABEL_W), color: theme.muted },
+      { text: "Spend", width: LABEL_W, color: theme.muted },
       { text: u.cost ? fmtUsd(u.cost.usd) : "–", bold: true, color: theme.usage },
       { text: "  ·  ", color: theme.muted },
       { text: fmtTokens(totalTokens(u)), bold: true },
@@ -540,7 +547,7 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
     }
     for (const p of g.prs.filter((p) => p.number !== g.pr?.number).slice(0, 3)) {
       const pill = prPill(p, g);
-      parts.push(line(els, `pr-${p.number}`, [{ text: fit(`#${p.number}`, 6), color: theme.muted }, { text: p.title, grow: true }, { text: ` ${pill.text}`, color: pill.color }]));
+      parts.push(line(els, `pr-${p.number}`, [{ text: `#${p.number}`, width: 6, color: theme.muted }, { text: p.title, grow: true }, { text: ` ${pill.text}`, color: pill.color }]));
     }
     return parts;
   }
@@ -550,7 +557,7 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
     const live = (s.agents ?? []).filter((a) => !isEnded(a.status)).length;
     parts.push(line(els, `s-${s.id}`, [
       { text: `${sessionBusy(s) ? "●" : "○"} `, color: sessionBusy(s) ? nameColor(s.id) : theme.muted },
-      { text: `${fit(s.project, 14)} `, bold: true, color: nameColor(s.id) },
+      { text: clip(s.project, 14), width: 15, bold: true, color: nameColor(s.id) },
       ...activityPieces(s, now).slice(1),
       live ? { text: ` ⟡${live}`, color: theme.agents } : null,
     ]));

@@ -818,11 +818,11 @@ test('Usage room: context, limits, spend, cache, tool timings and subagents', SL
   await settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
-  expect(await ui.find({ type: 'Text', text: ' 85%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '85%' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /170k\/200k/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^5-hour/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^7-day/ })).toBeDefined()          // always shown, even without a reading
-  expect(await ui.find({ type: 'Text', text: ' no data yet' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'no data yet' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^\$4\.21/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^90%/ })).toBeDefined()            // 9000 of 10000 input tokens from the cache
   expect(await ui.find({ type: 'Text', text: /^12k/ })).toBeDefined()            // tokens in all
@@ -831,6 +831,15 @@ test('Usage room: context, limits, spend, cache, tool timings and subagents', SL
   expect(await ui.find({ type: 'Text', text: '1 running · 0 done' })).toBeDefined()
   expect(seen.statuses.at(-1)).toBe('◔ 85%')                                       // nearly full: the status line says so
   await ui.unmount()
+
+  // The desktop draws text in a proportional font: columns are sized by their
+  // boxes, never by padding spaces, and the input box takes no autofocus.
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  expect(await desk.find({ type: 'Text', text: '85%' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /^ {2,}[\d$–]/ })).toBeUndefined()   // no spaces padding a number right
+  expect((await desk.find({ type: 'Input' }) as any)?.props.autoFocus).toBeUndefined()
+  expect(await desk.find({ type: 'Box', key: 'gap-Spend' })).toBeDefined()        // cards sit a row apart
+  await desk.unmount()
 })
 
 test('Git room: branch, PR, reviews and checks from gh; a refresh that turns CI red toasts', SLOW, async ($, on) => {

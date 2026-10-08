@@ -413,6 +413,16 @@ function liveNow() {
   return false;
 }
 
+// What a built-in room's drawing changes with as time passes. Usage moves by
+// the second only while a subagent runs (its spinner and timer); otherwise
+// the session's span and the spend buckets move by the minute. A redraw a
+// second for nothing made the desktop's input box flicker all through a turn.
+let lastFrame = "";
+function frameKey(view, now) {
+  if (view === "usage" && !agentCounts(state.usage).running) return `usage:${Math.floor(now / 60_000)}`;
+  return `${view}:${Math.floor(now / 1000)}`;
+}
+
 // One loop for the built-in rooms: a redraw a second while something runs
 // (spinners, timers), the agents' statuses, the heartbeat, and the Git poll.
 async function tick($) {
@@ -424,7 +434,10 @@ async function tick($) {
     if (agentCounts(state.usage).running) {
       try { if (applyAgentList(state.usage, await $.agent.list(), Date.now())) sysChanged($); } catch { /* the next tick */ }
     }
-    if (view !== "chat" && liveNow()) $.ui.invalidate("ui.render");
+    if (view !== "chat" && liveNow()) {
+      const key = frameKey(view, Date.now());
+      if (key !== lastFrame) { lastFrame = key; $.ui.invalidate("ui.render"); }
+    }
     if (state.sysRooms.includes("agents")) beat($, false);
     if (state.sysRooms.includes("git")) {
       const shown = view === "git" && state.paneShown;
@@ -523,7 +536,7 @@ export function register(on, options) {
     state.paneFocused = props.isFocused === true;
     if (state.paneFocused) void markRead($);
     state.paneShown = true;
-    return paneView($.ui.resolve(e), props, {
+    return paneView($.ui.resolve(e), { ...props, surface: e.surface }, {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void (async () => { if (state.view !== "chat") await setView($, "chat"); await selectRoom($, id); })(); },
