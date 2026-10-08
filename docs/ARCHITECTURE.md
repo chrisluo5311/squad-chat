@@ -41,6 +41,8 @@ These findings come from the Phase 0 spike on Claude Code 2.1.291:
 | Is there a reliable "session ended" event? | `session.end` exists but has a short time budget, so it is best effort. The bridge also exits by itself within about 5 s when its parent dies (it watches `ppid`), and presence relies on the dropped connection. |
 | Does chat leak into Claude's context? | Text typed in the pane never enters the transcript. A slash command is recorded as a user row with its arguments, so the mod rewrites the arguments of `/say`, `/room` and `/chat-login` in `session.append`, failing closed. Verified headless: the model can't see them. |
 
+One rule of our own comes first: **what arrives from a room never enters the model's context.** The mod has no `prompt.submit`, `prompt.compose` or `tool.call` hook, and nothing it receives from the bridge is appended to the session. Friends' messages are drawn, never read by Claude, so one that reads like an instruction stays a chat message. If a feature ever needs Claude to read a room (say, "summarize what I missed"), the person has to ask for it each time, and the text goes in as a clearly marked block of untrusted data, never as part of the prompt. `room messages never reach the model` in the mod tests guards this.
+
 Two rules of the mod runtime shape the code:
 
 * `$` is never followed across an import, so everything that touches the engine lives in `hooks/squad-chat.mjs`. `state.mjs`, `commands.mjs`, `views.mjs` and `theme.mjs` are plain logic. The hooks module hands them a `call(path, body)` function, a `say(text)` function and the surface's element table.
@@ -93,4 +95,4 @@ Things that took a while to get right:
 |---|---|---|
 | `supabase/tests/rls.test.sql` | `supabase test db` | Access control, limits, cascades (pgTAP) |
 | `bridge-tests/` | `npm test` in `plugins/squad-chat/bridge` | Two users, two real bridges, local Supabase: sign-in, passcodes, presence, messages, a network drop through a cuttable proxy, restarts, unread, deleting rooms, `kill -9` |
-| `plugins/squad-chat/tests/` | `claude plugin test ./plugins/squad-chat` | The mod against a fake bridge: sign-in, views, band, status line, read markers, mentions, tabs, room commands |
+| `plugins/squad-chat/tests/` | `claude plugin test ./plugins/squad-chat` | The mod against a fake bridge: sign-in, views, band, status line, read markers, mentions, tabs, room commands, room text never reaching the model |
