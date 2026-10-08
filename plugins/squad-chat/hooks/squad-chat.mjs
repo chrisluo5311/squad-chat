@@ -330,7 +330,7 @@ const COMMANDS = [
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
   { name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>" },
-  { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, or your diff to the room", argumentHint: "[diff [path] | send | cancel]" },
+  { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, or your diff to the room", argumentHint: "[diff [path]] [#room] | send | cancel" },
   { name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>" },
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
 ];

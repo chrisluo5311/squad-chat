@@ -138,20 +138,34 @@ const SHARE_HOLD_MS = 120_000;   // a preview waits this long for a send
 
 // "/chat-share" (what's selected, or the last code block in Claude's reply),
 // "/chat-share diff [path]", then "/chat-share send" or "/chat-share cancel".
+// A "#room" anywhere picks one of your other rooms; the current one otherwise.
+// (A path that starts with "#" can be written "./#name".)
 // In the pane's box it's "/share" (Claude Code's own /share is taken).
 // Nothing goes out without a look first. `sources` reads the session: selection(),
 // messages() and diff(path), each from the hooks module.
 export async function share(call, args, say, sources) {
-  const [verb, ...rest] = String(args ?? "").trim().split(/\s+/).filter(Boolean);
+  const words = String(args ?? "").trim().split(/\s+/).filter(Boolean);
+  const targets = words.filter((w) => w.startsWith("#"));
+  const [verb, ...rest] = words.filter((w) => !w.startsWith("#"));
   const c = sources.inPane ? "/share" : "/chat-share";
   requireSignedIn();
+  if (targets.length > 1) return say("Pick one room to share to.");
+  if (targets.length && (verb === "send" || verb === "cancel")) {
+    return say(`Pick the room when you start: ${c} ${targets[0]} or ${c} diff ${targets[0]}.`);
+  }
   if (verb === "cancel") {
     const had = state.pendingShare;
     state.pendingShare = null;
     return say(had ? "Dropped it." : "Nothing waiting to share.");
   }
   if (verb === "send") return sendShare(call, say, c);
-  if (!currentRoom()) return say("Join a room first: /room <name> <passcode>");
+  let room = currentRoom();
+  if (targets.length) {
+    const name = targets[0].slice(1).toLowerCase();
+    room = state.rooms.find((r) => r.slug === name);
+    if (!room) return say(`You're not in #${name}. Join it first: /room ${name} <passcode>`);
+  }
+  if (!room) return say("Join a room first: /room <name> <passcode>");
 
   let snippet;
   if (verb === "diff") {
@@ -159,7 +173,7 @@ export async function share(call, args, say, sources) {
     if (!body.trim()) return say(rest.length ? `No uncommitted changes in ${rest.join(" ")}.` : "No uncommitted changes to share.");
     snippet = { kind: "diff", lang: "diff", body };
   } else if (verb) {
-    return say(`Use ${c}, ${c} diff [path], ${c} send or ${c} cancel.`);
+    return say(`Use ${c} [#room], ${c} diff [path] [#room], ${c} send or ${c} cancel.`);
   } else {
     const selected = String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
     if (selected.trim()) snippet = looksLikeDiff(selected) ? { kind: "diff", lang: "diff", body: selected } : { kind: "code", lang: null, body: selected };
@@ -172,7 +186,6 @@ export async function share(call, args, say, sources) {
   const big = tooBig(snippet.body);
   if (big) return say(`Too big to share: ${big}.${snippet.kind === "diff" ? ` Share one file with ${c} diff <path>.` : " Select a smaller part."}`);
 
-  const room = currentRoom();
   const secret = findSecret(snippet.body);
   state.pendingShare = { ...snippet, room: room.id, slug: room.slug, secret, confirmed: false, until: Date.now() + SHARE_HOLD_MS };
   // The pane draws its own preview card: say only what needs saying.
@@ -241,7 +254,7 @@ export async function paneInput(call, value, say, { setDnd, sources } = {}) {
       case "say": return sendMessage(call, args, say);
       case "dnd": return dnd(args, say, setDnd);
       case "share": return share(call, args, say, sources);
-      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff] · /logout · anything else is a message");
+      case "help": return say("/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff] [#room] · /logout · anything else is a message");
       default: return say(`Unknown command /${cmd}. Try /help.`);
     }
   }

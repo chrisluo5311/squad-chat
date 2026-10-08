@@ -684,3 +684,33 @@ test('two snippets in a row: when the first can\'t shrink enough, the second kee
   expect(await ui.find({ type: 'Text', text: 'stealing it' })).toBeDefined()
   await ui.unmount()
 })
+
+test('/chat-share #room shares to another room you are in, never one you are not', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  on('ui.selection', () => ({ value: { text: 'npm test' } }))
+  on('session.cwd', () => ({ value: '/work/app' }))
+  const bridge = fakeBridge(on, { git: '@@ -1 +1 @@\n-a\n+b\n' })
+  await bridge.start($)
+  signedIn(bridge)
+  const DESIGN = { id: 'r-design', slug: 'design', last_read_id: 0, unread: 0 }
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, DESIGN] })
+  await settle()
+
+  await $.command.run({ command: 'chat-share', args: '#design' })
+  expect(logs).toContain('Ready to share to #design: code · 1 line')
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: 'npm test', room: 'r-design', kind: 'code' } })
+
+  await $.command.run({ command: 'chat-share', args: 'diff src/a.ts #Design' })
+  expect(bridge.runs.at(-1)!.argv.at(-1)).toBe('src/a.ts')   // the room isn't a path
+  expect(logs).toContain('Ready to share to #design: diff · +1 −1')
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(bridge.calls.at(-1)!.body.room).toBe('r-design')
+
+  await $.command.run({ command: 'chat-share', args: '#secret' })
+  expect(logs.at(-1)).toBe("You're not in #secret. Join it first: /room secret <passcode>")
+  await $.command.run({ command: 'chat-share', args: '#lobby #design' })
+  expect(logs.at(-1)).toBe('Pick one room to share to.')
+  await $.command.run({ command: 'chat-share', args: 'send #design' })
+  expect(logs.at(-1)).toBe('Pick the room when you start: /chat-share #design or /chat-share diff #design.')
+})

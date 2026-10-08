@@ -221,13 +221,47 @@ Until a server is set, the pane says so and shows these steps.
 | `/chat-login <email>`, then `/chat-login <code>` | Sign in by email from the prompt instead of the pane |
 | `/chat-login <name>` | Sign in with just a name, where the server allows it |
 | `/chat-name <new name>` | Change your display name. Your friends see the new one right away. |
-| `/chat-share` | Share the text you selected, or else the last code block in Claude's reply. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
-| `/chat-share diff [path]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
+| `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
+| `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
 
 The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/logout` and `/help` too, where the preview has **Send** and **Cancel** buttons. Type passcodes there: it never touches the conversation.
+
+#### Examples
+
+Start a room and bring your friends in:
+
+```
+/room design pixels42        create #design (or join it, if a friend made it) with passcode pixels42
+/room squad                  switch to #squad, a room you're already in
+/room                        list your rooms and their unread counts
+/say standup in 5?           post to the current room without opening the pane
+/who                         who's online, and in which rooms
+/chat-name captain           show up as captain from now on
+```
+
+Share code and diffs:
+
+```
+/chat-share                  the text you selected, or Claude's last code block, to the current room
+/chat-share #design          the same, to #design
+/chat-share diff             all your uncommitted changes
+/chat-share diff src/a.ts    only src/a.ts
+/chat-share diff src/a.ts #design
+/chat-share send             post what the preview showed
+/chat-share cancel           drop it
+```
+
+Stay focused:
+
+```
+/chat dnd on                 no toasts, and friends see you as busy
+/chat dnd auto               the same, but only while Claude works on something longer than 30 seconds
+/chat dnd off                back to normal, with one summary of what you missed
+/chat notify on              a toast when someone writes @yourname
+```
 
 <div align="center">
   <img src="docs/assets/dnd.gif" alt="With /chat dnd on, the band above the prompt turns grey and shows a muted count while a friend writes, with no toast. After /chat dnd off, one toast sums up the missed messages and the pane shows them." width="100%">

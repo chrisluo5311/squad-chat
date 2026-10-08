@@ -55,8 +55,8 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/who` | Who's online, across all your rooms |
 | `/chat-login <email>`, then `/chat-login <code>` | Sign in by email from the prompt instead of the pane |
 | `/chat-login <name>` | Sign in with just a name, where the server allows it |
-| `/chat-share` | Share the text you selected, or else the last code block in Claude's reply. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
-| `/chat-share diff [path]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
+| `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
+| `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
