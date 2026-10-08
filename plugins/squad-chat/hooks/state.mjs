@@ -65,12 +65,13 @@ export function statusText() {
   return `💬 ${counts}`;
 }
 
-// "While you were away: 5 new messages, 1 mentions you", or "" for nothing.
+// "💬 Missed 5 messages · 1 @mention", or "" for nothing. Short enough for
+// one line of a toast.
 export function missedText() {
   const { messages, mentions: at } = state.missed;
   if (!messages) return "";
-  const what = `${messages} new message${messages === 1 ? "" : "s"}`;
-  return `💬 While you were heads-down: ${what}${at ? `, ${at} mention${at === 1 ? "s" : ""} you` : ""}`;
+  const s = (n) => (n === 1 ? "" : "s");
+  return `💬 Missed ${messages} message${s(messages)}${at ? ` · ${at} @mention${s(at)}` : ""}`;
 }
 
 // "sam is typing…" for a room, or "".
