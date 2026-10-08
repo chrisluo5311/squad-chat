@@ -46,15 +46,19 @@ export function diffStats(body) {
 }
 
 // The lines a person reads: tabs as two spaces, and for a diff each file as
-// "▸ path" with its changes, without git's header lines.
+// "▸ path", its hunks, and its changes with one unchanged line on each side
+// (git gives three), without git's header lines.
 export function displayLines(body, kind = "code") {
   const all = String(body).replace(/\t/g, "  ").split("\n");
   if (kind !== "diff") return all;
-  return all.flatMap((line) => {
+  const lines = all.flatMap((line) => {
     const file = /^diff --git a\/(.+?) b\//.exec(line);
     if (file) return [`▸ ${file[1]}`];
     return FILE_HEADER.test(line) || /^(index |new file mode|deleted file mode|similarity index|rename (from|to) )/.test(line) ? [] : [line];
   });
+  const changed = (l) => l !== undefined && /^[+-]/.test(l);
+  const marker = (l) => l.startsWith("▸ ") || l.startsWith("@@");
+  return lines.filter((l, i) => marker(l) || changed(l) || changed(lines[i - 1]) || changed(lines[i + 1]));
 }
 
 export function lineCount(body) {

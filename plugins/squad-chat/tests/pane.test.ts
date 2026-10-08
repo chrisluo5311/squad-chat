@@ -618,12 +618,14 @@ test('snippets show as cards with a Copy button; the pane previews before sendin
   await ui.unmount()
 
   // git's header lines give way to the file's name; Copy still takes them.
-  bridge.emit(msg(2, 'bob', 'diff --git a/src/a.ts b/src/a.ts\nindex 1..2 100644\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,2 +1 @@\n-x\n--- an old comment\n+y', { kind: 'diff', lang: 'diff' }))
+  bridge.emit(msg(2, 'bob', 'diff --git a/src/a.ts b/src/a.ts\nindex 1..2 100644\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,4 +1,3 @@\n far away\n close by\n-x\n--- an old comment\n+y', { kind: 'diff', lang: 'diff' }))
   await settle()
   const ui2 = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
   expect(await ui2.find({ type: 'Text', text: '📎 diff · 1 file +1 −2' })).toBeDefined()
   expect(await ui2.find({ type: 'Text', text: '▸ src/a.ts' })).toBeDefined()
   expect(await ui2.find({ type: 'Text', text: '--- an old comment' })).toBeDefined()
+  expect(await ui2.find({ type: 'Text', text: ' close by' })).toBeDefined()   // one unchanged line of context
+  expect(await ui2.find({ type: 'Text', text: ' far away' })).toBeUndefined()
   expect(await ui2.find({ type: 'Text', text: /^index / })).toBeUndefined()
   await ui2.unmount()
   ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
