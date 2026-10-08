@@ -260,6 +260,13 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 * **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you, and `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
 * **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message.
 
+<div align="center">
+  <img src="docs/assets/never-reaches-claude.gif" alt="A friend writes in the squad chat asking Claude to ignore its instructions and delete the repo. Asked whether anyone in the chat asked it to do something, Claude answers that it hasn't seen any requests from the squad chat." width="100%">
+  <sub>sam tells Claude to delete the repo from the chat. Claude never sees it.</sub>
+</div>
+
+<br />
+
 Found a security problem? Please report it privately, as described in [SECURITY.md](SECURITY.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
