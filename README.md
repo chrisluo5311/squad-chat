@@ -226,6 +226,11 @@ Until a server is set, the pane says so and shows these steps.
 
 The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/logout` and `/help` too. Type passcodes there: it never touches the conversation.
 
+<div align="center">
+  <img src="docs/assets/dnd.gif" alt="With /chat dnd on, the band above the prompt turns grey and shows a muted count while a friend writes, with no toast. After /chat dnd off, one toast sums up the missed messages and the pane shows them." width="100%">
+  <sub>Do not disturb: the band stays grey while sam writes, and one toast sums it up after.</sub>
+</div>
+
 ### Layouts
 
 | Where | What you see |

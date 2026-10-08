@@ -462,7 +462,7 @@ test('/chat dnd on keeps quiet and shows you busy; off sums up what came in', SL
 
   await $.command.run({ command: 'chat', args: 'dnd off' })
   expect(bridge.calls.at(-1)).toEqual({ path: '/status', body: { status: 'available' } })
-  expect(seen.toasts).toEqual(['💬 While you were heads-down: 2 new messages, 1 mentions you'])
+  expect(seen.toasts).toEqual(['💬 Missed 2 messages · 1 @mention'])
   expect(seen.statuses.at(-1)).toBe('💬 #lobby 2')
 })
 
