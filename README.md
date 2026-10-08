@@ -242,6 +242,11 @@ Start a room and bring your friends in:
 /chat-name captain           show up as captain from now on
 ```
 
+<div align="center">
+  <img src="docs/assets/rooms.gif" alt="From the prompt: /room design pixels42 joins a friend's room, /room lists the rooms with an unread count, /room squad switches back, /say posts a message, /who shows who's online, and /chat-name captain changes the name. The pane then shows the conversation." width="100%">
+  <sub>Rooms from the prompt: join with a passcode, list, switch, post with /say, see who's online and pick a new name.</sub>
+</div>
+
 Share code and diffs:
 
 ```
