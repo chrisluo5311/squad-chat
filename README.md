@@ -234,6 +234,11 @@ The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/logout`
   <sub>Do not disturb: the band stays grey while sam writes, and one toast sums it up after.</sub>
 </div>
 
+<div align="center">
+  <img src="docs/assets/share.gif" alt="Claude writes a debounce helper. /chat-share shows a preview of its code block and /chat-share send posts it. /chat-share diff does the same for an uncommitted change. In the pane both appear as cards, the diff colored, and a friend replies." width="100%">
+  <sub>Sharing Claude's code block and an uncommitted diff: a preview first, then a card in the room.</sub>
+</div>
+
 ### Layouts
 
 | Where | What you see |
