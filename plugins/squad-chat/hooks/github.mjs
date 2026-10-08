@@ -96,8 +96,16 @@ export function parsePrList(list) {
   return (list ?? []).map(prModel);
 }
 
+// Recent runs, the newest of each workflow on each branch only: an older
+// run that a newer one replaced (a failure since fixed) no longer counts.
 export function parseRuns(list) {
-  return (list ?? []).map((r) => ({
+  const seen = new Set();
+  return (list ?? []).filter((r) => {
+    const key = `${r.workflowName || r.name}\u0000${r.headBranch}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map((r) => ({
     id: r.databaseId,
     name: r.workflowName || r.name || "workflow",
     branch: r.headBranch ?? "",
@@ -179,7 +187,7 @@ export async function fetchGit(run, prev = emptyGit()) {
     gh(["pr", "view", "--json", PR_VIEW_FIELDS]),
     gh(["pr", "list", "--state", "open", "--limit", "8", "--json", PR_FIELDS]),
     gh(["pr", "list", "--state", "open", "--search", "review-requested:@me", "--json", "number"]),
-    gh(["run", "list", "--limit", "6", "--json", "databaseId,name,workflowName,headBranch,status,conclusion,createdAt,updatedAt,url"]),
+    gh(["run", "list", "--limit", "12", "--json", "databaseId,name,workflowName,headBranch,status,conclusion,createdAt,updatedAt,url"]),
     gh(["issue", "list", "--state", "open", "--assignee", "@me", "--limit", "6", "--json", "number,title,url,labels,updatedAt"]),
     gh(["api", "repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=5"]),
   ]);
