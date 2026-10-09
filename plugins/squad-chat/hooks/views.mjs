@@ -345,9 +345,9 @@ function notice(els) {
 
 // What the input box is for right now.
 const SYS_INPUT = {
-  usage: { placeholder: "/git · /agents · /share usage · /help", label: "run" },
-  git: { placeholder: "r to refresh · /share git · /help", label: "run" },
-  agents: { placeholder: "/usage · /git · /share agents · /help", label: "run" },
+  usage: { placeholder: "/git · /agents · /share usage [#room] · /help", label: "run" },
+  git: { placeholder: "r to refresh · /share git [#room] · /help", label: "run" },
+  agents: { placeholder: "/usage · /git · /share agents [#room] · /help", label: "run" },
 };
 function inputMode() {
   const view = activeView();
@@ -421,20 +421,22 @@ function dockView(els, props, handlers) {
 
   if (view !== "chat") {
     const n = notice(els);
-    const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0);   // gap + input box + hints + notice
+    const pending = shareCard(els, handlers, width);
+    const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
     const capacity = Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
     parts.push(...sysDock(els, view, width, capacity, handlers));
     parts.push(Box({ key: "spacer", flexGrow: 1 }));
+    if (pending) parts.push(pending.node);
     if (n) parts.push(n);
     parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface));
-    parts.push(hints(els, SYS_HINTS[view]));
+    parts.push(sysHints(els, view, handlers));
   } else if (state.auth === "signed_in" && room) {
     const friends = friendsCard(els, width);
     parts.push(friends.node);
     used += 1 + friends.height;
 
     const n = notice(els);
-    const pending = shareCard(els, handlers);
+    const pending = shareCard(els, handlers, width);
     const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
     // The gap above the card, its border and head, and one row the dock reserves (its close mark).
     const capacity = Math.max(3, bodyRows - used - tail - 1 - 3 - 1);
@@ -467,28 +469,72 @@ function dockView(els, props, handlers) {
 }
 
 const SYS_HINTS = {
-  usage: "Context ▸ breaks it down · /share usage posts a snapshot",
-  git: "↻ or r refreshes · ⧉ copies a link · /share git",
-  agents: "▾ folds a session · all ▾ filters the feed · /share agents",
+  usage: "Context ▸ breaks it down",
+  git: "↻ or r refreshes · ⧉ copies a link",
+  agents: "▾ folds a session · all ▾ filters the feed",
 };
 
-// A snippet waiting for a look before it goes out, with Send and Cancel.
+// A built-in room's hints, after a Share button that posts its snapshot
+// (the preview card picks the room).
+function sysHints(els, view, handlers) {
+  const { Box, Text, Button } = els;
+  return Box({ key: "hints", flexDirection: "row", gap: 1, children: [
+    Box({ key: "share", flexShrink: 0, children: [
+      Button({ key: "share-snapshot", plain: true, label: "⇪ Share", onPress: () => handlers.onShare?.(view) }),
+    ] }),
+    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `· ${SYS_HINTS[view]}` }),
+  ] });
+}
+
+// The rooms a waiting snippet can go to, the chosen one lit. Rooms that
+// don't fit the width are left out, except the chosen one.
+function shareTargets(els, p, width, handlers) {
+  const { Box, Text, Button } = els;
+  if (state.rooms.length < 2) return null;
+  let left = width - 4 - 4;   // inside the card, after "to: "
+  const picks = [];
+  for (const r of [...state.rooms].sort((a, b) => (b.id === p.room) - (a.id === p.room))) {
+    const w = r.slug.length + 2;
+    if (w > left && r.id !== p.room) continue;
+    left -= w;
+    picks.push(r);
+  }
+  picks.sort((a, b) => state.rooms.indexOf(a) - state.rooms.indexOf(b));
+  return Box({ key: "to", flexDirection: "row", children: [
+    Text({ key: "label", color: theme.muted, children: "to: " }),
+    ...picks.map((r) => Box({ key: `pick-${r.id}`, flexShrink: 0, children: [
+      Button({ key: `to-${r.id}`, plain: true, label: `#${r.slug} `, dimColor: r.id !== p.room, onPress: () => handlers.onShareTarget?.(r.id) }),
+    ] })),
+  ] });
+}
+
+// A snippet waiting for a look before it goes out: where it goes, Send and Cancel.
 const PREVIEW_ROWS = 5;
-function shareCard(els, handlers) {
+function shareCard(els, handlers, width = 48) {
   const p = state.pendingShare;
   if (!p || Date.now() > p.until) return null;
   const { Box, Text, Button } = els;
   const lines = snippetLines(p.body, p.kind, PREVIEW_ROWS);
+  const targets = shareTargets(els, p, width, handlers);
   const children = [
     Box({ key: "code", flexDirection: "column", paddingX: 1, backgroundColor: theme.theirBubble, children: snippetBody(els, { kind: p.kind, ...lines }) }),
     p.secret ? Text({ key: "secret", color: theme.warn, wrap: "truncate-end", children: `⚠ looks like it has ${p.secret}` }) : null,
+    targets,
     Box({ key: "actions", flexDirection: "row", gap: 2, children: [
       Button({ key: "send", label: `Send to #${p.slug}`, variant: "primary", onPress: () => handlers.onShare?.("send") }),
       Button({ key: "cancel", label: "Cancel", onPress: () => handlers.onShare?.("cancel") }),
     ] }),
   ].filter(Boolean);
-  const height = 1 + 3 + lines.shown.length + (lines.more ? 1 : 0) + (p.secret ? 1 : 0) + 1;   // the gap above it first
+  const height = 1 + 3 + lines.shown.length + (lines.more ? 1 : 0) + (p.secret ? 1 : 0) + (targets ? 1 : 0) + 1;   // the gap above it first
   return { node: card(els, { key: "share", marginTop: 1, title: "SHARE?", titleColor: theme.amber, meta: snippetTitle(p), children }), height };
+}
+
+// The compact pane's one line for a waiting snippet.
+function pendingLine(els) {
+  const p = state.pendingShare;
+  if (!p || Date.now() > p.until) return null;
+  const to = state.rooms.length > 1 ? ", /share to #room" : "";
+  return els.Text({ key: "share", color: theme.amber, wrap: "truncate-end", children: `📎 ${snippetTitle(p)} for #${p.slug}: /share send${to} or /share cancel` });
 }
 
 // Above the prompt: as little as reads well.
@@ -503,6 +549,8 @@ function inlineView(els, props, handlers) {
 
   if (view !== "chat") {
     parts.push(...sysInline(els, view, width, handlers));
+    const share = pendingLine(els);
+    if (share) parts.push(share);
   } else if (state.auth === "signed_in" && room) {
     const names = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).map((u) => u.name);
     parts.push(Box({ key: "header", flexDirection: "row", justifyContent: "space-between", children: [
@@ -529,10 +577,8 @@ function inlineView(els, props, handlers) {
     }
     const typing = typingText(room.id);
     if (typing) parts.push(typingLine(els, typing));
-    const p = state.pendingShare;
-    if (p && Date.now() <= p.until) {
-      parts.push(Text({ key: "share", color: theme.amber, wrap: "truncate-end", children: `📎 ${snippetTitle(p)} for #${p.slug}: /share send or /share cancel` }));
-    }
+    const share = pendingLine(els);
+    if (share) parts.push(share);
   } else {
     parts.push(titleBar(els));
     parts.push(setupCard(els, width));

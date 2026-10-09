@@ -58,7 +58,7 @@ Every Claude Code session on this computer, in one place:
 
 ## Share a snapshot or hide tabs
 
-To show the team, `/chat-share usage` (or `git`, `agents`) posts a snapshot of the room to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4".
+To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`.
 
 `/chat rooms usage,git` picks which tabs you want, and `/chat rooms none` hides them all.
 

@@ -717,7 +717,53 @@ test('/chat-share #room shares to another room you are in, never one you are not
   await $.command.run({ command: 'chat-share', args: '#lobby #design' })
   expect(logs.at(-1)).toBe('Pick one room to share to.')
   await $.command.run({ command: 'chat-share', args: 'send #design' })
-  expect(logs.at(-1)).toBe('Pick the room when you start: /chat-share #design or /chat-share diff #design.')
+  expect(logs.at(-1)).toBe('Nothing waiting to share.')
+
+  // "to #room" moves what's waiting, "send #room" sends it there.
+  await $.command.run({ command: 'chat-share', args: '' })
+  expect(logs).toContain('Ready to share to #lobby: code · 1 line')
+  await $.command.run({ command: 'chat-share', args: 'to #design' })
+  expect(logs.at(-1)).toBe('It will go to #design. /chat-share send to post it.')
+  await $.command.run({ command: 'chat-share', args: 'to #secret' })
+  expect(logs.at(-1)).toBe("You're not in #secret. Join it first: /room secret <passcode>")
+  await $.command.run({ command: 'chat-share', args: 'send #lobby' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: 'npm test', room: LOBBY.id, kind: 'code' } })
+  await $.command.run({ command: 'chat-share', args: 'cancel #design' })
+  expect(logs.at(-1)).toBe('/chat-share cancel takes no room.')
+})
+
+test('a snapshot shared from a built-in room shows its preview there, and the card picks the room', SLOW, async ($, on) => {
+  on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
+  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  await bridge.start($)
+  signedIn(bridge)
+  const DESIGN = { id: 'r-design', slug: 'design', last_read_id: 0, unread: 0 }
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, DESIGN] })
+  await settle()
+  await $.session.measure({ context: { tokens: 50_000, window: 200_000, percent: 25 }, rateLimits: [], cost: { usd: 1.5 }, changed: ['context', 'cost'] })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeUndefined()
+  await ui.press({ key: 'share-snapshot' })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()   // drawn in the Usage room, not only in chat
+  expect(await ui.find({ key: 'to-r-design' })).toBeDefined()
+  await ui.press({ key: 'to-r-design' })
+  await settle()
+  await ui.press({ key: 'send' })
+  await settle()
+  const sent = bridge.calls.at(-1)
+  expect(sent?.path).toBe('/send')
+  expect(sent?.body.room).toBe('r-design')
+  expect(sent?.body.lang).toBe('usage')
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeUndefined()
+
+  // Typed in the box, with the room named.
+  await ui.input({ key: 'compose', text: '/share usage #design' })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()
+  await ui.press({ key: 'cancel' })
+  await ui.unmount()
 })
 
 // ---------------------------------------------------------------- built-in rooms

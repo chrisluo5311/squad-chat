@@ -33,7 +33,8 @@ description: Every squad-chat slash command, what it does, and examples.
 | --- | --- |
 | `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
 | `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
-| `/chat-share usage` / `git` / `agents` `[#room]` | Share a snapshot of a built-in room |
+| `/chat-share to #room` | Send what's waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. |
+| `/chat-share usage` / `git` / `agents` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 
 ### Notifications and built-in rooms
 
@@ -46,7 +47,7 @@ description: Every squad-chat slash command, what it does, and examples.
 
 ## In the pane
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the share preview has **Send** and **Cancel** buttons. In the Git room, `r` refreshes.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the share preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room, `r` refreshes.
 
 :::tip
 Type passcodes in the pane. It never touches the conversation, while a slash command's raw text stays in one bookkeeping line of the local transcript. See [Privacy & security](/squad-chat/reference/privacy/).

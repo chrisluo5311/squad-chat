@@ -11,7 +11,7 @@
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, sendMessage, paneInput, sysRooms } from "./commands.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
@@ -465,7 +465,7 @@ const COMMANDS = [
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
   { name: "chat-login", description: "squad-chat: sign in with an emailed code", argumentHint: "<email> | <code>" },
-  { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, your diff, or a Usage/Git/Agents snapshot to the room", argumentHint: "[diff [path] | usage | git | agents] [#room] | send | cancel" },
+  { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, your diff, or a Usage/Git/Agents snapshot to the room", argumentHint: "[diff [path] | usage | git | agents] [#room] | to #room | send [#room] | cancel" },
   { name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>" },
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
 ];
@@ -548,6 +548,11 @@ export function register(on, options) {
         })();
       },
       onShare: (verb) => { void shareFromPane($, verb); },
+      onShareTarget: (id) => {
+        const r = retargetShare(id);
+        state.notice = typeof r === "string" ? r : "";
+        $.ui.invalidate("ui.render");
+      },
       onCopy: (text, surface) => { void copySnippet($, text, surface); },
       onRefresh: () => { void refreshGit($); },
       onToggleBreakdown: () => toggleBreakdown($),
