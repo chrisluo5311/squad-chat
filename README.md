@@ -23,7 +23,7 @@
   <br />
   Friends online, right beside your Claude Code session. Zero tokens, zero leaks to Claude.
   <br />
-  <a href="#usage"><strong>Explore the commands »</strong></a>
+  <a href="https://chrisluo5311.github.io/squad-chat/"><strong>Read the docs »</strong></a>
   <br />
   <br />
   <a href="#about-the-project">View Demo</a>
@@ -62,10 +62,7 @@
         <li><a href="#two-accounts-on-one-computer">Two accounts on one computer</a></li>
       </ul>
     </li>
-    <li><a href="#privacy--security">Privacy &amp; Security</a></li>
-    <li><a href="#development">Development</a></li>
     <li><a href="#host-your-own-server">Host your own server</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
@@ -73,9 +70,10 @@
 
 ## About The Project
 
+https://github.com/user-attachments/assets/b83d9a2c-673a-40d0-90a3-a2c717b6c79a
+
 <div align="center">
-  <img src="docs/assets/demo.gif" alt="squad-chat demo: open the pane, sign in with an emailed code, join a room with its passcode, chat with a friend who shows as typing, switch rooms when a new message arrives, and change your display name" width="100%">
-  <sub>Signing in, joining a room, chatting while a friend is typing, switching rooms when a new message comes in, and picking a new name with /chat-name.</sub>
+  <sub>Chatting with the squad while Claude runs a subagent, then the Agents, Usage and Git rooms, and a Usage snapshot shared to the room.</sub>
 </div>
 
 <br />
@@ -93,6 +91,8 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 * **Fits any terminal.** Docked beside the transcript in a wide terminal, compact above the prompt in a narrow one, and a one-line summary when the pane is closed.
 
 It is a Claude Code mod: a plugin of function hooks, plus a small Node process that holds the connection to Supabase. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit.
+
+The full guide, with search, lives at **[chrisluo5311.github.io/squad-chat](https://chrisluo5311.github.io/squad-chat/)**. [Privacy & security](https://chrisluo5311.github.io/squad-chat/reference/privacy/), [development](https://chrisluo5311.github.io/squad-chat/reference/development/) and the [roadmap](https://chrisluo5311.github.io/squad-chat/reference/roadmap/) are there too. Found a security problem? Please report it privately, as described in [SECURITY.md](SECURITY.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -250,8 +250,8 @@ Where your branch stands on GitHub, read through the [`gh` CLI](https://cli.gith
 It refreshes every minute while you look at it, every five minutes otherwise, and shortly after a `git push`. Type `r` in the pane to refresh now, and press ⧉ to copy a link.
 
 <div align="center">
-  <img src="docs/assets/git.gif" alt="The Git room for the squad-chat repository: the branch, PR #7 with its checks going from three passed and two running to all five passed, the merge state turning from blocked to mergeable, and the Actions runs finishing, refreshed with r." width="100%">
-  <sub>PR #7's checks finish while the room refreshes: blocked becomes mergeable.</sub>
+  <img src="docs/assets/git.gif" alt="The Git room for the squad-chat repository on a merged branch: PR #8 merged with all five checks passed, no other open pull requests, the latest Actions runs and no assigned issues, then r refreshes it." width="100%">
+  <sub>A merged branch: PR #8 and its five checks, the latest Actions runs, and a refresh with r.</sub>
 </div>
 
 <br />
@@ -381,81 +381,6 @@ Gmail delivers `you+b@gmail.com` to `you@gmail.com`, which makes a handy second 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-## Privacy & Security
-
-* **What Claude sees.** Nothing typed in the pane enters the conversation. The arguments of `/say`, `/room` and `/chat-login` are replaced with a placeholder before Claude Code stores the command, and command answers are notices the model never reads. Claude Code still keeps a slash command's raw text in one bookkeeping line of the local transcript on your own disk, so type passcodes in the pane if that matters to you.
-* **What Claude reads from the room: nothing.** Your friends' messages, names and who's online are drawn in the pane, the band and the status line, and that's all. None of it goes into your prompts, the system prompt, tool results or the transcript, so a friend joking "delete the repo" can't turn into an instruction. A test sends exactly that kind of message and checks it never reaches the model.
-* **Who sees your messages.** Only members of the room. Access is enforced in the database with row-level security, and you become a member only with the room's passcode. Five wrong passcodes lock you out for 15 minutes.
-* **Who runs the server.** Your squad's server belongs to whoever hosts it, and they can read its database like any database admin. Pick a host you trust, or host it yourself.
-* **What friends see.** Your display name (the name you picked, or the part of your email before the `@`) and whether you're online, or busy during do not disturb. Never your email.
-* **What's stored.** Messages are deleted after 30 days. Your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you, and `/chat-logout` removes it. An account made with just a name can't be signed back into once you sign out, so `/chat-logout` asks twice.
-* **What sharing sends.** `/chat-share` reads your selection, Claude's replies or `git diff` on your own computer, and nothing leaves until you look at it and send it. If it looks like it holds an API key, a token, a private key or a secret from an env file, it says so and asks you to send twice. What you share is stored on your squad's server like any message.
-* **What the built-in rooms read.** The Usage and Agents rooms read this session's own figures from Claude Code: context, cost, rate limits, token counts, tool names and timings, and subagents. The Git room runs `git status` and `gh` in the session's folder as you. Nothing is sent anywhere, and no token is stored. To show other sessions, each session keeps a small heartbeat file in `/tmp/squad-chat-<uid>/sessions/`, readable only by you: the folder's name, branch, model, what it's doing, and the last few tool calls with a few words each (a command, a file's name, a search pattern). Anything that looks like a secret is masked. No prompts, replies or tool output go in. A heartbeat is removed when its session ends. Only `/chat-share usage|git|agents` sends any of it to a chat room, after you look at the preview.
-* **Abuse limits.** At most 10 messages per 10 seconds per person, and 500 characters per message. A shared snippet may be up to 8000 characters and 200 lines, at most 3 a minute.
-
-<div align="center">
-  <img src="docs/assets/never-reaches-claude.gif" alt="A friend writes in the squad chat asking Claude to ignore its instructions and delete the repo. Asked whether anyone in the chat asked it to do something, Claude answers that it hasn't seen any requests from the squad chat." width="100%">
-  <sub>sam tells Claude to delete the repo from the chat. Claude never sees it.</sub>
-</div>
-
-<br />
-
-Found a security problem? Please report it privately, as described in [SECURITY.md](SECURITY.md).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Development
-
-Want to help? [CONTRIBUTING.md](CONTRIBUTING.md) covers setting up, the tests and how to send a pull request.
-
-```sh
-# The mod
-claude plugin validate ./plugins/squad-chat   # check the manifest and hooks
-claude plugin test ./plugins/squad-chat       # mod tests, against a fake bridge
-claude --plugin-dir ./plugins/squad-chat      # run Claude Code with this checkout
-
-# The bridge
-cd plugins/squad-chat/bridge
-npm install && npm run build                  # rebuild dist/bridge.mjs after editing src/
-npm test                                      # two users, two bridges, local Supabase
-
-# The database
-supabase start                                # local stack on ports 56420-56429
-supabase test db                              # pgTAP access-control tests
-supabase db advisors --local --type all
-```
-
-To run the mod against the local stack, start Claude Code with:
-
-```sh
-SQUAD_SUPABASE_URL=http://127.0.0.1:56421 \
-SQUAD_SUPABASE_KEY=<local publishable key from `supabase status`> \
-SQUAD_CONFIG_DIR=$(mktemp -d) \
-claude --plugin-dir ./plugins/squad-chat
-```
-
-Sign-in emails land in the local mail UI at http://127.0.0.1:56424.
-
-| Path | Contents |
-| --- | --- |
-| `plugins/squad-chat/hooks/squad-chat.mjs` | Hooks: commands, pane, band, status line, the bridge client, keeping chat out of the conversation |
-| `plugins/squad-chat/hooks/state.mjs` | State built from the bridge's events |
-| `plugins/squad-chat/hooks/commands.mjs` | Slash commands and the pane's input box |
-| `plugins/squad-chat/hooks/views.mjs` | The docked pane, the compact pane and the band |
-| `plugins/squad-chat/hooks/sysviews.mjs` | The built-in rooms: Usage, Git and Agents |
-| `plugins/squad-chat/hooks/widgets.mjs` | Meters, sparklines, stat tiles, rows and the card stack the built-in rooms share |
-| `plugins/squad-chat/hooks/metrics.mjs` | This session's usage, tool timings and subagents |
-| `plugins/squad-chat/hooks/github.mjs` | The Git room's data, read through `git` and `gh` |
-| `plugins/squad-chat/hooks/sessions.mjs` | Heartbeats shared with the other sessions on this computer |
-| `plugins/squad-chat/hooks/theme.mjs` | Colors and glyphs |
-| `plugins/squad-chat/bridge/src/` | The Node bridge (bundled into `bridge/dist/bridge.mjs`) |
-| `plugins/squad-chat/tests/` | Mod tests |
-| `bridge-tests/` | Bridge tests against a local Supabase |
-| `supabase/migrations/`, `supabase/tests/` | Schema, RLS and pgTAP tests |
-| `docs/ARCHITECTURE.md` | How it fits together, and why |
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 ## Host your own server
 
 One person per group does this, once. It fits in Supabase's free plan.
@@ -492,26 +417,6 @@ One person per group does this, once. It fits in Supabase's free plan.
         ```
      5. Try it: sign in with your own email. Each code shows up under **Emails** in Resend's dashboard, with its delivery status.
 5. **Share the server** with your friends: the project URL and the publishable key, from **Project Settings → API Keys**. Everyone, you included, [connects with them](#connect-to-a-server).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Roadmap
-
-- [x] Supabase backend: rooms with passcodes, RLS, rate limits, 30-day retention
-- [x] Email-code sign-in and a Node bridge for Realtime presence and messages
-- [x] Catch-up after network drops, and a watchdog for stuck reconnects
-- [x] Docked pane, compact pane, one-line band and status line
-- [x] Chat bubbles, room tabs, unread markers and @mention toasts
-- [x] Leave and delete rooms
-- [x] Bring your own server, with sign-in by name or by email code
-- [x] `/chat-name` to change your display name
-- [x] Typing indicators
-- [x] Do not disturb, by hand or while Claude works
-- [x] Share code and diffs from your session
-- [x] Built-in Usage, Git and Agents rooms
-- [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
-
-See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for proposed features and known issues.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

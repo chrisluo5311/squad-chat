@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.astro/
+public/media/
+src/content/docs/reference/architecture.md

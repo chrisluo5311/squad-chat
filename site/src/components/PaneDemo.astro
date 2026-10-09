@@ -1,0 +1,139 @@
+---
+// A live, text-rendered picture of squad-chat beside a Claude Code session.
+// Real HTML instead of a GIF, so it stays sharp at any zoom. It loops every 12 s.
+---
+
+<figure class="pane-demo not-content" aria-label="Claude Code on the left, the squad-chat pane on the right">
+  <div class="bar">
+    <span class="light"></span><span class="light"></span><span class="light"></span>
+    <span class="where">claude — ~/squad-chat</span>
+  </div>
+  <div class="body">
+    <div class="claude">
+      <div class="dim"><span class="acc">▍</span>Claude Code <span class="faint">v2.1.292</span></div>
+      <div class="in" style="--d: 0s"><span class="dim">&gt;</span> add a debounce to the search box</div>
+      <div class="in" style="--d: 0.8s"><span class="ok">⏺</span> Read <span class="dim">src/search.ts</span></div>
+      <div class="in" style="--d: 1.6s"><span class="ok">⏺</span> Edit <span class="dim">src/search.ts</span> <span class="ok">+12</span> <span class="del">−3</span></div>
+      <div class="in code" style="--d: 2.4s">const run = debounce(query, 200)<br /><span class="dim">input.on("input", run)</span></div>
+      <div class="in" style="--d: 3.4s">Done. Typing now waits 200 ms before it searches.</div>
+      <div class="prompt"><span class="acc">&gt;</span> /chat-share<span class="caret"></span></div>
+    </div>
+    <div class="pane">
+      <div class="tabs">
+        <span style="color: #e2b86b">◔</span><span style="color: #6cc070">⎇</span><span style="color: #7fb6e2">⟡</span>
+        <span class="tab-on">#squad</span><span class="tab">#design <span class="acc">2</span></span>
+      </div>
+      <div class="friends">
+        <span class="label">FRIENDS</span>
+        <span><span class="on">●</span> sam</span>
+        <span><span class="on">●</span> ana</span>
+        <span class="dim"><span style="color: #e2b86b">●</span> kai busy</span>
+      </div>
+      <div class="messages">
+        <div class="in theirs" style="--d: 0.4s"><div class="who" style="color: #e2b86b">sam</div><div class="bubble">is search still janky?</div></div>
+        <div class="in mine" style="--d: 4.2s">
+          <div class="card"><div class="card-head">code · src/search.ts</div><div class="card-body">debounce(query, 200)</div></div>
+        </div>
+        <div class="in theirs" style="--d: 5.4s"><div class="who" style="color: #7fb6e2">ana</div><div class="bubble">ship it</div></div>
+        <div class="in typing" style="--d: 6.2s">sam is typing <i></i><i></i><i></i></div>
+      </div>
+      <div class="compose">message #squad</div>
+    </div>
+  </div>
+  <div class="status">
+    <span>◔ Usage │ <span style="color: #e2b86b">☀ Clear</span> 12% 121k/1.0M</span>
+    <span>5-hour 18%</span>
+    <span class="right"><span class="acc">#design</span> 2 unread</span>
+  </div>
+</figure>
+
+<style>
+  .pane-demo {
+    --acc: #d97757;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 35rem;
+    background: #141413;
+    border: 1px solid #2e2c2a;
+    border-radius: 0.875rem;
+    overflow: hidden;
+    font-family: var(--__sl-font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #e8e6dc;
+    box-shadow: 0 2.5rem 7.5rem rgb(0 0 0 / 0.45);
+    text-align: left;
+  }
+  .bar, .status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    padding: 0.5rem 0.875rem;
+    background: #1a1918;
+    color: #8f8b84;
+    font-size: 0.75rem;
+  }
+  .bar { border-bottom: 1px solid #2e2c2a; gap: 0.5rem; }
+  .status { border-top: 1px solid #2e2c2a; }
+  .light { width: 0.6875rem; height: 0.6875rem; border-radius: 50%; background: #3a3835; }
+  .where { margin-left: 0.625rem; }
+  .right { margin-left: auto; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .claude {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 1.125rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-right: 1px solid #2e2c2a;
+  }
+  .code { padding: 0.625rem 0.75rem; border-radius: 0.5rem; background: #1d1c1a; border: 1px solid #2e2c2a; color: #d6d3cb; }
+  .prompt { margin-top: auto; display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 0.75rem; border: 1px solid #3a3835; border-radius: 0.5rem; color: #8f8b84; }
+  .caret { width: 0.4375rem; height: 0.9375rem; background: #e8e6dc; animation: caret 1s steps(1) infinite; }
+  .pane { flex: 0 0 44%; min-width: 0; display: flex; flex-direction: column; background: #181716; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: center; padding: 0.625rem 0.75rem; border-bottom: 1px solid #2e2c2a; font-size: 0.75rem; }
+  .tab-on { padding: 0.25rem 0.625rem; border-radius: 0.375rem; background: var(--acc); color: #141413; font-weight: 700; }
+  .tab { color: #b5b1a8; }
+  .friends { margin: 0.75rem 0.75rem 0.25rem; padding: 0.625rem 0.75rem; border: 1px solid #2e2c2a; border-radius: 0.625rem; display: flex; flex-wrap: wrap; gap: 0.875rem; font-size: 0.75rem; }
+  .label { color: #8f8b84; font-weight: 700; letter-spacing: 0.08em; }
+  .messages { flex: 1; min-height: 0; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; justify-content: flex-end; }
+  .theirs { align-self: flex-start; max-width: 80%; }
+  .mine { align-self: flex-end; max-width: 85%; }
+  .who { font-size: 0.6875rem; margin-bottom: 0.1875rem; }
+  .bubble { padding: 0.5rem 0.6875rem; border-radius: 0.625rem 0.625rem 0.625rem 0.1875rem; background: #24221f; }
+  .card { border: 1px solid #3a3835; border-radius: 0.625rem 0.625rem 0.1875rem 0.625rem; overflow: hidden; background: #1d1c1a; }
+  .card-head { padding: 0.3125rem 0.625rem; font-size: 0.6875rem; color: #8f8b84; border-bottom: 1px solid #2e2c2a; }
+  .card-body { padding: 0.5rem 0.625rem; }
+  .typing { color: #8f8b84; font-size: 0.75rem; display: flex; align-items: center; gap: 0.375rem; }
+  .typing i { width: 0.25rem; height: 0.25rem; border-radius: 50%; background: #8f8b84; animation: dot 1.2s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: 0.2s; }
+  .typing i:nth-child(3) { animation-delay: 0.4s; }
+  .compose { margin: 0.5rem 0.75rem 0.75rem; padding: 0.5625rem 0.75rem; border: 1px solid #3a3835; border-radius: 0.5rem; color: #5e5b56; }
+  .dim { color: #8f8b84; }
+  .faint { color: #5e5b56; }
+  .acc { color: var(--acc); }
+  .ok, .on { color: #6cc070; }
+  .del { color: #e07a7a; }
+  .in { animation: loop 12s ease infinite both; animation-delay: var(--d); }
+
+  @keyframes loop {
+    0% { opacity: 0; transform: translateY(6px); }
+    5%, 88% { opacity: 1; transform: none; }
+    96%, 100% { opacity: 0; transform: none; }
+  }
+  @keyframes dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+  @keyframes caret { 50% { opacity: 0; } }
+
+  @media (max-width: 50rem) {
+    .pane-demo { height: auto; }
+    .body { flex-direction: column; }
+    .claude { border-right: 0; border-bottom: 1px solid #2e2c2a; }
+    .messages { min-height: 15rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .in, .caret, .typing i { animation: none; }
+  }
+</style>
