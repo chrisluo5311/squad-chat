@@ -163,8 +163,13 @@ export async function share(call, args, say, sources) {
   const c = sources.inPane ? "/share" : "/chat-share";
   requireSignedIn();
   if (targets.length > 1) return say("Pick one room to share to.");
-  if (targets.length && (verb === "send" || verb === "cancel")) {
-    return say(`Pick the room when you start: ${c} ${targets[0]} or ${c} diff ${targets[0]}.`);
+  if (targets.length && verb === "cancel") return say(`${c} cancel takes no room.`);
+  // "/share to #room" points what's waiting at another room, "/share send #room" sends it there.
+  if (verb === "to" || (verb === "send" && targets.length)) {
+    if (!targets.length) return say(`Name the room: ${c} to #room.`);
+    const r = retargetShare(targets[0].slice(1));
+    if (typeof r === "string") return say(r);
+    if (verb === "to") return say(`It will go to #${r.slug}. ${c} send to post it.`);
   }
   if (verb === "cancel") {
     const had = state.pendingShare;
@@ -188,7 +193,7 @@ export async function share(call, args, say, sources) {
     if (!body.trim()) return say(rest.length ? `No uncommitted changes in ${rest.join(" ")}.` : "No uncommitted changes to share.");
     snippet = { kind: "diff", lang: "diff", body };
   } else if (verb) {
-    return say(`Use ${c} [#room], ${c} diff [path] [#room], ${c} usage|git|agents [#room], ${c} send or ${c} cancel.`);
+    return say(`Use ${c} [#room], ${c} diff [path] [#room], ${c} usage|git|agents [#room], ${c} to #room, ${c} send [#room] or ${c} cancel.`);
   } else {
     const selected = String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
     if (selected.trim()) snippet = looksLikeDiff(selected) ? { kind: "diff", lang: "diff", body: selected } : { kind: "code", lang: null, body: selected };
@@ -210,8 +215,20 @@ export async function share(call, args, say, sources) {
     `Ready to share to #${room.slug}: ${snippetTitle(snippet)}`,
     ...preview,
     ...(secret ? [`⚠ It looks like it has ${secret}. Check it before you send.`] : []),
-    `${c} send to post it, ${c} cancel to drop it.`,
+    `${c} send to post it, ${c} to #room to pick another room, ${c} cancel to drop it.`,
   ].join("\n"));
+}
+
+// Points the waiting snippet at another of your rooms, by slug or id.
+// Returns the room, or what went wrong.
+export function retargetShare(nameOrId) {
+  const p = state.pendingShare;
+  if (!p || Date.now() > p.until) return "Nothing waiting to share.";
+  const name = String(nameOrId).toLowerCase();
+  const room = state.rooms.find((r) => r.id === nameOrId || r.slug === name);
+  if (!room) return `You're not in #${name}. Join it first: /room ${name} <passcode>`;
+  if (room.id !== p.room) Object.assign(p, { room: room.id, slug: room.slug, confirmed: false });
+  return room;
 }
 
 async function sendShare(call, say, c) {
@@ -258,7 +275,7 @@ function showView(view, say, setView) {
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents] [#room] · /usage · /git · /agents · /chat · /logout · anything else is a message";
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents] [#room] · /share to #room · /usage · /git · /agents · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in room ("chat" for the chat), `refreshGit()`

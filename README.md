@@ -271,7 +271,7 @@ Every Claude Code session on this computer, in one place:
 
 <br />
 
-To show the team, `/chat-share usage` (or `git`, `agents`) posts a snapshot of the room to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". `/chat rooms usage,git` picks which tabs you want, and `/chat rooms none` hides them all.
+To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`. `/chat rooms usage,git` picks which tabs you want, and `/chat rooms none` hides them all.
 
 ### Commands
 
@@ -290,6 +290,7 @@ To show the team, `/chat-share usage` (or `git`, `agents`) posts a snapshot of t
 | `/chat-name <new name>` | Change your display name. Your friends see the new one right away. |
 | `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
 | `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
+| `/chat-share to #room` | Send what's waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
@@ -297,7 +298,7 @@ To show the team, `/chat-share usage` (or `git`, `agents`) posts a snapshot of t
 | `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, or `all`, or `none` |
 | `/chat-share usage` / `git` / `agents` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview has **Send** and **Cancel** buttons. In the Git room, `r` refreshes. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room, `r` refreshes. Type passcodes there: it never touches the conversation.
 
 #### Examples
 
