@@ -1,11 +1,11 @@
 ---
 title: Built-in rooms
-description: The Usage, Git and Agents tabs that sit before your chat rooms.
+description: The Usage, Git, Agents and Snippets tabs that sit before your chat rooms.
 ---
 
-Three tabs sit before your chat rooms: **◔ Usage**, **⎇ Git** and **⟡ Agents**. They need no server and no sign-in, and nothing in them leaves your computer unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail.
+Four tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents** and **⌘ Snippets**. They need no server and no sign-in, and nothing in them leaves your computer unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
-Open one with `/chat usage`, `/chat git` or `/chat agents`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+Open one with `/chat usage`, `/chat git`, `/chat agents` or `/chat snippet`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
 ## ◔ Usage
 
@@ -56,10 +56,20 @@ Every Claude Code session on this computer, in one place:
   <figcaption>Two sessions at once: this one waits on a subagent while the other runs commands.</figcaption>
 </figure>
 
+## ⌘ Snippets
+
+Code you reach for again and again, kept on this computer and one click from your clipboard:
+
+- **Save** what you selected, or else the last code block in Claude's reply, with `/snippet add <name>`. Its language comes along when Claude's block names one.
+- **⧉** copies a snippet, and **⇪** shares it to a chat room, with the same preview as `/chat-share`.
+- **Tidy up** with `/snippet rename <old> -> <new>` and `/snippet delete <name>`. `/snippet copy <name>` and `/snippet share <name> [#room]` work from the prompt too.
+
+The list lives in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. Snippets is the first *function room*: a room drawn from a small manifest that names where its data comes from, so more rooms can follow without new drawing code. [Architecture](/squad-chat/reference/architecture/#function-rooms) explains how they work.
+
 ## Share a snapshot or hide tabs
 
 To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`.
 
-`/chat rooms usage,git` picks which tabs you want, and `/chat rooms none` hides them all.
+`/chat rooms usage,git` picks which tabs you want, `/chat rooms -snippet` or `+snippet` drops or brings back one, and `/chat rooms none` hides them all.
 
 What these rooms read, and what they keep on disk, is listed under [Privacy & security](/squad-chat/reference/privacy/#what-the-built-in-rooms-read).

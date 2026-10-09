@@ -1,7 +1,8 @@
 // squad-chat bridge: a Node child of the mod that holds the Supabase
 // connection (the mod runtime has no WebSocket), and shares this session's
-// heartbeat with the other sessions on the computer (the Agents room).
-// Without a server it still runs, for the heartbeats alone.
+// heartbeat with the other sessions on the computer (the Agents room), and
+// runs the function rooms' providers. Without a server it still runs, for
+// the heartbeats and the function rooms.
 //
 //   events  → stdout, one JSON object per line (NDJSON)
 //   control ← HTTP on a private Unix socket; every request carries
@@ -14,6 +15,7 @@
 //   SQUAD_CONFIG_DIR     session + prefs (default ~/.config/squad-chat)
 //   SQUAD_SOCKET_DIR     where the socket goes (default /tmp/squad-chat-<uid>)
 //   SQUAD_SESSIONS_DIR   the sessions' heartbeats (default <socket dir>/sessions)
+//   SQUAD_ROOMS_DIR      the function rooms squad-chat ships (the plugin's rooms/)
 //   SQUAD_DEBUG=1        log Realtime traffic to stderr
 //   SQUAD_REFRESH_MS     how often to refresh friends and rooms (tests)
 //
@@ -25,6 +27,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chat, HttpError } from "./chat.mjs";
 import { sessionBoard } from "./sessions.mjs";
+import { roomRegistry } from "./rooms/registry.mjs";
 
 const MAX_BODY = 64 * 1024;   // a snippet is up to 8000 characters
 
@@ -67,11 +70,23 @@ const chat = configured ? new Chat({
 
 const board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join(socketDir, "sessions"), emit });
 
+// Function rooms: shipped ones first, then any installed on this computer.
+const fnRooms = roomRegistry({
+  dirs: [env.SQUAD_ROOMS_DIR, join(configDir, "rooms")],
+  dataDir: join(configDir, "room-data"),
+  emit,
+  log,
+});
+
 // ------------------------------------------------------------ control API
 
 const localRoutes = {
   "GET /ping": () => ({ ok: true, pid: process.pid }),
   "POST /sessions/beat": (b) => (board.beat(b), { ok: true }),
+  "GET /fnroom/list": () => (fnRooms.report(), { ok: true }),
+  "POST /fnroom/visible": (b) => fnRooms.setVisible(b),
+  "POST /fnroom/refresh": (b) => fnRooms.refresh(b.room),
+  "POST /fnroom/action": (b) => fnRooms.action(b),
   "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },
 };
 
@@ -140,6 +155,7 @@ async function shutdown(code) {
   server.close();
   rmSync(socketPath, { force: true });
   board.close();
+  fnRooms.close();
   await chat?.shutdown().catch(() => {});
   process.exit(code);
 }
@@ -156,5 +172,6 @@ server.listen(socketPath, () => {
   chmodSync(socketPath, 0o600);
   emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
   board.report();
+  fnRooms.report();
   chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
 });

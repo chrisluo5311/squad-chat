@@ -15,7 +15,11 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   // The harness never starts a session on its own: answer what the plugin's
   // session.start leans on, and `start($)` raises it.
   const clock = mock.clock(on)   // the bridge loop reads the time and sleeps between restarts
-  mock.store(on, store)
+  // $.store over `store` itself, so a test can read what was kept.
+  on('store.get', (_$: any, e: any) => ({ value: store[e.key] }))
+  on('store.set', (_$: any, e: any) => { store[e.key] = e.value; return { value: undefined } })
+  on('store.delete', (_$: any, e: any) => { delete store[e.key]; return { value: undefined } })
+  on('store.keys', () => ({ value: Object.keys(store) }))
   on('session.start', async () => ({ cwd: '/' }))
   on('command.register', async (_$: any, e: any) => ({ value: { command: e.name } }))
   on('process.run', async (_$: any, e: any) => {
@@ -1071,5 +1075,224 @@ test('band: a built-in room shows its one-line summary above the prompt', SLOW, 
   ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...bandProps, bodyColumns: 60 } })
   const narrow = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
   expect(narrow).toContain('☇ Storm 75% · 5-hour 40% · spent $2.00')
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------- function rooms
+
+// rooms/snippet/room.json as the bridge reports it (the bridge tests check the file itself).
+const SNIPPET_ROOM = {"schema": 1, "id": "snippet", "version": "1.0.0", "name": "Snippets", "icon": "⌘", "color": "amber", "description": "Code you reuse, kept on this computer, one click from your clipboard.", "author": "squad-chat", "permissions": {"hosts": []}, "providers": [{"id": "list", "type": "local-list", "params": {"max": 200}}], "layout": {"cards": [{"title": "SNIPPETS", "meta": "{list.count} saved", "body": {"type": "list", "items": "list.items", "title": "name", "tag": "lang", "preview": "body", "copy": "body", "share": "body", "empty": "Nothing saved yet. Select some code, or let Claude write some, then /snippet add <name>."}}], "inline": {"type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "share": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <name>"}, "band": "{list.count} snippets", "hint": "⧉ copies · ⇪ shares · /snippet add|rename|delete", "placeholder": "/snippet add <name> · /snippet delete <name> · /help"}}
+const SNIPS = [
+  { id: 's1', name: 'curl json', lang: 'sh', body: "curl -sH 'accept: application/json' $URL", at: '2026-10-09T01:00:00Z' },
+  { id: 's2', name: 'jq tidy', lang: null, body: '\njq . file.json\n# then less', at: '2026-10-09T02:00:00Z' },
+]
+const snippetsLoaded = (items = SNIPS) => [
+  { type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] },
+  { type: 'fnroom', id: 'snippet', provider: 'list', data: { items, count: items.length }, at: Date.now() },
+]
+
+test('Snippet room: a tab, the list with copy and share, and the bridge told what is on show', SLOW, async ($, on) => {
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...snippetsLoaded())
+  await settle()
+  expect(bridge.calls.find((c) => c.path === '/fnroom/visible')?.body).toEqual({ enabled: ['snippet'], shown: null })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await ui.press({ key: 'sys-snippet' })
+  await settle()
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet'], shown: 'snippet' })
+  expect(await ui.find({ type: 'Text', text: ' ⌘ Snippets ' })).toBeDefined()   // the active tab
+  expect(await ui.find({ type: 'Text', text: 'SNIPPETS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2 saved' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'curl json' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' sh' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  jq . file.json' })).toBeDefined()   // the first line that isn't blank
+
+  await ui.press({ key: 'copy-c0-s2' })
+  expect(copied).toEqual(['\njq . file.json\n# then less'])
+  await ui.press({ key: 'share-c0-s1' })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()
+  await ui.press({ key: 'send' })
+  await settle()
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: "curl -sH 'accept: application/json' $URL", room: LOBBY.id, kind: 'code', lang: 'sh' } })
+
+  // "r" in the box asks the bridge again.
+  await ui.input({ key: 'compose', text: 'r' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/refresh', body: { room: 'snippet' } })
+  await ui.unmount()
+})
+
+test('Snippet room: an empty list says how to add one; a long one gives way with "+ more"', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'snippet' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...snippetsLoaded([]))
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /^Nothing saved yet\./ })).toBeDefined()
+  await ui.unmount()
+
+  const many = Array.from({ length: 30 }, (_, i) => ({ id: `n${i}`, name: `snippet ${String(i).padStart(2, '0')}`, lang: 'ts', body: `const x${i} = ${i}`, at: '' }))
+  bridge.emit({ type: 'fnroom', id: 'snippet', provider: 'list', data: { items: many, count: 30 }, at: Date.now() })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'snippet 00' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'snippet 29' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^\+ \d+ more$/ })).toBeDefined()
+  await ui.unmount()
+
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  expect(await ui.find({ type: 'Text', text: '⌘ Snippets' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  30 saved' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '+ 26 more' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/snippet saves the selection or the last code block, and renames, deletes, copies and shares', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
+  let selection = 'git log --oneline -5'
+  on('ui.selection', () => ({ value: { text: selection } }))
+  on('session.messages', () => ({ value: [{ role: 'assistant', text: 'Here:\n```py\nprint("hi")\n```', toolUses: [] }] }))
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...snippetsLoaded())
+  await settle()
+  bridge.replies['/fnroom/action'] = (b) => [200, { ok: true, item: { name: b.args.to ?? b.args.name, lang: b.args.lang ?? null, body: b.args.body ?? 'x' } }]
+
+  await $.command.run({ command: 'snippet', args: 'add last five' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'snippet', provider: 'list', action: 'add', args: { name: 'last five', body: 'git log --oneline -5', lang: null } } })
+  expect(logs.at(-1)).toBe('Saved "last five", 1 line.')
+
+  selection = ''
+  await $.command.run({ command: 'snippet', args: 'add hello' })
+  expect(bridge.calls.at(-1)!.body.args).toEqual({ name: 'hello', body: 'print("hi")', lang: 'py' })
+  expect(logs.at(-1)).toBe('Saved "hello" (py), 1 line.')
+
+  await $.command.run({ command: 'snippet', args: 'rename jq tidy -> jq pretty' })
+  expect(bridge.calls.at(-1)!.body).toEqual({ room: 'snippet', provider: 'list', action: 'rename', args: { name: 'jq tidy', to: 'jq pretty' } })
+  await $.command.run({ command: 'snippet', args: 'delete curl json' })
+  expect(bridge.calls.at(-1)!.body.args).toEqual({ name: 'curl json' })
+
+  await $.command.run({ command: 'snippet', args: 'copy JQ TIDY' })
+  expect(copied).toEqual(['\njq . file.json\n# then less'])
+  await $.command.run({ command: 'snippet', args: 'copy nope' })
+  expect(logs.at(-1)).toBe('No snippet called "nope".')
+
+  await $.command.run({ command: 'snippet', args: 'share curl json' })
+  expect(logs).toContain('Ready to share to #lobby: code · sh · 1 line')
+  await $.command.run({ command: 'chat-share', args: 'cancel' })
+  await $.command.run({ command: 'snippet', args: 'SHARE curl json #lobby' })   // the room isn't part of the name
+  expect(logs.filter((l) => l === 'Ready to share to #lobby: code · sh · 1 line')).toHaveLength(2)
+
+  bridge.replies['/fnroom/action'] = () => [409, { error: 'There\'s already a snippet called "hello". Rename or delete it first.' }]
+  selection = 'x'
+  await $.command.run({ command: 'snippet', args: 'add hello' })
+  expect(logs.at(-1)).toBe('There\'s already a snippet called "hello". Rename or delete it first.')
+  await $.command.run({ command: 'snippet', args: 'frobnicate' })
+  expect(logs.at(-1)).toMatch(/^Use \/snippet add <name>/)
+})
+
+test('/chat rooms takes function rooms too, and +name or -name', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...snippetsLoaded())
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms -snippet' })
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, git, agents.')
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: [], shown: null })
+  await $.command.run({ command: 'chat', args: 'rooms +snippet -git' })
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, snippet.')
+  await $.command.run({ command: 'chat', args: 'rooms weather' })
+  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, snippet.')
+  await $.command.run({ command: 'chat', args: 'rooms snippet' })
+  expect(logs.at(-1)).toBe('Rooms with tabs: snippet.')
+})
+
+test('a room new in this version gets a tab once, even for people who chose their tabs', SLOW, async ($, on) => {
+  const store: Record<string, unknown> = { sysRooms: ['usage', 'git'] }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...snippetsLoaded())
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ key: 'sys-snippet' })).toBeDefined()
+  expect(await ui.find({ key: 'sys-agents' })).toBeUndefined()   // still their choice
+  await ui.unmount()
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'snippet'])
+})
+
+test('tabs that would wrap show the rooms not on show as their icon', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...snippetsLoaded())
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), bodyColumns: 100 } })
+  expect((await ui.find({ key: 'sys-git' }))?.props.label).toBe(' ⎇ Git')
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), bodyColumns: 44 } })
+  expect((await ui.find({ key: 'sys-git' }))?.props.label).toBe(' ⎇')
+  expect((await ui.find({ key: 'sys-snippet' }))?.props.label).toBe(' ⌘')
+  await ui.unmount()
+})
+
+test('a function room in the band, and shared as a snapshot', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'snippet' } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...snippetsLoaded())
+  await settle()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '⌘ Snippets' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: '2 snippets' })).toBeDefined()
+  await band.unmount()
+
+  await $.command.run({ command: 'chat-share', args: 'snippet' })
+  expect(logs.some((l) => l.startsWith('Ready to share to #lobby: code · snippet'))).toBe(true)
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(bridge.calls.at(-1)!.body.text).toBe('Snippets\nSNIPPETS · 2 saved\n  • curl json (sh)\n  • jq tidy')
+})
+
+test('a function room shows what went wrong, and keeps its last data marked stale', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'snippet' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] })
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'Loading…' })).toBeDefined()
+  await ui.unmount()
+  bridge.emit(
+    { type: 'fnroom', id: 'snippet', provider: 'list', data: { items: SNIPS, count: 2 }, at: Date.now() },
+    { type: 'fnroom', id: 'snippet', provider: 'list', data: { items: SNIPS, count: 2 }, at: Date.now(), error: 'disk full', stale: true },
+  )
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '⚠ disk full' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stale' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'curl json' })).toBeDefined()
+  await ui.unmount()
+
+  // A restarted bridge has nothing cached: its failed first run keeps what's here.
+  bridge.emit(
+    { type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] },
+    { type: 'fnroom', id: 'snippet', provider: 'list', data: { items: SNIPS, count: 2 }, at: Date.now() },
+    { type: 'fnroom', id: 'snippet', provider: 'list', data: null, at: null, error: 'list.json isn\'t valid JSON', stale: false },
+  )
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /isn't valid JSON/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stale' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'curl json' })).toBeDefined()
   await ui.unmount()
 })
