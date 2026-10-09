@@ -213,6 +213,23 @@ export function line(els, key, pieces) {
     : Box({ key: `p${i}`, flexShrink: 0, children: [p.node ?? Text({ key: "t", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, backgroundColor: p.bg, children: p.text })] }))) });
 }
 
+// A rounded card like the chat's: a bold title, right-aligned meta (text or
+// an element), the rows. Returns the node and the rows it takes.
+export function card(els, { key, title, color, meta, metaColor, metaNode, rows, grow = false }) {
+  const { Box, Text } = els;
+  const head = Box({ key: "head", flexDirection: "row", justifyContent: "space-between", gap: 1, children: [
+    Text({ key: "title", bold: true, color, wrap: "truncate-end", children: title }),
+    metaNode ?? (meta ? Text({ key: "meta", color: metaColor ?? theme.muted, wrap: "truncate-start", children: meta }) : null),
+  ].filter(Boolean) });
+  const body = grow
+    ? [Box({ key: "body", flexDirection: "column", flexGrow: 1, overflow: "hidden", children: rows })]
+    : rows;
+  return Box({
+    key, flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1,
+    flexGrow: grow ? 1 : 0, flexShrink: grow ? 1 : 0, children: [head, ...body],
+  });
+}
+
 // Cards in priority order, as many as the height allows, a row apart so
 // their frames don't run together. What doesn't fit is named on one muted
 // line, so the person knows a taller pane shows more.

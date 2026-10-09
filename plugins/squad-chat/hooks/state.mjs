@@ -9,6 +9,10 @@ export const MAX_MESSAGES = 100;   // per room
 
 // The built-in rooms, in tab order. They need no server and no sign-in.
 export const SYS_ROOMS = ["usage", "git", "agents"];
+// Function rooms come from the bridge (manifests in rooms/<id>/room.json).
+// These have tabs until /chat rooms says otherwise.
+export const DEFAULT_ROOMS = [...SYS_ROOMS, "snippet"];
+export const ROOM_ID = /^[a-z][a-z0-9-]{1,23}$/;
 
 export const state = {
   bridge: "starting",     // starting | ready | restarting | unavailable | unconfigured
@@ -38,7 +42,9 @@ export const state = {
   dividerAt: new Map(),   // room id → read marker when the pane last caught up: the "new" line
   // The built-in rooms.
   view: "chat",           // chat | usage | git | agents: what the pane shows, kept in $.store
-  sysRooms: [...SYS_ROOMS],   // which built-in rooms have tabs (/chat rooms), kept in $.store
+  sysRooms: [...DEFAULT_ROOMS],   // which built-in and function rooms have tabs (/chat rooms), kept in $.store
+  fn: new Map(),          // function room id → { manifest, data: { provider: data }, at, error, stale }
+  fnInvalid: [],          // manifests the bridge refused: [{ dir, errors }]
   usage: createUsage(),   // this session's numbers (metrics.mjs)
   git: emptyGit(),        // the Git room's snapshot (github.mjs)
   sessionId: null,
@@ -49,10 +55,26 @@ export const state = {
   ended: false,
 };
 
-// What the pane shows: a built-in room, or the chat (a hidden room's tab
-// falls back to the chat).
+// Every room there is besides the chat: built-in first, then the function
+// rooms in the order the bridge found them.
+export function roomIds() {
+  return [...SYS_ROOMS, ...state.fn.keys()];
+}
+
+export function isFnRoom(id) {
+  return state.fn.has(id);
+}
+
+// The rooms with tabs, in tab order.
+export function enabledRooms() {
+  return roomIds().filter((id) => state.sysRooms.includes(id));
+}
+
+// What the pane shows: a built-in or function room, or the chat (a hidden
+// room's tab, or a function room the bridge hasn't reported, falls back to
+// the chat).
 export function activeView() {
-  return state.view !== "chat" && state.sysRooms.includes(state.view) ? state.view : "chat";
+  return state.view !== "chat" && enabledRooms().includes(state.view) ? state.view : "chat";
 }
 
 export function currentRoom() {
@@ -204,6 +226,25 @@ export function applyEvent(event) {
     case "status":
       state.roomStatus.set(event.room, event.status);
       return true;
+    case "fnrooms": {
+      const next = new Map();
+      for (const manifest of event.rooms ?? []) {
+        const had = state.fn.get(manifest.id);
+        next.set(manifest.id, { manifest, data: had?.data ?? {}, at: had?.at ?? {}, error: had?.error ?? {}, stale: had?.stale ?? {} });
+      }
+      state.fn = next;
+      state.fnInvalid = event.invalid ?? [];
+      return true;
+    }
+    case "fnroom": {
+      const room = state.fn.get(event.id);
+      if (!room) return false;
+      room.data[event.provider] = event.data;
+      room.at[event.provider] = event.at;
+      room.error[event.provider] = event.error ?? null;
+      room.stale[event.provider] = !!event.stale;
+      return true;
+    }
     case "sessions":
       state.sessions = (event.sessions ?? []).filter((x) => x?.id && x.id !== state.sessionId);
       return true;

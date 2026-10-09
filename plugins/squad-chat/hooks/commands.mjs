@@ -6,13 +6,13 @@
 // `say(text)`, the answer: $.ui.log for slash commands (shown, never sent to
 // the model), the pane's notice line for the input box.
 
-import { state, currentRoom, activeView, SYS_ROOMS } from "./state.mjs";
+import { state, currentRoom, activeView, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { lastCodeBlock, looksLikeDiff, snippetTitle, findSecret, tooBig, displayLines } from "./share.mjs";
 import { snapshotText } from "./sysviews.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
-// sign-in codes, room passcodes.
-export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share"]);
+// sign-in codes, room passcodes, snippets.
+export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share", "snippet"]);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE = /^\d[\d\s]{4,12}\d$/;
@@ -135,16 +135,27 @@ export async function dnd(args, say, setDnd) {
   return say(DND_MODES[mode]);
 }
 
-// "/chat rooms usage,git": which built-in rooms have tabs. "all" or "none" too.
+// "/chat rooms usage,git,snippet": which built-in and function rooms have
+// tabs. "all" or "none" too, and "+snippet" or "-git" to add or drop one.
 // `save(list)` keeps the choice.
 export async function sysRooms(args, say, save) {
   const arg = String(args ?? "").trim().toLowerCase();
-  if (!arg) return say(`Built-in rooms: ${state.sysRooms.join(", ") || "none"}. Change with /chat rooms usage,git,agents (or all, or none).`);
-  const list = arg === "all" ? [...SYS_ROOMS] : arg === "none" ? [] : arg.split(/[\s,]+/).filter(Boolean);
-  const unknown = list.filter((x) => !SYS_ROOMS.includes(x));
-  if (unknown.length) return say(`No built-in room called ${unknown.join(", ")}. They are usage, git and agents.`);
-  await save(SYS_ROOMS.filter((x) => list.includes(x)));
-  return say(state.sysRooms.length ? `Built-in rooms: ${state.sysRooms.join(", ")}.` : "Built-in rooms hidden.");
+  const known = roomIds();
+  const names = () => enabledRooms().join(", ") || "none";
+  if (!arg) return say(`Rooms with tabs: ${names()}. There are ${known.join(", ")}. Change with /chat rooms ${known.join(",")}, all, none, +name or -name.`);
+  const words = arg === "all" ? [...known] : arg === "none" ? [] : arg.split(/[\s,]+/).filter(Boolean);
+  const unknown = words.map((w) => w.replace(/^[+-]/, "")).filter((x) => !known.includes(x));
+  if (unknown.length) return say(`No room called ${unknown.join(", ")}. There are ${known.join(", ")}.`);
+  let list;
+  if (words.length && words.every((w) => /^[+-]/.test(w))) {
+    const set = new Set(state.sysRooms);
+    for (const w of words) (w[0] === "+" ? set.add(w.slice(1)) : set.delete(w.slice(1)));
+    list = [...set];
+  } else list = words.map((w) => w.replace(/^\+/, ""));
+  // Keep rooms the bridge hasn't reported yet as they were.
+  const pending = state.sysRooms.filter((x) => !known.includes(x));
+  await save([...known.filter((x) => list.includes(x)), ...pending]);
+  return say(enabledRooms().length ? `Rooms with tabs: ${names()}.` : "Room tabs hidden.");
 }
 
 const SHARE_HOLD_MS = 120_000;   // a preview waits this long for a send
@@ -186,14 +197,14 @@ export async function share(call, args, say, sources) {
   if (!room) return say("Join a room first: /room <name> <passcode>");
 
   let snippet;
-  if (SYS_ROOMS.includes(verb)) {
-    snippet = { kind: "code", lang: verb, body: snapshotText(verb) };
+  if (roomIds().includes(verb)) {
+    snippet = { kind: "code", lang: verb.slice(0, 20), body: snapshotText(verb) };
   } else if (verb === "diff") {
     const body = String(await sources.diff(rest.join(" ")) ?? "").replace(/\n$/, "");
     if (!body.trim()) return say(rest.length ? `No uncommitted changes in ${rest.join(" ")}.` : "No uncommitted changes to share.");
     snippet = { kind: "diff", lang: "diff", body };
   } else if (verb) {
-    return say(`Use ${c} [#room], ${c} diff [path] [#room], ${c} usage|git|agents [#room], ${c} to #room, ${c} send [#room] or ${c} cancel.`);
+    return say(`Use ${c} [#room], ${c} diff [path] [#room], ${c} ${roomIds().join("|")} [#room], ${c} to #room, ${c} send [#room] or ${c} cancel.`);
   } else {
     const selected = String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
     if (selected.trim()) snippet = looksLikeDiff(selected) ? { kind: "diff", lang: "diff", body: selected } : { kind: "code", lang: null, body: selected };
@@ -203,13 +214,19 @@ export async function share(call, args, say, sources) {
       snippet = { kind: "code", ...block };
     }
   }
+  return stageShare(snippet, room, say, { inPane: sources.inPane, c });
+}
+
+// Holds a snippet for a look before it goes to `room`: the pane draws a
+// preview card, a slash command answers with a few lines of it.
+function stageShare(snippet, room, say, { inPane = false, c = inPane ? "/share" : "/chat-share" } = {}) {
   const big = tooBig(snippet.body);
   if (big) return say(`Too big to share: ${big}.${snippet.kind === "diff" ? ` Share one file with ${c} diff <path>.` : " Select a smaller part."}`);
 
   const secret = findSecret(snippet.body);
   state.pendingShare = { ...snippet, room: room.id, slug: room.slug, secret, confirmed: false, until: Date.now() + SHARE_HOLD_MS };
   // The pane draws its own preview card: say only what needs saying.
-  if (sources.inPane) return secret ? say(`⚠ It looks like it has ${secret}. Check it before you send.`) : undefined;
+  if (inPane) return secret ? say(`⚠ It looks like it has ${secret}. Check it before you send.`) : undefined;
   const preview = displayLines(snippet.body, snippet.kind).slice(0, 3).map((l) => `  │ ${l.slice(0, 100)}`);
   return say([
     `Ready to share to #${room.slug}: ${snippetTitle(snippet)}`,
@@ -217,6 +234,79 @@ export async function share(call, args, say, sources) {
     ...(secret ? [`⚠ It looks like it has ${secret}. Check it before you send.`] : []),
     `${c} send to post it, ${c} to #room to pick another room, ${c} cancel to drop it.`,
   ].join("\n"));
+}
+
+// Something from a function room (a saved snippet's ⇪) to share: held for a
+// look like any snippet, for the current room or `target` ("#room").
+export function shareItem(item, say, { inPane = false, target = null } = {}) {
+  requireSignedIn();
+  let room = currentRoom();
+  if (target) {
+    const name = target.replace(/^#/, "").toLowerCase();
+    room = state.rooms.find((r) => r.slug === name);
+    if (!room) return say(`You're not in #${name}. Join it first: /room ${name} <passcode>`);
+  }
+  if (!room) return say("Join a room first: /room <name> <passcode>");
+  return stageShare({ kind: "code", lang: item.lang ?? null, body: String(item.body ?? "") }, room, say, { inPane });
+}
+
+// ---------------------------------------------------------------- the Snippet room
+
+const SNIPPET_HELP = "Use /snippet add <name>, /snippet rename <old> -> <new>, /snippet delete <name>, /snippet copy <name> or /snippet share <name> [#room].";
+
+// "/snippet add <name>" saves what's selected, or else the last code block
+// in Claude's reply. The list stays on this computer, in the Snippet room.
+// `copy(text)` puts text on the clipboard, `setView(id)` shows a room.
+export async function snippet(call, args, say, { sources, copy, setView, inPane = false } = {}) {
+  const [verb = "", ...rest] = String(args ?? "").trim().split(/\s+/).filter(Boolean);
+  const name = rest.filter((w) => !(verb === "share" && w.startsWith("#"))).join(" ");
+  if (!isFnRoom("snippet")) return say("The Snippet room hasn't loaded yet. Try again in a moment.");
+  const act = (action, a) => call("/fnroom/action", { room: "snippet", provider: "list", action, args: a });
+  const find = async (n) => {
+    if (!n) return null;
+    let items = state.fn.get("snippet")?.data.list?.items;
+    if (!items) items = (await call("/fnroom/refresh", { room: "snippet" })).data?.list?.items ?? [];
+    return items.find((x) => x.name.toLowerCase() === n.toLowerCase()) ?? null;
+  };
+  switch (verb.toLowerCase()) {
+    case "": {
+      if (!state.sysRooms.includes("snippet")) return say("The Snippet room is hidden. Bring it back with /chat rooms +snippet.");
+      return setView?.("snippet");
+    }
+    case "add": case "save": {
+      if (!name) return say("Name it: /snippet add <name>");
+      const selected = String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
+      const block = selected.trim() ? { body: selected, lang: null } : lastCodeBlock(await sources.messages());
+      if (!block?.body?.trim()) return say("Select some text first, or ask Claude for some code.");
+      const r = await act("add", { name, body: block.body, lang: block.lang ?? null });
+      const lines = r.item.body.split("\n").length;
+      const secret = findSecret(r.item.body);
+      return say(`Saved "${r.item.name}"${r.item.lang ? ` (${r.item.lang})` : ""}, ${lines} line${lines === 1 ? "" : "s"}.${secret ? ` ⚠ It looks like it has ${secret}. It stays on this computer, but check it before you share it.` : ""}`);
+    }
+    case "delete": case "remove": case "rm": {
+      if (!name) return say("Which one? /snippet delete <name>");
+      const r = await act("delete", { name });
+      return say(`Deleted "${r.item.name}".`);
+    }
+    case "rename": case "mv": {
+      const m = /^(.+?)\s*(?:->|→)\s*(.+)$/.exec(name) ?? (rest.length === 2 ? [null, rest[0], rest[1]] : null);
+      if (!m) return say("Use /snippet rename <old name> -> <new name>");
+      const r = await act("rename", { name: m[1].trim(), to: m[2].trim() });
+      return say(`Renamed it "${r.item.name}".`);
+    }
+    case "copy": case "cp": {
+      const item = await find(name);
+      if (!item) return say(name ? `No snippet called "${name}".` : "Which one? /snippet copy <name>");
+      return copy?.(item.body);
+    }
+    case "share": {
+      const item = await find(name);
+      if (!item) return say(name ? `No snippet called "${name}".` : "Which one? /snippet share <name> [#room]");
+      return shareItem(item, say, { inPane, target: rest.find((w) => w.startsWith("#")) ?? null });
+    }
+    default:
+      return say(SNIPPET_HELP);
+  }
 }
 
 // Points the waiting snippet at another of your rooms, by slug or id.
@@ -271,20 +361,22 @@ function requireSignedIn() {
 }
 
 function showView(view, say, setView) {
-  if (!state.sysRooms.includes(view)) return say(`The ${view} room is hidden. Bring it back with /chat rooms all.`);
+  if (!state.sysRooms.includes(view)) return say(`The ${view} room is hidden. Bring it back with /chat rooms +${view}.`);
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents] [#room] · /share to #room · /usage · /git · /agents · /chat · /logout · anything else is a message";
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /usage · /git · /agents · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
-// `setView(id)` shows a built-in room ("chat" for the chat), `refreshGit()`
-// fetches the Git room again.
-export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit } = {}) {
+// `setView(id)` shows a built-in or function room ("chat" for the chat),
+// `refreshGit()` fetches the Git room again, `refreshRoom(id)` a function
+// room, `copy(text)` puts text on the clipboard.
+export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit, refreshRoom, copy } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
   const view = activeView();
   if (view === "git" && /^r(efresh)?$/i.test(text)) return refreshGit?.();
+  if (isFnRoom(view) && /^r(efresh)?$/i.test(text)) return refreshRoom?.(view);
   const m = /^\/([\w-]+)\s*([\s\S]*)$/.exec(text);
   if (m) {
     const [, cmd, args] = m;
@@ -294,9 +386,9 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
         // "/chat git" typed here does what it does at the prompt.
         const [sub, ...more] = args.trim().toLowerCase().split(/\s+/).filter(Boolean);
         if (!sub || sub === "chat") return setView?.("chat");
-        if (SYS_ROOMS.includes(sub)) return showView(sub, say, setView);
+        if (roomIds().includes(sub)) return showView(sub, say, setView);
         if (sub === "dnd") return dnd(more.join(" "), say, setDnd);
-        return say("Here, /chat takes usage, git, agents or dnd. Type it at the prompt for the rest.");
+        return say(`Here, /chat takes ${roomIds().join(", ")} or dnd. Type it at the prompt for the rest.`);
       }
       case "room": return room(call, args, say);
       case "who": return who(say);
@@ -306,8 +398,11 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
       case "say": return sendMessage(call, args, say);
       case "dnd": return dnd(args, say, setDnd);
       case "share": return share(call, args, say, sources);
+      case "snippet": return snippet(call, args, say, { sources, copy, setView, inPane: true });
       case "help": return say(HELP);
-      default: return say(`Unknown command /${cmd}. Try /help.`);
+      default:
+        if (isFnRoom(cmd)) return showView(cmd, say, setView);
+        return say(`Unknown command /${cmd}. Try /help.`);
     }
   }
   if (view !== "chat") return say(`This is the ${view} room: type a command (/help), or pick a chat room to talk.`);

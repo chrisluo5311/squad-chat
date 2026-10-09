@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "snippet",
+  "version": "1.0.0",
+  "name": "Snippets",
+  "icon": "⌘",
+  "color": "amber",
+  "description": "Code you reuse, kept on this computer, one click from your clipboard.",
+  "author": "squad-chat",
+  "permissions": { "hosts": [] },
+  "providers": [
+    { "id": "list", "type": "local-list", "params": { "max": 200 } }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "SNIPPETS",
+        "meta": "{list.count} saved",
+        "body": {
+          "type": "list",
+          "items": "list.items",
+          "title": "name",
+          "tag": "lang",
+          "preview": "body",
+          "copy": "body",
+          "share": "body",
+          "empty": "Nothing saved yet. Select some code, or let Claude write some, then /snippet add <name>."
+        }
+      }
+    ],
+    "inline": { "type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <name>" },
+    "band": "{list.count} snippets",
+    "hint": "⧉ copies · ⇪ shares · /snippet add|rename|delete",
+    "placeholder": "/snippet add <name> · /snippet delete <name> · /help"
+  }
+}

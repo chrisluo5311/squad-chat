@@ -9,11 +9,12 @@
 // Inline (above the prompt): one header line, the last few messages, input.
 // Band (pane not up): one line with an Open button.
 
-import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView, enabledRooms } from "./state.mjs";
 import { theme, nameColor, glyph } from "./theme.mjs";
 import { snippetTitle, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
-import { SYS, sysDock, sysInline, sysBandPieces, sysBadge } from "./sysviews.mjs";
+import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge } from "./sysviews.mjs";
+import { fnHint, fnPlaceholder } from "./fnviews.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
 
@@ -238,21 +239,24 @@ function titleBar(els) {
   ] });
 }
 
-// The tabs: built-in rooms first, each in its own color, then a thin rule
-// and the chat rooms. The tab on show is filled with its color; the others
-// are pressable and carry a badge when something there is worth a glance.
-function roomTabs(els, handlers) {
+// The tabs: built-in and function rooms first, each in its own color, then
+// a thin rule and the chat rooms. The tab on show is filled with its color;
+// the others are pressable and carry a badge when something there is worth
+// a glance. When the labels would wrap, the rooms not on show are drawn as
+// their icon alone.
+function roomTabs(els, handlers, width) {
   const { Box, Text, Button } = els;
   const view = activeView();
+  const compact = tabRows(width, false) > 1;
   const tabs = [];
-  for (const id of state.sysRooms) {
-    const meta = SYS[id];
+  for (const id of enabledRooms()) {
+    const meta = roomMeta(id);
     const badge = view === id ? null : sysBadge(id);
     if (view === id) {
       tabs.push(Text({ key: `sys-${id}`, bold: true, color: theme.onAccent, backgroundColor: meta.color, children: ` ${meta.icon} ${meta.label} ` }));
       continue;
     }
-    const tab = Button({ key: `sys-${id}`, plain: true, label: ` ${meta.icon} ${meta.label}`, dimColor: !badge, onPress: () => handlers.onSelectView?.(id) });
+    const tab = Button({ key: `sys-${id}`, plain: true, label: compact ? ` ${meta.icon}` : ` ${meta.icon} ${meta.label}`, dimColor: !badge, onPress: () => handlers.onSelectView?.(id) });
     tabs.push(badge ? Box({ key: `sysbox-${id}`, flexDirection: "row", gap: 1, children: [tab, Text({ key: "badge", bold: true, color: badge.color, children: badge.text })] }) : tab);
   }
   const chatTabs = [];
@@ -267,7 +271,7 @@ function roomTabs(els, handlers) {
         ? Box({ key: `tabbox-${r.id}`, flexDirection: "row", gap: 1, children: [tab, Text({ key: "badge", bold: true, color: theme.amber, children: String(r.unread) })] })
         : tab);
     }
-  } else if (state.sysRooms.length) {
+  } else if (enabledRooms().length) {
     // Signed out or no room yet: one tab back to the chat's own screens.
     chatTabs.push(view === "chat"
       ? Text({ key: "tab-chat", bold: true, color: theme.onAccent, backgroundColor: theme.accent, children: " # chat " })
@@ -277,17 +281,20 @@ function roomTabs(els, handlers) {
   return Box({ key: "tabs", flexDirection: "row", flexWrap: "wrap", columnGap: 1, children: [...tabs, ...rule, ...chatTabs] });
 }
 
-// How many rows the tabs take at `width`: they wrap like words.
-function tabRows(width) {
+// How many rows the tabs take at `width`: they wrap like words. `compact`
+// as roomTabs decides it, unless given.
+function tabRows(width, compact = tabRows(width, false) > 1) {
   const view = activeView();
-  const widths = state.sysRooms.map((id) => {
+  const widths = enabledRooms().map((id) => {
     const badge = view === id ? null : sysBadge(id);
-    return cells(` ${SYS[id].icon} ${SYS[id].label}${view === id ? " " : ""}`) + (badge ? 1 + cells(badge.text) : 0);
+    const meta = roomMeta(id);
+    const label = view === id ? ` ${meta.icon} ${meta.label} ` : compact ? ` ${meta.icon}` : ` ${meta.icon} ${meta.label}`;
+    return cells(label) + (badge ? 1 + cells(badge.text) : 0);
   });
   if (widths.length) widths.push(1);   // the rule
   if (state.auth === "signed_in" && state.rooms.length) {
     for (const r of state.rooms) widths.push(cells(` #${r.slug} `) + (r.unread ? 1 + String(r.unread).length : 0));
-  } else if (state.sysRooms.length) widths.push(8);
+  } else if (widths.length) widths.push(8);
   let rows = 1;
   let used = 0;
   for (const w of widths) {
@@ -351,7 +358,7 @@ const SYS_INPUT = {
 };
 function inputMode() {
   const view = activeView();
-  if (view !== "chat") return SYS_INPUT[view];
+  if (view !== "chat") return SYS_INPUT[view] ?? { placeholder: fnPlaceholder(view), label: "run" };
   if (state.bridge !== "ready") return null;
   if (state.auth === "signed_out") return { placeholder: "you@example.com, or a name", label: "continue" };
   if (state.auth === "code_sent") return { placeholder: "8-digit code from the email", label: "sign in" };
@@ -414,8 +421,8 @@ function dockView(els, props, handlers) {
   const parts = [titleBar(els)];
   let used = 1;
 
-  if (state.sysRooms.length || (state.auth === "signed_in" && state.rooms.length)) {
-    parts.push(roomTabs(els, handlers));
+  if (enabledRooms().length || (state.auth === "signed_in" && state.rooms.length)) {
+    parts.push(roomTabs(els, handlers, width));
     used += tabRows(width);
   }
 
@@ -482,7 +489,7 @@ function sysHints(els, view, handlers) {
     Box({ key: "share", flexShrink: 0, children: [
       Button({ key: "share-snapshot", plain: true, label: "⇪ Share", onPress: () => handlers.onShare?.(view) }),
     ] }),
-    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `· ${SYS_HINTS[view]}` }),
+    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `· ${SYS_HINTS[view] ?? fnHint(view)}` }),
   ] });
 }
 
@@ -605,7 +612,7 @@ export function bandView(els, props, { onOpen }) {
   const { Box, Text, Button } = els;
   const view = activeView();
   if (view !== "chat") {
-    const meta = SYS[view];
+    const meta = roomMeta(view);
     return Box({ flexDirection: "row", children: [
       Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: [
         Box({ key: "room", flexShrink: 0, children: [Text({ key: "t", bold: true, color: meta.color, children: `${meta.icon} ${meta.label}` })] }),

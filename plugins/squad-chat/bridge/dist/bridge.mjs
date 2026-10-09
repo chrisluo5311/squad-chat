@@ -4396,8 +4396,8 @@ var require_RealtimeChannel = __commonJS({
       }
       /** @internal */
       _notThisChannelEvent(event, ref) {
-        const { close, error, leave, join: join4 } = constants_1.CHANNEL_EVENTS;
-        const events = [close, error, leave, join4];
+        const { close, error, leave, join: join6 } = constants_1.CHANNEL_EVENTS;
+        const events = [close, error, leave, join6];
         return ref && events.includes(event) && ref !== this.joinPush.ref;
       }
       /** @internal */
@@ -5576,19 +5576,19 @@ var require_base64url = __commonJS({
         throw new Error(`Invalid Base64-URL character "${String.fromCharCode(charCode)}"`);
       }
     }
-    function stringToBase64URL(str) {
+    function stringToBase64URL(str2) {
       const base64 = [];
       const emitter = (char) => {
         base64.push(char);
       };
       const state = { queue: 0, queuedBits: 0 };
-      stringToUTF8(str, (byte) => {
+      stringToUTF8(str2, (byte) => {
         byteToBase64URL(byte, state, emitter);
       });
       byteToBase64URL(null, state, emitter);
       return base64.join("");
     }
-    function stringFromBase64URL(str) {
+    function stringFromBase64URL(str2) {
       const conv = [];
       const utf8Emit = (codepoint) => {
         conv.push(String.fromCodePoint(codepoint));
@@ -5601,8 +5601,8 @@ var require_base64url = __commonJS({
       const byteEmit = (byte) => {
         stringFromUTF8(byte, utf8State, utf8Emit);
       };
-      for (let i = 0; i < str.length; i += 1) {
-        byteFromBase64URL(str.charCodeAt(i), b64State, byteEmit);
+      for (let i = 0; i < str2.length; i += 1) {
+        byteFromBase64URL(str2.charCodeAt(i), b64State, byteEmit);
       }
       return conv.join("");
     }
@@ -5628,12 +5628,12 @@ var require_base64url = __commonJS({
       }
       throw new Error(`Unrecognized Unicode codepoint: ${codepoint.toString(16)}`);
     }
-    function stringToUTF8(str, emit2) {
-      for (let i = 0; i < str.length; i += 1) {
-        let codepoint = str.charCodeAt(i);
+    function stringToUTF8(str2, emit2) {
+      for (let i = 0; i < str2.length; i += 1) {
+        let codepoint = str2.charCodeAt(i);
         if (codepoint > 55295 && codepoint <= 56319) {
           const highSurrogate = (codepoint - 55296) * 1024 & 65535;
-          const lowSurrogate = str.charCodeAt(i + 1) - 56320 & 65535;
+          const lowSurrogate = str2.charCodeAt(i + 1) - 56320 & 65535;
           codepoint = (lowSurrogate | highSurrogate) + 65536;
           i += 1;
         }
@@ -5673,20 +5673,20 @@ var require_base64url = __commonJS({
         }
       }
     }
-    function base64UrlToUint8Array(str) {
+    function base64UrlToUint8Array(str2) {
       const result = [];
       const state = { queue: 0, queuedBits: 0 };
       const onByte = (byte) => {
         result.push(byte);
       };
-      for (let i = 0; i < str.length; i += 1) {
-        byteFromBase64URL(str.charCodeAt(i), state, onByte);
+      for (let i = 0; i < str2.length; i += 1) {
+        byteFromBase64URL(str2.charCodeAt(i), state, onByte);
       }
       return new Uint8Array(result);
     }
-    function stringToUint8Array(str) {
+    function stringToUint8Array(str2) {
       const result = [];
-      stringToUTF8(str, (byte) => result.push(byte));
+      stringToUTF8(str2, (byte) => result.push(byte));
       return new Uint8Array(result);
     }
     function bytesToBase64URL(bytes) {
@@ -6059,8 +6059,8 @@ var require_helpers = __commonJS({
       }
     }
     var UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    function validateUUID(str) {
-      if (!UUID_REGEX.test(str)) {
+    function validateUUID(str2) {
+      if (!UUID_REGEX.test(str2)) {
         throw new Error("@supabase/auth-js: Expected parameter to be UUID but is not");
       }
     }
@@ -13906,9 +13906,9 @@ var require_main3 = __commonJS({
 
 // src/bridge.mjs
 import { createServer } from "node:http";
-import { mkdirSync as mkdirSync3, rmSync as rmSync3, chmodSync as chmodSync3 } from "node:fs";
+import { mkdirSync as mkdirSync4, rmSync as rmSync3, chmodSync as chmodSync4 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join as join3 } from "node:path";
+import { join as join5 } from "node:path";
 
 // node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -22826,8 +22826,411 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
   };
 }
 
+// src/rooms/registry.mjs
+import { readdirSync as readdirSync2, readFileSync as readFileSync4 } from "node:fs";
+import { join as join4 } from "node:path";
+
+// src/rooms/manifest.mjs
+var SCHEMA = 1;
+var COLORS = ["sky", "leaf", "lilac", "amber", "coral", "rose", "teal", "sand"];
+var RESERVED = /* @__PURE__ */ new Set(["chat", "usage", "git", "agents", "all", "none"]);
+var ID2 = /^[a-z][a-z0-9-]{1,23}$/;
+var PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
+var VERSION = /^\d+\.\d+\.\d+$/;
+var HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+var INTERVAL = /^\d+(ms|s|m|h)$/;
+var WIDGETS = {
+  list: { items: "path!", title: "field!", tag: "field", preview: "field", copy: "field", share: "field", max: "int", empty: "text" },
+  table: { items: "path!", columns: "columns!", max: "int", empty: "text" },
+  tiles: { tiles: "tiles!" },
+  meter: { label: "text!", value: "path!", right: "text", color: "color" },
+  text: { text: "text!", color: "color" }
+};
+function parseInterval(s) {
+  if (s == null) return null;
+  const m = /^(\d+)(ms|s|m|h)$/.exec(String(s));
+  if (!m) return null;
+  return Number(m[1]) * { ms: 1, s: 1e3, m: 6e4, h: 36e5 }[m[2]];
+}
+var str = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max;
+function checkWidget(body, where, errors) {
+  if (!body || typeof body !== "object") return errors.push(`${where}: not an object`);
+  const spec = WIDGETS[body.type];
+  if (!spec) return errors.push(`${where}: unknown widget "${body.type}" (${Object.keys(WIDGETS).join(", ")})`);
+  for (const [key, kind] of Object.entries(spec)) {
+    const v = body[key];
+    const required = kind.endsWith("!");
+    const k = kind.replace("!", "");
+    if (v === void 0) {
+      if (required) errors.push(`${where}.${key}: missing`);
+      continue;
+    }
+    if ((k === "path" || k === "field") && !(typeof v === "string" && PATH.test(v))) errors.push(`${where}.${key}: not a path`);
+    if (k === "text" && !str(v, 200)) errors.push(`${where}.${key}: 1-200 characters`);
+    if (k === "int" && !(Number.isInteger(v) && v > 0 && v <= 100)) errors.push(`${where}.${key}: a whole number 1-100`);
+    if (k === "color" && !COLORS.includes(v)) errors.push(`${where}.${key}: one of ${COLORS.join(", ")}`);
+    if (k === "columns") {
+      if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.columns: 1-8 columns`);
+      else v.forEach((c, i) => {
+        if (!(typeof c?.field === "string" && PATH.test(c.field))) errors.push(`${where}.columns[${i}].field: not a path`);
+        if (c.label != null && !str(c.label, 20)) errors.push(`${where}.columns[${i}].label: 1-20 characters`);
+        if (c.width != null && !(Number.isInteger(c.width) && c.width > 0 && c.width <= 40)) errors.push(`${where}.columns[${i}].width: 1-40`);
+        if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
+      });
+    }
+    if (k === "tiles") {
+      if (!Array.isArray(v) || !v.length || v.length > 6) errors.push(`${where}.tiles: 1-6 tiles`);
+      else v.forEach((t, i) => {
+        if (!str(t?.value, 100)) errors.push(`${where}.tiles[${i}].value: 1-100 characters`);
+        if (t?.sub != null && !str(t.sub, 100)) errors.push(`${where}.tiles[${i}].sub: 1-100 characters`);
+        if (t?.color != null && !COLORS.includes(t.color)) errors.push(`${where}.tiles[${i}].color: one of ${COLORS.join(", ")}`);
+      });
+    }
+  }
+  for (const key of Object.keys(body)) if (key !== "type" && !(key in spec)) errors.push(`${where}.${key}: not a field of ${body.type}`);
+}
+function checkManifest(m, providers) {
+  const errors = [];
+  if (!m || typeof m !== "object") return ["not a JSON object"];
+  if (m.schema !== SCHEMA) errors.push(`schema: must be ${SCHEMA}`);
+  if (!(typeof m.id === "string" && ID2.test(m.id))) errors.push("id: 2-24 lowercase letters, digits or -, starting with a letter");
+  else if (RESERVED.has(m.id)) errors.push(`id: "${m.id}" is taken`);
+  if (!(typeof m.version === "string" && VERSION.test(m.version))) errors.push("version: like 1.0.0");
+  if (!str(m.name, 20)) errors.push("name: 1-20 characters");
+  if (!(typeof m.icon === "string" && [...m.icon].length === 1)) errors.push("icon: one character");
+  if (!COLORS.includes(m.color)) errors.push(`color: one of ${COLORS.join(", ")}`);
+  if (m.description != null && !str(m.description, 200)) errors.push("description: 1-200 characters");
+  const hosts = m.permissions?.hosts ?? [];
+  if (!Array.isArray(hosts) || hosts.length > 10 || !hosts.every((h) => typeof h === "string" && HOST.test(h))) errors.push("permissions.hosts: up to 10 host names");
+  if (!Array.isArray(m.providers) || !m.providers.length || m.providers.length > 4) errors.push("providers: 1-4 providers");
+  else {
+    const seen = /* @__PURE__ */ new Set();
+    m.providers.forEach((p, i) => {
+      const where = `providers[${i}]`;
+      if (!(typeof p?.id === "string" && /^[a-z][a-z0-9_]{0,15}$/.test(p.id))) errors.push(`${where}.id: 1-16 lowercase letters, digits or _`);
+      else if (seen.has(p.id)) errors.push(`${where}.id: "${p.id}" twice`);
+      else seen.add(p.id);
+      if (!providers[p?.type]) errors.push(`${where}.type: no provider called "${p?.type}"`);
+      if (p?.params != null && (typeof p.params !== "object" || Array.isArray(p.params))) errors.push(`${where}.params: an object`);
+      for (const k of ["visible", "background"]) {
+        const v = p?.interval?.[k];
+        if (v != null && !(INTERVAL.test(v) && parseInterval(v) >= 1e3)) errors.push(`${where}.interval.${k}: like 30s or 10m, at least 1s`);
+      }
+    });
+  }
+  const l = m.layout;
+  if (!l || typeof l !== "object") errors.push("layout: missing");
+  else {
+    if (!Array.isArray(l.cards) || !l.cards.length || l.cards.length > 6) errors.push("layout.cards: 1-6 cards");
+    else l.cards.forEach((c, i) => {
+      if (!str(c?.title, 30)) errors.push(`layout.cards[${i}].title: 1-30 characters`);
+      if (c?.meta != null && !str(c.meta, 100)) errors.push(`layout.cards[${i}].meta: 1-100 characters`);
+      checkWidget(c?.body, `layout.cards[${i}].body`, errors);
+    });
+    if (l.inline != null) checkWidget(l.inline, "layout.inline", errors);
+    for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
+  }
+  return errors;
+}
+
+// src/rooms/net.mjs
+var RoomError = class extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+};
+var TIMEOUT_MS = 1e4;
+var MAX_BYTES = 1024 * 1024;
+var MAX_STRING = 2e4;
+function allowedHosts(providerHosts = [], manifestHosts = []) {
+  const declared = new Set(manifestHosts.map((h) => String(h).toLowerCase()));
+  return providerHosts.map((h) => String(h).toLowerCase()).filter((h) => declared.has(h));
+}
+async function limitedFetch(url, { hosts, timeoutMs = TIMEOUT_MS, maxBytes = MAX_BYTES, headers = {} } = {}) {
+  let target;
+  try {
+    target = new URL(url);
+  } catch {
+    throw new RoomError(400, `not a URL: ${url}`);
+  }
+  if (target.protocol !== "https:" && target.protocol !== "http:") throw new RoomError(400, `not http(s): ${url}`);
+  if (!hosts?.includes(target.hostname.toLowerCase())) throw new RoomError(403, `${target.hostname} isn't one of this room's hosts`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(target, { headers: { "user-agent": "squad-chat", ...headers }, redirect: "manual", signal: ctrl.signal });
+    if (res.status >= 300 && res.status < 400) throw new RoomError(502, `${target.hostname} redirected elsewhere`);
+    const reader = res.body?.getReader();
+    const chunks = [];
+    let size = 0;
+    if (reader) {
+      for (; ; ) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.length;
+        if (size > maxBytes) {
+          await reader.cancel();
+          throw new RoomError(502, `${target.hostname} answered more than ${Math.round(maxBytes / 1024)} KB`);
+        }
+        chunks.push(value);
+      }
+    }
+    const text = Buffer.concat(chunks).toString("utf8");
+    return {
+      status: res.status,
+      ok: res.ok,
+      text,
+      json() {
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new RoomError(502, `${target.hostname} didn't answer JSON`);
+        }
+      }
+    };
+  } catch (err) {
+    if (err instanceof RoomError) throw err;
+    if (err?.name === "AbortError") throw new RoomError(504, `${target.hostname} took longer than ${Math.round(timeoutMs / 1e3)}s`);
+    throw new RoomError(502, `couldn't reach ${target.hostname}: ${err?.cause?.code ?? err?.message ?? err}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+var ESCAPES = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
+var CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g;
+function cleanString(s) {
+  const out = String(s).replace(ESCAPES, "").replace(CONTROLS, "");
+  return out.length > MAX_STRING ? `${out.slice(0, MAX_STRING)}\u2026` : out;
+}
+function clean(value, depth = 0) {
+  if (depth > 8) return null;
+  if (typeof value === "string") return cleanString(value);
+  if (Array.isArray(value)) return value.slice(0, 500).map((v) => clean(v, depth + 1));
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[cleanString(k)] = clean(v, depth + 1);
+    return out;
+  }
+  return typeof value === "number" || typeof value === "boolean" || value == null ? value : null;
+}
+
+// src/rooms/providers/local-list.mjs
+import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, renameSync as renameSync3, mkdirSync as mkdirSync3, chmodSync as chmodSync3 } from "node:fs";
+import { join as join3 } from "node:path";
+import { randomBytes } from "node:crypto";
+var MAX_ITEMS = 200;
+var MAX_BODY = 2e4;
+var NAME2 = /^[^\n\r\t]{1,40}$/;
+var LANG2 = /^[a-z0-9+#._-]{1,20}$/;
+function load(dir) {
+  try {
+    const data = JSON.parse(readFileSync3(join3(dir, "list.json"), "utf8"));
+    return Array.isArray(data.items) ? data.items : [];
+  } catch {
+    return [];
+  }
+}
+function save(dir, items) {
+  mkdirSync3(dir, { recursive: true, mode: 448 });
+  chmodSync3(dir, 448);
+  const file = join3(dir, "list.json");
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync3(tmp, JSON.stringify({ v: 1, items }, null, 1), { mode: 384 });
+  renameSync3(tmp, file);
+}
+var byName = (a, b) => a.name.localeCompare(b.name, void 0, { sensitivity: "base" });
+var same = (a, b) => a.toLowerCase() === b.toLowerCase();
+function cleanName(name) {
+  const n = String(name ?? "").trim();
+  if (!NAME2.test(n)) throw new RoomError(400, "A name is 1-40 characters on one line.");
+  return n;
+}
+function find(items, name) {
+  const n = cleanName(name);
+  const i = items.findIndex((x) => same(x.name, n));
+  if (i < 0) throw new RoomError(404, `No snippet called "${n}".`);
+  return i;
+}
+var local_list_default = {
+  type: "local-list",
+  hosts: [],
+  async fetch(params, ctx) {
+    const items = load(ctx.dataDir).sort(byName);
+    return { items, count: items.length };
+  },
+  actions: {
+    add(params, args, ctx) {
+      const items = load(ctx.dataDir);
+      const name = cleanName(args.name);
+      const body = String(args.body ?? "").replace(/^(\s*\n)+/, "").trimEnd();
+      if (!body.trim()) throw new RoomError(400, "Nothing to save.");
+      if (body.length > MAX_BODY) throw new RoomError(413, `Too long to save: ${body.length} characters, more than ${MAX_BODY}.`);
+      if (items.some((x) => same(x.name, name))) throw new RoomError(409, `There's already a snippet called "${name}". Rename or delete it first.`);
+      const max = Math.min(MAX_ITEMS, Number(params.max) || MAX_ITEMS);
+      if (items.length >= max) throw new RoomError(409, `That's ${max} snippets already. Delete one first.`);
+      const lang = args.lang && LANG2.test(args.lang) ? args.lang : null;
+      const item = { id: randomBytes(6).toString("hex"), name, lang, body, at: (/* @__PURE__ */ new Date()).toISOString() };
+      items.push(item);
+      save(ctx.dataDir, items);
+      return { ok: true, item };
+    },
+    delete(params, args, ctx) {
+      const items = load(ctx.dataDir);
+      const [item] = items.splice(find(items, args.name), 1);
+      save(ctx.dataDir, items);
+      return { ok: true, item };
+    },
+    rename(params, args, ctx) {
+      const items = load(ctx.dataDir);
+      const i = find(items, args.name);
+      const to = cleanName(args.to);
+      if (items.some((x, j) => j !== i && same(x.name, to))) throw new RoomError(409, `There's already a snippet called "${to}".`);
+      items[i] = { ...items[i], name: to };
+      save(ctx.dataDir, items);
+      return { ok: true, item: items[i] };
+    }
+  }
+};
+
+// src/rooms/registry.mjs
+var PROVIDERS = Object.fromEntries([local_list_default].map((p) => [p.type, p]));
+function readRooms(dir, providers) {
+  const rooms = [];
+  const invalid = [];
+  let names = [];
+  try {
+    names = readdirSync2(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch {
+    return { rooms, invalid };
+  }
+  for (const name of names.sort()) {
+    const file = join4(dir, name, "room.json");
+    let m;
+    try {
+      m = JSON.parse(readFileSync4(file, "utf8"));
+    } catch (err) {
+      invalid.push({ dir: join4(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
+      continue;
+    }
+    const errors = checkManifest(m, providers);
+    if (!errors.length && m.id !== name) errors.push(`id: "${m.id}" but its folder is "${name}"`);
+    if (errors.length) invalid.push({ dir: join4(dir, name), errors });
+    else rooms.push(m);
+  }
+  return { rooms, invalid };
+}
+function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
+}, providers = PROVIDERS }) {
+  const rooms = /* @__PURE__ */ new Map();
+  const invalid = [];
+  for (const dir of dirs.filter(Boolean)) {
+    const found = readRooms(dir, providers);
+    invalid.push(...found.invalid);
+    for (const m of found.rooms) {
+      if (rooms.has(m.id)) invalid.push({ dir: join4(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
+      else rooms.set(m.id, m);
+    }
+  }
+  let enabled = /* @__PURE__ */ new Set();
+  let shown = null;
+  const last = /* @__PURE__ */ new Map();
+  const timers = /* @__PURE__ */ new Map();
+  const running = /* @__PURE__ */ new Set();
+  const key = (id, pid) => `${id}/${pid}`;
+  function ctxFor(m, p) {
+    const def = providers[p.type];
+    const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
+    return {
+      dataDir: join4(dataDir, m.id),
+      fetch: (url, init) => limitedFetch(url, { ...init, hosts })
+    };
+  }
+  async function run(id, pid) {
+    const m = rooms.get(id);
+    const p = m?.providers.find((x) => x.id === pid);
+    if (!p) return;
+    const k = key(id, pid);
+    if (running.has(k)) return;
+    running.add(k);
+    clearTimeout(timers.get(k));
+    try {
+      const data = clean(await providers[p.type].fetch(p.params ?? {}, ctxFor(m, p)));
+      const at = Date.now();
+      last.set(k, { data, at });
+      emit2({ type: "fnroom", id, provider: pid, data, at });
+    } catch (err) {
+      if (!(err instanceof RoomError)) log2(`room ${id}/${pid}: ${err?.stack ?? err}`);
+      const prev = last.get(k);
+      emit2({ type: "fnroom", id, provider: pid, data: prev?.data ?? null, at: prev?.at ?? null, error: err?.message ?? String(err), stale: !!prev });
+    } finally {
+      running.delete(k);
+      schedule(id, pid);
+    }
+  }
+  function schedule(id, pid) {
+    const k = key(id, pid);
+    clearTimeout(timers.get(k));
+    timers.delete(k);
+    if (!enabled.has(id)) return;
+    const p = rooms.get(id)?.providers.find((x) => x.id === pid);
+    const ms = parseInterval(shown === id ? p?.interval?.visible : p?.interval?.background);
+    if (ms) timers.set(k, setTimeout(() => void run(id, pid), ms));
+  }
+  return {
+    report() {
+      emit2({ type: "fnrooms", rooms: [...rooms.values()], invalid });
+    },
+    // Which rooms have tabs, and which is on show. A room just enabled, or
+    // just shown with data older than its visible interval, runs now.
+    setVisible({ enabled: list = [], shown: now = null } = {}) {
+      const before = enabled;
+      enabled = new Set(list.filter((id) => rooms.has(id)));
+      const wasShown = shown;
+      shown = enabled.has(now) ? now : null;
+      for (const id of rooms.keys()) {
+        for (const p of rooms.get(id).providers) {
+          const k = key(id, p.id);
+          if (!enabled.has(id)) {
+            clearTimeout(timers.get(k));
+            timers.delete(k);
+            continue;
+          }
+          const age = Date.now() - (last.get(k)?.at ?? 0);
+          const fresh = parseInterval(p.interval?.visible);
+          if (!before.has(id) || !last.has(k) || shown === id && wasShown !== id && fresh && age > fresh) void run(id, p.id);
+          else schedule(id, p.id);
+        }
+      }
+      return { ok: true };
+    },
+    async refresh(id) {
+      const m = rooms.get(id);
+      if (!m) throw new RoomError(404, `no room called ${id}`);
+      await Promise.all(m.providers.map((p) => run(id, p.id)));
+      return { ok: true, data: Object.fromEntries(m.providers.map((p) => [p.id, last.get(key(id, p.id))?.data ?? null])) };
+    },
+    // One of a provider's actions; the provider runs again after it.
+    async action({ room: id, provider: pid, action, args = {} } = {}) {
+      const m = rooms.get(id);
+      if (!m) throw new RoomError(404, `no room called ${id}`);
+      const p = m.providers.find((x) => x.id === pid) ?? (pid ? null : m.providers[0]);
+      if (!p) throw new RoomError(404, `room ${id} has no provider ${pid}`);
+      const fn = providers[p.type].actions?.[action];
+      if (typeof fn !== "function") throw new RoomError(404, `${p.type} has no action ${action}`);
+      const r = await fn(p.params ?? {}, args && typeof args === "object" ? args : {}, ctxFor(m, p));
+      await run(id, p.id);
+      return clean(r ?? { ok: true });
+    },
+    close() {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    }
+  };
+}
+
 // src/bridge.mjs
-var MAX_BODY = 64 * 1024;
+var MAX_BODY2 = 64 * 1024;
 var env = process.env;
 var token = env.SQUAD_BRIDGE_TOKEN;
 function emit(event) {
@@ -22843,11 +23246,11 @@ if (!token) {
 }
 var configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
 if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
-var configDir = env.SQUAD_CONFIG_DIR || join3(env.XDG_CONFIG_HOME || join3(homedir(), ".config"), "squad-chat");
-var socketDir = env.SQUAD_SOCKET_DIR || join3(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
-mkdirSync3(socketDir, { recursive: true, mode: 448 });
-chmodSync3(socketDir, 448);
-var socketPath = join3(socketDir, `${process.pid}.sock`);
+var configDir = env.SQUAD_CONFIG_DIR || join5(env.XDG_CONFIG_HOME || join5(homedir(), ".config"), "squad-chat");
+var socketDir = env.SQUAD_SOCKET_DIR || join5(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
+mkdirSync4(socketDir, { recursive: true, mode: 448 });
+chmodSync4(socketDir, 448);
+var socketPath = join5(socketDir, `${process.pid}.sock`);
 rmSync3(socketPath, { force: true });
 var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
@@ -22857,10 +23260,20 @@ var chat = configured ? new Chat({
   log,
   debug: env.SQUAD_DEBUG === "1"
 }) : null;
-var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join3(socketDir, "sessions"), emit });
+var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join5(socketDir, "sessions"), emit });
+var fnRooms = roomRegistry({
+  dirs: [env.SQUAD_ROOMS_DIR, join5(configDir, "rooms")],
+  dataDir: join5(configDir, "room-data"),
+  emit,
+  log
+});
 var localRoutes = {
   "GET /ping": () => ({ ok: true, pid: process.pid }),
   "POST /sessions/beat": (b) => (board.beat(b), { ok: true }),
+  "GET /fnroom/list": () => (fnRooms.report(), { ok: true }),
+  "POST /fnroom/visible": (b) => fnRooms.setVisible(b),
+  "POST /fnroom/refresh": (b) => fnRooms.refresh(b.room),
+  "POST /fnroom/action": (b) => fnRooms.action(b),
   "POST /shutdown": () => {
     setTimeout(() => shutdown(0), 0);
     return { ok: true };
@@ -22890,7 +23303,7 @@ function readBody(req) {
     req.setEncoding("utf8");
     req.on("data", (c) => {
       data += c;
-      if (data.length > MAX_BODY) {
+      if (data.length > MAX_BODY2) {
         reject(new HttpError(413, "request too large"));
         req.destroy();
       }
@@ -22931,6 +23344,7 @@ async function shutdown(code) {
   server.close();
   rmSync3(socketPath, { force: true });
   board.close();
+  fnRooms.close();
   await chat?.shutdown().catch(() => {
   });
   process.exit(code);
@@ -22943,8 +23357,9 @@ var watch2 = setInterval(() => {
   if (process.ppid !== parent) shutdown(0);
 }, 5e3);
 server.listen(socketPath, () => {
-  chmodSync3(socketPath, 384);
+  chmodSync4(socketPath, 384);
   emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
   board.report();
+  fnRooms.report();
   chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
 });

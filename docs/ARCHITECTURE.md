@@ -74,9 +74,10 @@ Two ways to sign in, both through Supabase Auth:
 
 `plugins/squad-chat/bridge/src/`:
 
-* `bridge.mjs`: the process. Control API over the Unix socket (`/login/name`, `/login/start`, `/login/verify`, `/logout`, `/name`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/typing`, `/status`, `/read`, `/who`, `/state`, `/sessions/beat`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `typing`, `name`, `friends`, `status`, `sessions`, `error`), and the parent watch. Without a server configured it still starts, for the heartbeats alone: it reports `unconfigured`, its `ready` says `chat: false`, and the chat routes answer 503.
+* `bridge.mjs`: the process. Control API over the Unix socket (`/login/name`, `/login/start`, `/login/verify`, `/logout`, `/name`, `/room`, `/room/select`, `/room/leave`, `/room/delete`, `/send`, `/typing`, `/status`, `/read`, `/who`, `/state`, `/sessions/beat`, `/fnroom/list`, `/fnroom/visible`, `/fnroom/refresh`, `/fnroom/action`, `/ping`, `/shutdown`), NDJSON events on stdout (`ready`, `auth`, `rooms`, `message`, `presence`, `typing`, `name`, `friends`, `status`, `sessions`, `fnrooms`, `fnroom`, `error`), and the parent watch. Without a server configured it still starts, for the heartbeats alone: it reports `unconfigured`, its `ready` says `chat: false`, and the chat routes answer 503.
 * `chat.mjs`: everything Supabase. Sign-in with the emailed code, rooms, one private channel per room, catch-up, unread counts, heartbeats and the friends list.
 * `sessions.mjs`: the heartbeat board for the Agents room (see [Built-in rooms](#built-in-rooms)).
+* `rooms/`: the function rooms (see [Function rooms](#function-rooms)): `manifest.mjs` checks a room's manifest, `registry.mjs` loads the rooms and runs their providers, `net.mjs` holds what a provider may fetch, and `providers/` has one file per provider.
 * `file-storage.mjs`: the session file, `~/.config/squad-chat/session.json`, written `0600` through a temp file and a rename.
 
 Things that took a while to get right:
@@ -100,6 +101,29 @@ The Usage, Git and Agents tabs are drawn by the mod from what it can read on thi
 * **Git.** `github.mjs` runs `git status --porcelain=v2 --branch` and a handful of `gh … --json` calls in parallel through `$.process.run` in the session's folder, as the person is already signed in to `gh`. It polls every minute while the room is on show and every five minutes otherwise, and once more a few seconds after a `git push` or `gh pr create` goes through the Bash tool. A failed refresh keeps the last snapshot, marked stale. Comparing two snapshots gives the toasts: checks failing, a review asked of you, your PR approved, merged or in conflict.
 * **Agents.** Each session's mod builds a heartbeat (`sessions.mjs`): folder name, branch, model, what it's doing, its subagent tree and its last dozen tool calls, each summarized in a few words with secret-looking text masked. It posts it to its bridge at most once a second while things change, and every ten seconds otherwise. The bridge writes it to `/tmp/squad-chat-<uid>/sessions/<session id>.json` (folder `0700`, file `0600`, through a temp file and a rename), watches the folder, and sends the mod a `sessions` event with every live heartbeat. A file is dropped when its bridge's pid is gone or it hasn't been written for 30 seconds, and a bridge deletes its own file when it shuts down. The folder sits beside the sockets, not in the config folder, so sessions under different `SQUAD_CONFIG_DIR`s still see each other.
 * **Drawing.** `sysviews.mjs` builds each room from the same rounded card as the chat, with `widgets.mjs` for eighth-block meters, sparklines, stat tiles and rows whose fixed parts never shrink. `stackCards` places cards by priority in the height the dock has and names the ones that didn't fit. One loop in the mod ticks every second: a redraw while something runs (spinners and timers), the subagents' status, the heartbeat and the Git poll.
+
+## Function rooms
+
+A function room is a room drawn from data, not from code of its own: a manifest, `rooms/<id>/room.json`, names its providers, the hosts they may reach and a layout. Snippets is the first. The manifest is data: nothing in it runs, so a room someone else wrote can't do more than the providers squad-chat ships allow.
+
+```jsonc
+{
+  "schema": 1, "id": "snippet", "version": "1.0.0", "name": "Snippets", "icon": "⌘", "color": "amber",
+  "permissions": { "hosts": [] },
+  "providers": [{ "id": "list", "type": "local-list", "params": { "max": 200 } }],
+  "layout": {
+    "cards": [{ "title": "SNIPPETS", "meta": "{list.count} saved",
+                "body": { "type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "share": "body" } }],
+    "band": "{list.count} snippets"
+  }
+}
+```
+
+* **Where rooms come from.** The bridge reads the rooms squad-chat ships (`plugins/squad-chat/rooms/`, passed as `SQUAD_ROOMS_DIR`), then any in `~/.config/squad-chat/rooms/`, which can't take a shipped room's id. `manifest.mjs` checks each one: its id, name, icon and color, that every provider exists, the hosts, and that the layout uses only known widgets with plain paths. One that doesn't check out is skipped, and the reasons go to the debug log.
+* **Providers.** Each is a module in `bridge/src/rooms/providers/` with a `type`, the `hosts` it may ever reach, `fetch(params, ctx)` for its data and named `actions` (Snippets has `add`, `rename` and `delete`). `ctx.fetch` reaches only the hosts both the provider and the manifest name, within 10 seconds and 1 MB, and refuses redirects. `ctx.dataDir` is the room's own folder under `~/.config/squad-chat/room-data/`. Every string in a provider's answer loses terminal escapes and control characters before it leaves the bridge.
+* **When they run.** The mod tells the bridge which function rooms have tabs and which is on show (`/fnroom/visible`, only when that changes). A provider runs when its room gets a tab, after each of its actions, on `/fnroom/refresh` (`r` in the room), and on its `interval`: `visible` while its room is on show, `background` otherwise. A failed run keeps the last data, marked stale, with the error.
+* **Drawing.** `fnviews.mjs` fills the layout in from the providers' data: `list`, `table`, `tiles`, `meter` and `text` widgets, bound with paths such as `list.items` and templates such as `{list.count} saved`. One layout gives the docked cards (a long list gives up rows, "+ 3 more", before a card is left out), the inline pane, the band and the plain-text snapshot `/chat-share <room>` posts.
+* **Tabs.** Function rooms sit after the built-in ones. `/chat rooms` takes both, with `+name` and `-name`. A room that's new in a version gets its tab once, even for people who chose their tabs before (`roomsOffered` in `$.store`). Taken away, it stays away.
 
 ## Function rooms: Phase 0
 
@@ -125,4 +149,5 @@ Function rooms are rooms you install: a JSON manifest drawn with the built-in ro
 | `supabase/tests/rls.test.sql` | `supabase test db` | Access control, limits, cascades (pgTAP) |
 | `bridge-tests/` | `npm test` in `plugins/squad-chat/bridge` | Two users, two real bridges, local Supabase: sign-in, passcodes, presence, messages, a network drop through a cuttable proxy, restarts, unread, deleting rooms, `kill -9` |
 | `bridge-tests/sessions.test.mjs` | the same `npm test`, no Supabase needed | Two bridges without a server sharing heartbeats, a dead session dropped, refusing bad heartbeats, cleaning up on shutdown |
-| `plugins/squad-chat/tests/` | `claude plugin test ./plugins/squad-chat` | The mod against a fake bridge: sign-in, views, band, status line, read markers, mentions, tabs, room commands, room text never reaching the model, and the built-in rooms (usage figures, tool timing passed through untouched, `gh` results and toasts, other sessions, snapshots) |
+| `bridge-tests/fnrooms.test.mjs` | the same `npm test`, no Supabase needed | Loading rooms and refusing bad manifests, the Snippets list (add, rename, delete, a private file, kept across restarts), fetch held to a room's hosts, time and size, and strings cleaned of terminal escapes |
+| `plugins/squad-chat/tests/` | `claude plugin test ./plugins/squad-chat` | The mod against a fake bridge: sign-in, views, band, status line, read markers, mentions, tabs, room commands, room text never reaching the model, the built-in rooms (usage figures, tool timing passed through untouched, `gh` results and toasts, other sessions, snapshots), and function rooms (the Snippets room, `/snippet`, icon tabs, the band, stale data) |

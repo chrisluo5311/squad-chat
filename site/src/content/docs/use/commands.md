@@ -34,7 +34,15 @@ description: Every squad-chat slash command, what it does, and examples.
 | `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
 | `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
 | `/chat-share to #room` | Send what's waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. |
-| `/chat-share usage` / `git` / `agents` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+| `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+
+### Snippets
+
+| Command | What it does |
+| --- | --- |
+| `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the [Snippets room](/squad-chat/use/built-in-rooms/#-snippets) |
+| `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
+| `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
 
 ### Notifications and built-in rooms
 
@@ -42,12 +50,12 @@ description: Every squad-chat slash command, what it does, and examples.
 | --- | --- |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, or `all`, or `none` |
+| `/chat usage` / `git` / `agents` / `snippet` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 
 ## In the pane
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the share preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room, `r` refreshes.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the share preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git and Snippets rooms, `r` refreshes.
 
 :::tip
 Type passcodes in the pane. It never touches the conversation, while a slash command's raw text stays in one bookkeeping line of the local transcript. See [Privacy & security](/squad-chat/reference/privacy/).

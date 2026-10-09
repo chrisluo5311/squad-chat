@@ -15,6 +15,7 @@ export const LOCAL_URL = "http://127.0.0.1:56421";
 export const LOCAL_KEY = process.env.SQUAD_TEST_SUPABASE_KEY || "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
 const MAILPIT = "http://127.0.0.1:56424";
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), "../plugins/squad-chat/bridge/dist/bridge.mjs");
+const ROOMS = join(dirname(fileURLToPath(import.meta.url)), "../plugins/squad-chat/rooms");
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const runId = () => randomBytes(3).toString("hex");
@@ -28,8 +29,9 @@ export async function localStackUp() {
 export class Bridge {
   // `url: null` starts it without a server (heartbeats only); `sessionsDir`
   // shares the sessions' heartbeat folder between bridges.
-  constructor(name, { url = LOCAL_URL, configDir, sessionsDir } = {}) {
+  constructor(name, { url = LOCAL_URL, configDir, sessionsDir, roomsDir = ROOMS } = {}) {
     this.name = name;
+    this.roomsDir = roomsDir;
     this.url = url;
     this.sessionsDir = sessionsDir;
     this.configDir = configDir ?? mkdtempSync(join(tmpdir(), `sq-${name}-`));
@@ -52,6 +54,7 @@ export class Bridge {
       SQUAD_REFRESH_MS: "2000",   // notice deleted rooms quickly
     };
     if (this.sessionsDir) env.SQUAD_SESSIONS_DIR = this.sessionsDir;
+    if (this.roomsDir) env.SQUAD_ROOMS_DIR = this.roomsDir;
     this.child = spawn(process.execPath, [BRIDGE], { env, stdio: ["ignore", "pipe", "pipe"] });
     this.exited = new Promise((r) => this.child.on("exit", (code, signal) => r({ code, signal })));
     let buf = "";

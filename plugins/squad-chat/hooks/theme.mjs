@@ -26,6 +26,18 @@ export const theme = {
   agents: "#C8A2E0",       // lilac
 };
 
+// The colors a function room's manifest may name, from the same palette.
+export const palette = {
+  sky: "#7FB6E2",
+  leaf: "#6CC070",
+  lilac: "#C8A2E0",
+  amber: "#E2B86B",
+  coral: "#D97757",
+  rose: "#E58FA8",
+  teal: "#6FC2B5",
+  sand: "#D9A877",
+};
+
 // Green, amber or red for how full something is (a percent, 0-100).
 export function level(pct) {
   if (pct >= 85) return theme.error;

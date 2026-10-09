@@ -9,19 +9,25 @@ import { state } from "./state.mjs";
 import { theme, level, nameColor } from "./theme.mjs";
 import {
   cells, clip, fit, fmtTokens, fmtUsd, fmtDur, fmtSpan, relTime, age, resetLabel,
-  bar, sparkline, meter, tiles, line, col, stackCards, CARD_GAP, LABEL_W,
+  bar, sparkline, meter, tiles, line, col, stackCards, card, CARD_GAP, LABEL_W,
 } from "./widgets.mjs";
 import {
   totalTokens, cacheRatio, burnRate, limitWindows, spendSeries, toolRows, agentTree, agentCounts, isEnded, topTool,
 } from "./metrics.mjs";
 import { gitAttention, ghStatusText } from "./github.mjs";
 import { orderSessions, mergedFeed } from "./sessions.mjs";
+import { fnMeta, fnDock, fnInline, fnBandPieces, fnSnapshot } from "./fnviews.mjs";
 
 export const SYS = {
   usage: { icon: "◔", label: "Usage", color: theme.usage },
   git: { icon: "⎇", label: "Git", color: theme.git },
   agents: { icon: "⟡", label: "Agents", color: theme.agents },
 };
+
+// A room's icon, label and color: built-in or function room.
+export function roomMeta(id) {
+  return SYS[id] ?? fnMeta(id);
+}
 
 const SPIN = ["◐", "◓", "◑", "◒"];
 const spin = (now) => SPIN[Math.floor(now / 1000) % SPIN.length];
@@ -41,23 +47,6 @@ function limitMeter(els, l, w) {
 const LIMIT_NAMES = { five_hour: "5-hour", seven_day: "7-day", seven_day_opus: "7d opus", seven_day_sonnet: "7d sonnet", spend_limit: "Spend" };
 function limitName(kind) {
   return LIMIT_NAMES[kind] ?? String(kind).replace(/_/g, " ");
-}
-
-// A rounded card like the chat's: a bold title, right-aligned meta (text or
-// an element), the rows. Returns the node and the rows it takes.
-function card(els, { key, title, color, meta, metaColor, metaNode, rows, grow = false }) {
-  const { Box, Text } = els;
-  const head = Box({ key: "head", flexDirection: "row", justifyContent: "space-between", gap: 1, children: [
-    Text({ key: "title", bold: true, color, wrap: "truncate-end", children: title }),
-    metaNode ?? (meta ? Text({ key: "meta", color: metaColor ?? theme.muted, wrap: "truncate-start", children: meta }) : null),
-  ].filter(Boolean) });
-  const body = grow
-    ? [Box({ key: "body", flexDirection: "column", flexGrow: 1, overflow: "hidden", children: rows })]
-    : rows;
-  return Box({
-    key, flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1,
-    flexGrow: grow ? 1 : 0, flexShrink: grow ? 1 : 0, children: [head, ...body],
-  });
 }
 
 const sized = (name, node, rowCount) => ({ name, node, height: 3 + rowCount });
@@ -495,6 +484,7 @@ function agentsDock(els, w, capacity, handlers, now) {
 // The docked pane's body for a built-in room: cards within `capacity` rows.
 export function sysDock(els, view, width, capacity, handlers, now = Date.now()) {
   const w = Math.max(20, width - 4);   // inside a card's border and padding
+  if (!SYS[view]) return fnDock(els, view, w, capacity, handlers);
   if (view === "usage") return usageDock(els, w, capacity, handlers, now);
   if (view === "git") return gitDock(els, w, capacity, handlers, now);
   return agentsDock(els, w, capacity, handlers, now);
@@ -504,6 +494,7 @@ export function sysDock(els, view, width, capacity, handlers, now = Date.now()) 
 export function sysInline(els, view, width, handlers, now = Date.now()) {
   const { Text } = els;
   const w = Math.max(20, width);
+  if (!SYS[view]) return fnInline(els, view, w, handlers);
   const meta = SYS[view];
   const head = (text, right) => line(els, "head", [
     { text: `${meta.icon} ${meta.label}`, bold: true, color: meta.color },
@@ -583,6 +574,7 @@ export function forecast(pct) {
 // spent $1.21": the context as a forecast once measured, the 5-hour window,
 // and the spend once there is some.
 export function sysBandPieces(view, width = 0) {
+  if (!SYS[view]) return fnBandPieces(view);
   const sep = { text: " · ", color: theme.muted };
   const join = (list) => list.filter(Boolean).flatMap((p, i) => (i ? [sep, ...p] : p));
   const figure = (label, pct) => [{ text: `${label} `, color: theme.muted }, { text: `${Math.round(pct)}%`, color: level(pct), bold: true }];
@@ -665,6 +657,7 @@ const textBar = (pct, width) => {
 
 // A built-in room as plain text, for a snippet card in a chat room.
 export function snapshotText(view, now = Date.now()) {
+  if (!SYS[view]) return fnSnapshot(view);
   const W = 20;
   const out = [];
   if (view === "usage") {

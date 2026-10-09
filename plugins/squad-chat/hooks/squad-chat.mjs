@@ -7,11 +7,12 @@
 //   commands.mjs  slash commands and the pane's input box
 //   views.mjs     the pane
 //   sysviews.mjs  the built-in rooms (Usage, Git, Agents), with widgets.mjs
+//   fnviews.mjs   function rooms, drawn from the manifests the bridge loads
 //   metrics.mjs   this session's numbers, github.mjs the Git room's data,
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 
-import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
+import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
@@ -80,7 +81,7 @@ async function runBridge($, options) {
     try {
       const child = $.process.spawn({
         argv: ["node", `${$.plugin.root}/bridge/dist/bridge.mjs`],
-        env: { SQUAD_BRIDGE_TOKEN: state.token, ...serverEnv(options) },
+        env: { SQUAD_BRIDGE_TOKEN: state.token, SQUAD_ROOMS_DIR: `${$.plugin.root}/rooms`, ...serverEnv(options) },
       });
       for await (const { stream, text } of child) {
         if (stream === "stderr") { $.ui.log(`squad-chat bridge: ${text.trimEnd()}`, { to: "debug" }); continue; }
@@ -93,6 +94,10 @@ async function runBridge($, options) {
           let event;
           try { event = JSON.parse(line); }
           catch { $.ui.log(`squad-chat bridge: unparsable line: ${line.slice(0, 120)}`, { to: "debug" }); continue; }
+          if (event.type === "fnrooms") {
+            lastVisible = "";   // a new bridge knows nothing yet
+            for (const bad of event.invalid ?? []) $.ui.log(`squad-chat: room ${bad.dir} skipped: ${bad.errors.join("; ")}`, { to: "debug" });
+          }
           if (applyEvent(event)) afterChange($);
           // A new or restarted bridge starts out available: tell it again.
           if (event.type === "auth" && event.state === "signed_in" && isQuiet()) sendStatus($);
@@ -165,12 +170,48 @@ async function openPane($) {
 // @mention when the person asked for that (/chat notify on).
 function afterChange($) {
   $.ui.invalidate("ui.render");
+  syncRooms($);
   $.ui.status(statusText());
   if (state.mention) {
     const m = state.mention;
     state.mention = null;
     if (state.notify) $.ui.toast(`💬 ${m.user} in #${m.slug}: ${m.body.slice(0, 80)}`);
   }
+}
+
+// ---------------------------------------------------------------- function rooms
+
+// Tell the bridge which function rooms have tabs and which is on show, so it
+// runs their providers (and polls the one on show more often). Only on change.
+let lastVisible = "";
+function syncRooms($) {
+  if (!state.socket || !state.fn.size) return;
+  const enabled = enabledRooms().filter(isFnRoom);
+  const view = activeView();
+  const shown = state.paneShown && isFnRoom(view) ? view : null;
+  const key = JSON.stringify([enabled, shown]);
+  if (key === lastVisible) return;
+  lastVisible = key;
+  callBridge($, "/fnroom/visible", { enabled, shown }).catch((err) => {
+    lastVisible = "";
+    $.ui.log(`squad-chat: rooms: ${err?.message ?? err}`, { to: "debug" });
+  });
+}
+
+async function refreshRoom($, id) {
+  try {
+    await callBridge($, "/fnroom/refresh", { room: id });
+  } catch (err) {
+    state.notice = err?.message ?? String(err);
+    $.ui.invalidate("ui.render");
+  }
+}
+
+// A function room's ⇪: held for a look, like any snippet.
+function shareItemFromPane($, item) {
+  const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
+  try { shareItem(item, say, { inPane: true }); } catch (err) { say(err?.message ?? String(err)); }
+  $.ui.invalidate("ui.render");
 }
 
 // ---------------------------------------------------------------- do not disturb
@@ -234,6 +275,12 @@ async function shareFromPane($, verb) {
     say(err?.message ?? String(err));
   }
   $.ui.invalidate("ui.render");
+}
+
+// Copy from a command: at the prompt, or typed in the pane's box.
+async function copyText($, text, say) {
+  const r = await $.ui.copy({ text });
+  say(r?.isCopied ? "Copied." : `Couldn't copy${r?.reason ? `: ${r.reason}` : ""}.`);
 }
 
 async function copySnippet($, text, surface) {
@@ -304,6 +351,8 @@ async function submitFromPane($, value) {
       sources: shareSources($, { inPane: true }),
       setView: (view) => setView($, view),
       refreshGit: () => refreshGit($),
+      refreshRoom: (id) => refreshRoom($, id),
+      copy: (text) => copyText($, text, say),
     });
     state.dividerAt.clear();   // they've replied: everything above is read
     await markRead($);         // they're looking at the room they just wrote in
@@ -460,7 +509,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or the Usage, Git and Agents rooms (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents | rooms <list> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet | rooms <list> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -468,6 +517,7 @@ const COMMANDS = [
   { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, your diff, or a Usage/Git/Agents snapshot to the room", argumentHint: "[diff [path] | usage | git | agents] [#room] | to #room | send [#room] | cancel" },
   { name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>" },
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
+  { name: "snippet", description: "squad-chat: save code you reuse (the selection, or Claude's last code block), then copy or share it from the Snippet room", argumentHint: "add <name> | rename <old> -> <new> | delete <name> | copy <name> | share <name> [#room]" },
 ];
 
 export function register(on, options) {
@@ -484,9 +534,19 @@ export function register(on, options) {
     state.dnd = ["on", "off", "auto"].includes(savedDnd) ? savedDnd : "off";
     wasQuiet = isQuiet();   // already in effect: no summary for a reload
     const savedRooms = await $.store.get("sysRooms");
-    if (Array.isArray(savedRooms)) state.sysRooms = SYS_ROOMS.filter((x) => savedRooms.includes(x));
+    if (Array.isArray(savedRooms)) state.sysRooms = savedRooms.filter((x) => typeof x === "string" && ROOM_ID.test(x));
+    // A room that's new in this version gets a tab once, even for people who
+    // chose their tabs before it existed. Taken away, it stays away.
+    const offered = await $.store.get("roomsOffered");
+    const seen = Array.isArray(offered) ? offered : Array.isArray(savedRooms) ? [...SYS_ROOMS] : [...DEFAULT_ROOMS];
+    const fresh = DEFAULT_ROOMS.filter((x) => !seen.includes(x));
+    if (fresh.length) {
+      state.sysRooms = [...state.sysRooms, ...fresh.filter((x) => !state.sysRooms.includes(x))];
+      await $.store.set("sysRooms", state.sysRooms);
+    }
+    if (!Array.isArray(offered) || fresh.length) await $.store.set("roomsOffered", [...new Set([...seen, ...DEFAULT_ROOMS])]);
     const savedView = await $.store.get("view");
-    if (savedView === "chat" || SYS_ROOMS.includes(savedView)) state.view = savedView;
+    if (savedView === "chat" || (typeof savedView === "string" && ROOM_ID.test(savedView))) state.view = savedView;
     try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
     try { cwdCache = await $.session.cwd(); } catch { cwdCache = null; }
     try { state.usage.model = (await $.session.model()) || state.usage.model; } catch { /* the first turn tells */ }
@@ -502,10 +562,10 @@ export function register(on, options) {
 
   on("command.run", { command: "chat" }, ($, e) => answer($, async (call, say) => {
     const args = String(e.args ?? "").trim();
-    const v = /^(usage|git|agents|chat)$/i.exec(args);
-    if (v) {
-      const view = v[1].toLowerCase();
-      if (view !== "chat" && !state.sysRooms.includes(view)) return say(`The ${view} room is hidden. Bring it back with /chat rooms all.`);
+    const asked = args.toLowerCase();
+    if (asked === "chat" || roomIds().includes(asked)) {
+      const view = asked;
+      if (view !== "chat" && !state.sysRooms.includes(view)) return say(`The ${view} room is hidden. Bring it back with /chat rooms +${view}.`);
       await setView($, view);
       return openPane($);
     }
@@ -529,13 +589,18 @@ export function register(on, options) {
   on("command.run", { command: "chat-share" }, ($, e) => answer($, (call, say) => share(call, e.args, say, shareSources($))));
   on("command.run", { command: "chat-name" }, ($, e) => answer($, (call, say) => rename(call, e.args, say)));
   on("command.run", { command: "chat-logout" }, ($) => answer($, (call, say) => logout(call, say)));
+  on("command.run", { command: "snippet" }, ($, e) => answer($, (call, say) => snippet(call, e.args, say, {
+    sources: shareSources($),
+    copy: (text) => copyText($, text, say),
+    setView: async (view) => { await setView($, view); await openPane($); },
+  })));
 
   on("ui.render", { component: "Pane" }, ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e);
     const props = e.props ?? {};
     state.paneFocused = props.isFocused === true;
     if (state.paneFocused) void markRead($);
-    state.paneShown = true;
+    if (!state.paneShown) { state.paneShown = true; syncRooms($); }
     return paneView($.ui.resolve(e), { ...props, surface: e.surface }, {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
@@ -554,6 +619,7 @@ export function register(on, options) {
         $.ui.invalidate("ui.render");
       },
       onCopy: (text, surface) => { void copySnippet($, text, surface); },
+      onShareItem: (item) => shareItemFromPane($, item),
       onRefresh: () => { void refreshGit($); },
       onToggleBreakdown: () => toggleBreakdown($),
       onToggleSession: (id) => { if (!state.collapsed.delete(id)) state.collapsed.add(id); $.ui.invalidate("ui.render"); },
@@ -653,6 +719,7 @@ export function register(on, options) {
       state.paneFocused = false;
       state.paneShown = false;
       state.dividerAt.clear();
+      syncRooms($);
       $.ui.invalidate("ui.render");
     }
     return next(e);

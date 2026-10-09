@@ -46,7 +46,9 @@ The Usage and Agents rooms read this session's own figures from Claude Code: con
 
 To show other sessions, each session keeps a small heartbeat file in `/tmp/squad-chat-<uid>/sessions/`, readable only by you: the folder's name, branch, model, what it's doing, and the last few tool calls with a few words each (a command, a file's name, a search pattern). Anything that looks like a secret is masked. No prompts, replies or tool output go in. A heartbeat is removed when its session ends.
 
-Only `/chat-share usage|git|agents` sends any of it to a chat room, after you look at the preview.
+Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. The Snippets room never touches the network.
+
+Only `/chat-share usage|git|agents|snippet`, or a snippet's **⇪**, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 
 ## Abuse limits
 
