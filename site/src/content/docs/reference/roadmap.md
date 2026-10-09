@@ -19,7 +19,8 @@ description: What's done and what's next.
 - [x] Function rooms, Phase 0: what the pane, macOS, mpv and the quote sources can do ([findings](/squad-chat/reference/architecture/#function-rooms-phase-0))
 - [x] Function rooms framework: rooms from a JSON manifest, fed by providers in the bridge
 - [x] The Snippets room
-- [ ] Weather, Tech News, Monitor, Stock and Lo-fi rooms
+- [x] Room settings, and the Weather and Tech News rooms
+- [ ] Monitor, Stock and Lo-fi rooms
 - [ ] A room marketplace: browse, install and update rooms from the pane
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 

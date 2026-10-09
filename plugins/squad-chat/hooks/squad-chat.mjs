@@ -12,7 +12,7 @@
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, roomSettings, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
@@ -509,7 +509,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet | rooms <list> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|weather|news | rooms <list> | set <room> <setting> <value> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -569,6 +569,8 @@ export function register(on, options) {
       await setView($, view);
       return openPane($);
     }
+    const st = /^set\b\s*(.*)$/i.exec(args);
+    if (st) return roomSettings(call, st[1], say);
     const rm = /^rooms\b\s*(.*)$/i.exec(args);
     if (rm) return sysRooms(rm[1], say, (list) => saveSysRooms($, list));
     const d = /^dnd\b\s*(.*)$/i.exec(args);

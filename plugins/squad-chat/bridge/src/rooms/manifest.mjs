@@ -24,6 +24,60 @@ const WIDGETS = {
   text: { text: "text!", color: "color" },
 };
 
+// A setting's kinds. A "list" holds strings (or URLs, whose hosts must be
+// the room's own), "enum" one of `values`.
+const SETTING_TYPES = ["list", "enum", "string", "bool", "int"];
+const SETTING_KEY = /^[a-z][a-z0-9_]{0,19}$/;
+
+function checkSettings(settings, hosts, errors) {
+  if (settings == null) return;
+  if (typeof settings !== "object" || Array.isArray(settings)) return errors.push("settings: an object");
+  const keys = Object.keys(settings);
+  if (keys.length > 8) errors.push("settings: at most 8");
+  for (const key of keys) {
+    const st = settings[key];
+    const where = `settings.${key}`;
+    if (!SETTING_KEY.test(key)) errors.push(`${where}: a key of 1-20 lowercase letters, digits or _`);
+    if (!SETTING_TYPES.includes(st?.type)) { errors.push(`${where}.type: one of ${SETTING_TYPES.join(", ")}`); continue; }
+    if (st.label != null && !str(st.label, 40)) errors.push(`${where}.label: 1-40 characters`);
+    if (st.type === "enum" && !(Array.isArray(st.values) && st.values.length && st.values.length <= 10 && st.values.every((v) => str(v, 30)))) errors.push(`${where}.values: 1-10 choices`);
+    if (st.type === "list" && st.item != null && !["string", "url"].includes(st.item)) errors.push(`${where}.item: string or url`);
+    if (st.type === "list" && st.max != null && !(Number.isInteger(st.max) && st.max > 0 && st.max <= 20)) errors.push(`${where}.max: 1-20`);
+    if (st.type === "int" && [st.min, st.max].some((v) => v != null && !Number.isInteger(v))) errors.push(`${where}: min and max are whole numbers`);
+    const bad = settingError(st, st.default, hosts);
+    if (bad) errors.push(`${where}.default: ${bad}`);
+  }
+}
+
+// What's wrong with `value` for setting `st`, or null when it's fine.
+export function settingError(st, value, hosts = []) {
+  switch (st.type) {
+    case "list": {
+      if (!Array.isArray(value)) return "a list";
+      if (value.length > (st.max ?? 10)) return `at most ${st.max ?? 10}`;
+      for (const v of value) {
+        if (!str(v, st.item === "url" ? 300 : 100)) return `each one 1-${st.item === "url" ? 300 : 100} characters`;
+        if (st.item === "url") {
+          let u;
+          try { u = new URL(v); } catch { return `not a URL: ${v}`; }
+          if (u.protocol !== "https:") return `not https: ${v}`;
+          if (!hosts.includes(u.hostname.toLowerCase())) return `${u.hostname} isn't one of this room's hosts (${hosts.join(", ")})`;
+        }
+      }
+      return null;
+    }
+    case "enum": return st.values?.includes(value) ? null : `one of ${(st.values ?? []).join(", ")}`;
+    case "string": return str(value, 100) ? null : "1-100 characters";
+    case "bool": return typeof value === "boolean" ? null : "on or off";
+    case "int":
+      if (!Number.isInteger(value)) return "a whole number";
+      if (st.min != null && value < st.min) return `at least ${st.min}`;
+      if (st.max != null && value > st.max) return `at most ${st.max}`;
+      return null;
+    default: return "unknown setting";
+  }
+}
+
 export function parseInterval(s) {
   if (s == null) return null;
   const m = /^(\d+)(ms|s|m|h)$/.exec(String(s));
@@ -94,12 +148,18 @@ export function checkManifest(m, providers) {
       else seen.add(p.id);
       if (!providers[p?.type]) errors.push(`${where}.type: no provider called "${p?.type}"`);
       if (p?.params != null && (typeof p.params !== "object" || Array.isArray(p.params))) errors.push(`${where}.params: an object`);
+      for (const [k, v] of Object.entries(p?.params ?? {})) {
+        const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
+        if (ref && !(m.settings && Object.hasOwn(m.settings, ref[1]))) errors.push(`${where}.params.${k}: no setting called ${ref[1]}`);
+      }
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];
         if (v != null && !(INTERVAL.test(v) && parseInterval(v) >= 1000)) errors.push(`${where}.interval.${k}: like 30s or 10m, at least 1s`);
       }
     });
   }
+
+  checkSettings(m.settings, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
 
   const l = m.layout;
   if (!l || typeof l !== "object") errors.push("layout: missing");

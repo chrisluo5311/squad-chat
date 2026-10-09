@@ -3,24 +3,22 @@
 // the network.
 //
 // Every session's bridge may change the same list, so each change holds a
-// lock (a folder made beside the file: making one is atomic) from reading
+// lock (lock.mjs: a folder made beside the file, which is atomic) from reading
 // the list to writing it back. A list that can't be read is left alone and
 // reported, never written over: only a missing file is an empty list.
 
-import { readFileSync, writeFileSync, renameSync, mkdirSync, chmodSync, rmdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { RoomError } from "../net.mjs";
+import { locked as lockedAs } from "../lock.mjs";
+
+const locked = (dir, fn) => lockedAs(dir, "list", fn);
 
 const MAX_ITEMS = 200;
 const MAX_BODY = 20_000;
 const NAME = /^[^\n\r\t]{1,40}$/;
 const LANG = /^[a-z0-9+#._-]{1,20}$/;
-
-const LOCK_WAIT_MS = 5_000;
-const LOCK_STALE_MS = 15_000;   // a lock this old was left by a bridge that died holding it
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const isItem = (x) => x && typeof x === "object" && typeof x.name === "string" && typeof x.body === "string";
 
@@ -37,24 +35,6 @@ function load(dir) {
   catch { throw new RoomError(500, `${file} isn't valid JSON. Fix or move it: nothing was changed.`); }
   if (!Array.isArray(data?.items) || !data.items.every(isItem)) throw new RoomError(500, `${file} doesn't hold a list of snippets. Fix or move it: nothing was changed.`);
   return data.items;
-}
-
-// Runs `fn` holding the list's lock: read, change and write as one step.
-async function locked(dir, fn) {
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  chmodSync(dir, 0o700);
-  const lock = join(dir, "list.lock");
-  const until = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try { mkdirSync(lock); break; }
-    catch (err) {
-      if (err.code !== "EEXIST") throw err;
-      try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) { rmdirSync(lock); continue; } } catch { continue; }
-      if (Date.now() > until) throw new RoomError(503, "Another session is changing the list. Try again in a moment.");
-      await sleep(20 + Math.random() * 30);
-    }
-  }
-  try { return fn(); } finally { try { rmdirSync(lock); } catch { /* already gone */ } }
 }
 
 function save(dir, items) {

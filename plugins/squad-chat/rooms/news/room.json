@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "id": "news",
+  "version": "1.0.0",
+  "name": "Tech News",
+  "icon": "✦",
+  "color": "lilac",
+  "description": "Hacker News and the tech feeds you pick, newest first, with links one click away.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["hacker-news.firebaseio.com", "www.ithome.com.tw", "www.theverge.com", "feeds.arstechnica.com", "techcrunch.com"] },
+  "settings": {
+    "hn": { "type": "enum", "label": "Hacker News", "values": ["top", "best", "new", "off"], "default": "top" },
+    "feeds": {
+      "type": "list",
+      "label": "Feeds",
+      "item": "url",
+      "max": 8,
+      "default": ["https://www.ithome.com.tw/rss", "https://www.theverge.com/rss/index.xml", "https://feeds.arstechnica.com/arstechnica/index", "https://techcrunch.com/feed/"]
+    }
+  },
+  "providers": [
+    { "id": "hn", "type": "hn", "params": { "list": "$settings.hn", "count": 12 }, "interval": { "visible": "15m", "background": "30m" } },
+    { "id": "feeds", "type": "rss", "params": { "feeds": "$settings.feeds" }, "interval": { "visible": "15m", "background": "30m" } }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "HACKER NEWS",
+        "meta": "{hn.list}",
+        "body": { "type": "list", "items": "hn.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "max": 8, "empty": "Hacker News is off. /set hn top brings it back." }
+      },
+      {
+        "title": "FEEDS",
+        "meta": "{feeds.count} stories",
+        "body": { "type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "empty": "No feeds. /set feeds https://techcrunch.com/feed/ adds one." }
+      }
+    ],
+    "inline": { "type": "list", "items": "hn.items", "title": "title", "copy": "url", "share": "share", "max": 4, "empty": "Hacker News is off: /set hn top" },
+    "band": "▲ {hn.items.0.title}",
+    "hint": "⧉ copies the link · ⇪ shares it · r refreshes",
+    "placeholder": "/set hn best · /set feeds +https://… · r · /help"
+  }
+}

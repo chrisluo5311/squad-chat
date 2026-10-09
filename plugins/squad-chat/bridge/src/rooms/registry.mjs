@@ -7,6 +7,11 @@
 // Events:
 //   { type: "fnrooms", rooms: [manifest], invalid: [{ dir, errors }] }
 //   { type: "fnroom", id, provider, data, at, error?, stale? }
+//   { type: "fnsettings", id, values }   a room's settings, defaults filled in
+//
+// A room's settings live in <data dir>/<id>/settings.json (0600), only the
+// ones changed from the manifest's defaults. A provider's params may name
+// one as "$settings.<key>".
 //
 // A provider runs when its room is enabled: once at the start, after each
 // of its actions, and on its interval, the `visible` one while its room is
@@ -14,13 +19,45 @@
 // A run asked for while one is going waits for it and then runs once more,
 // so an action's change is never overwritten by an older answer.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { checkManifest, parseInterval } from "./manifest.mjs";
+import { checkManifest, parseInterval, settingError } from "./manifest.mjs";
 import { allowedHosts, limitedFetch, clean, RoomError } from "./net.mjs";
+import { locked } from "./lock.mjs";
 import localList from "./providers/local-list.mjs";
+import openMeteo from "./providers/open-meteo.mjs";
+import hn from "./providers/hn.mjs";
+import rss from "./providers/rss.mjs";
 
-export const PROVIDERS = Object.fromEntries([localList].map((p) => [p.type, p]));
+export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss].map((p) => [p.type, p]));
+
+// "Taipei, Tokyo" for a list, "on" for a bool: what's typed, as the
+// setting's kind. A list also takes "+Osaka" or "-Tokyo" to add or drop.
+export function parseSetting(st, raw, current) {
+  const text = String(raw ?? "").trim();
+  switch (st.type) {
+    case "list": {
+      const parts = text.split(",").map((x) => x.trim()).filter(Boolean);
+      if (parts.length && parts.every((x) => /^[+-]/.test(x))) {
+        let list = [...(current ?? [])];
+        for (const x of parts) {
+          const v = x.slice(1).trim();
+          list = list.filter((y) => y.toLowerCase() !== v.toLowerCase());
+          if (x[0] === "+") list.push(v);
+        }
+        return list;
+      }
+      return parts;
+    }
+    case "bool":
+      if (/^(on|true|yes|1)$/i.test(text)) return true;
+      if (/^(off|false|no|0)$/i.test(text)) return false;
+      return text;
+    case "int": return /^-?\d+$/.test(text) ? Number(text) : text;
+    case "enum": return st.values.find((v) => v.toLowerCase() === text.toLowerCase()) ?? text;
+    default: return text;
+  }
+}
 
 // A provider's actions by name. A Map, so a name from a request can only
 // ever find an action the provider declared, never something inherited.
@@ -68,6 +105,41 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
   const queued = new Map();    // "room/provider" → the run after it
 
   const key = (id, pid) => `${id}/${pid}`;
+  const hostsOf = (m) => (m.permissions?.hosts ?? []).map((h) => h.toLowerCase());
+
+  // ---- settings
+
+  const settingsFile = (id) => join(dataDir, id, "settings.json");
+  function savedSettings(id) {
+    try {
+      const data = JSON.parse(readFileSync(settingsFile(id), "utf8"));
+      return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+    } catch { return {}; }
+  }
+  // The manifest's defaults, with what was changed on top. A saved value
+  // that no longer checks out (the manifest changed) falls back.
+  function settingsOf(id) {
+    const m = rooms.get(id);
+    const saved = savedSettings(id);
+    const out = {};
+    for (const [k, st] of Object.entries(m?.settings ?? {})) {
+      out[k] = Object.hasOwn(saved, k) && !settingError(st, saved[k], hostsOf(m)) ? saved[k] : st.default;
+    }
+    return out;
+  }
+  function emitSettings(id) {
+    if (rooms.get(id)?.settings) emit({ type: "fnsettings", id, values: settingsOf(id) });
+  }
+  // A provider's params, with "$settings.<key>" filled in.
+  function paramsOf(m, p) {
+    const values = settingsOf(m.id);
+    const out = {};
+    for (const [k, v] of Object.entries(p.params ?? {})) {
+      const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
+      out[k] = ref ? values[ref[1]] : v;
+    }
+    return out;
+  }
 
   function ctxFor(m, p) {
     const def = providers[p.type];
@@ -99,7 +171,7 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
     const k = key(id, pid);
     clearTimeout(timers.get(k));
     try {
-      const data = clean(await providers[p.type].fetch(p.params ?? {}, ctxFor(m, p)));
+      const data = clean(await providers[p.type].fetch(paramsOf(m, p), ctxFor(m, p)));
       const at = Date.now();
       last.set(k, { data, at });
       emit({ type: "fnroom", id, provider: pid, data, at });
@@ -125,6 +197,37 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
   return {
     report() {
       emit({ type: "fnrooms", rooms: [...rooms.values()], invalid });
+      for (const id of rooms.keys()) emitSettings(id);
+    },
+    // Changes one setting from what was typed ("default" puts it back), then
+    // runs the room's providers with it.
+    async setSetting({ room: id, key: k, value } = {}) {
+      const m = rooms.get(id);
+      if (!m) throw new RoomError(404, `no room called ${id}`);
+      const settings = new Map(Object.entries(m.settings ?? {}));
+      if (!settings.has(String(k))) throw new RoomError(404, `${m.name} has no setting ${k}${settings.size ? `. It has ${[...settings.keys()].join(", ")}` : ""}.`);
+      const st = settings.get(String(k));
+      // Every session's bridge shares the file: read, change and write it
+      // holding its lock, so two changes at once both land.
+      await locked(join(dataDir, id), "settings", () => {
+        const saved = savedSettings(id);
+        if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
+        else {
+          const v = parseSetting(st, value, settingsOf(id)[k]);
+          const bad = settingError(st, v, hostsOf(m));
+          if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
+          // Only what differs from the default is kept, so a room's new
+          // default reaches people who never changed it.
+          if (JSON.stringify(v) === JSON.stringify(st.default)) delete saved[k];
+          else saved[k] = v;
+        }
+        const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
+        writeFileSync(tmp, JSON.stringify(saved, null, 1), { mode: 0o600 });
+        renameSync(tmp, settingsFile(id));
+      });
+      emitSettings(id);
+      if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
+      return { ok: true, values: settingsOf(id) };
     },
     // Which rooms have tabs, and which is on show. A room just enabled, or
     // just shown with data older than its visible interval, runs now.
@@ -160,7 +263,7 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
       const table = actionTable(providers[p.type]);
       const name = String(action);
       if (!table.has(name)) throw new RoomError(404, `${p.type} has no action ${name}`);
-      const r = await table.get(name)(p.params ?? {}, args && typeof args === "object" ? args : {}, ctxFor(m, p));
+      const r = await table.get(name)(paramsOf(m, p), args && typeof args === "object" ? args : {}, ctxFor(m, p));
       await run(id, p.id);
       return clean(r ?? { ok: true });
     },

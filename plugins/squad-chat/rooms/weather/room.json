@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "id": "weather",
+  "version": "1.0.0",
+  "name": "Weather",
+  "icon": "☀",
+  "color": "sky",
+  "description": "Now, the next 24 hours and the week, for the cities you pick. From Open-Meteo, no key needed.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["api.open-meteo.com", "geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"] },
+  "settings": {
+    "cities": { "type": "list", "label": "Cities", "default": ["Taipei"], "max": 6 },
+    "units": { "type": "enum", "label": "Units", "values": ["metric", "imperial"], "default": "metric" }
+  },
+  "providers": [
+    { "id": "wx", "type": "open-meteo", "params": { "cities": "$settings.cities", "units": "$settings.units" }, "interval": { "visible": "10m", "background": "30m" } }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "NOW",
+        "meta": "updated {wx.updated}",
+        "body": {
+          "type": "table",
+          "items": "wx.cities",
+          "columns": [
+            { "field": "icon", "width": 2, "color": "amber" },
+            { "field": "name", "width": 13 },
+            { "field": "tempText", "width": 5, "right": true },
+            { "field": "range", "width": 12, "right": true },
+            { "field": "rainText", "width": 7, "right": true, "color": "sky" },
+            { "field": "aqiText" }
+          ],
+          "empty": "No cities yet: /set cities Taipei, Tokyo"
+        }
+      },
+      {
+        "title": "NEXT 24 HOURS",
+        "meta": "{wx.first.name}",
+        "body": { "type": "text", "text": "{wx.first.icon} {wx.first.desc}, {wx.first.feels} · humidity {wx.first.humidity} · wind {wx.first.wind}\n{wx.first.rainLine}" }
+      },
+      {
+        "title": "THIS WEEK",
+        "meta": "{wx.first.name}",
+        "body": {
+          "type": "table",
+          "items": "wx.days",
+          "columns": [
+            { "field": "day", "width": 6 },
+            { "field": "icon", "width": 2, "color": "amber" },
+            { "field": "range", "width": 12, "right": true },
+            { "field": "rain", "right": true, "color": "sky" }
+          ]
+        }
+      }
+    ],
+    "inline": {
+      "type": "table",
+      "items": "wx.cities",
+      "columns": [
+        { "field": "icon", "width": 2, "color": "amber" },
+        { "field": "name", "width": 13 },
+        { "field": "tempText", "width": 5, "right": true },
+        { "field": "rainText", "width": 7, "right": true, "color": "sky" },
+        { "field": "desc" }
+      ],
+      "max": 4,
+      "empty": "No cities yet: /set cities Taipei"
+    },
+    "band": "{wx.first.icon} {wx.first.name} {wx.first.tempText} · {wx.first.rainText}",
+    "hint": "/set cities Taipei, Tokyo · /set units imperial · r refreshes",
+    "placeholder": "/set cities +Osaka · /set units metric · r · /help"
+  }
+}

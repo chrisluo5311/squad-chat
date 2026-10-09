@@ -29,7 +29,7 @@ describe("function rooms in the bridge", () => {
   it("reports the shipped rooms, and refuses the ones that don't check out", async () => {
     await b.start();
     const ev = await b.waitFor((e) => e.type === "fnrooms");
-    assert.deepEqual(ev.rooms.map((r) => r.id), ["snippet"]);
+    assert.deepEqual(ev.rooms.map((r) => r.id), ["news", "snippet", "weather"]);
     const why = Object.fromEntries(ev.invalid.map((x) => [x.dir.split("/").at(-1), x.errors.join("; ")]));
     assert.match(why.broken, /no provider called "shell"/);
     assert.match(why.snippet, /already a room/);
@@ -103,6 +103,63 @@ describe("function rooms in the bridge", () => {
     for (let i = 0; i < 10; i++) await b.ok("POST", "/fnroom/action", { room: "snippet", action: "delete", args: { name: `n${i}` } });
   });
 
+  it("reports each room's settings, changes them as typed, and refuses what doesn't fit", async () => {
+    const values = (id) => b.events.filter((e) => e.type === "fnsettings" && e.id === id).at(-1)?.values;
+    assert.deepEqual(values("weather"), { cities: ["Taipei"], units: "metric" });
+    assert.equal(values("snippet"), undefined);   // no settings, no event
+
+    // Weather has no tab here, so nothing goes online: only the setting changes.
+    let r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "Taipei, Tokyo , New York" });
+    assert.deepEqual(r.values.cities, ["Taipei", "Tokyo", "New York"]);
+    r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "+Osaka, -tokyo" });
+    assert.deepEqual(r.values.cities, ["Taipei", "New York", "Osaka"]);
+    r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "units", value: "Imperial" });
+    assert.equal(r.values.units, "imperial");
+    assert.deepEqual(values("weather"), { cities: ["Taipei", "New York", "Osaka"], units: "imperial" });
+    const file = join(b.configDir, "room-data", "weather", "settings.json");
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { cities: ["Taipei", "New York", "Osaka"], units: "imperial" });
+
+    const bad = async (body, want) => {
+      const res = await b.call("POST", "/fnroom/settings", body);
+      assert.equal(res.status, want[0]);
+      assert.match(res.body.error, want[1]);
+    };
+    await bad({ room: "weather", key: "units", value: "kelvin" }, [400, /Units: one of metric, imperial/]);
+    await bad({ room: "weather", key: "cities", value: "a,b,c,d,e,f,g" }, [400, /at most 6/]);
+    await bad({ room: "weather", key: "colour", value: "x" }, [404, /no setting colour\. It has cities, units/]);
+    await bad({ room: "news", key: "feeds", value: "+https://evil.example/rss" }, [400, /evil\.example isn't one of this room's hosts/]);
+    await bad({ room: "news", key: "feeds", value: "+http://techcrunch.com/feed/" }, [400, /not https/]);
+    await bad({ room: "snippet", key: "x", value: "y" }, [404, /Snippets has no setting x/]);
+
+    r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "default" });
+    assert.deepEqual(r.values, { cities: ["Taipei"], units: "imperial" });
+    // Setting a default by hand keeps nothing, so a later default still reaches you.
+    await b.ok("POST", "/fnroom/settings", { room: "weather", key: "units", value: "metric" });
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {});
+  });
+
+  it("loses no setting when two sessions change them at once", async () => {
+    const other = new Bridge("rooms-3", { url: null, configDir: b.configDir });
+    await other.start();
+    try {
+      await Promise.all([
+        b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "Kyoto" }),
+        other.ok("POST", "/fnroom/settings", { room: "weather", key: "units", value: "imperial" }),
+        b.ok("POST", "/fnroom/settings", { room: "news", key: "hn", value: "best" }),
+        other.ok("POST", "/fnroom/settings", { room: "news", key: "feeds", value: "-https://techcrunch.com/feed/" }),
+      ]);
+      const read = (id) => JSON.parse(readFileSync(join(b.configDir, "room-data", id, "settings.json"), "utf8"));
+      assert.deepEqual(read("weather"), { cities: ["Kyoto"], units: "imperial" });
+      assert.equal(read("news").hn, "best");
+      assert.equal(read("news").feeds.length, 3);
+    } finally {
+      await other.stop();
+      rmSync(other.socketDir, { recursive: true, force: true });
+    }
+    for (const [room, key] of [["weather", "cities"], ["weather", "units"], ["news", "hn"], ["news", "feeds"]]) await b.ok("POST", "/fnroom/settings", { room, key, value: "default" });
+  });
+
   it("keeps the list across restarts", async () => {
     await b.stop();
     await b.start();
@@ -145,8 +202,29 @@ describe("what a provider may fetch", () => {
 });
 
 describe("manifests", () => {
-  it("the Snippet room's checks out", () => {
-    assert.deepEqual(checkManifest(SNIPPET, PROVIDERS), []);
+  it("every room squad-chat ships checks out", () => {
+    for (const id of ["snippet", "weather", "news"]) {
+      const m = JSON.parse(readFileSync(new URL(`../plugins/squad-chat/rooms/${id}/room.json`, import.meta.url), "utf8"));
+      assert.deepEqual(checkManifest(m, PROVIDERS), [], id);
+    }
+  });
+
+  it("checks settings: their kinds, their defaults, and params that name them", () => {
+    const m = {
+      ...SNIPPET,
+      permissions: { hosts: ["example.com"] },
+      settings: {
+        feeds: { type: "list", item: "url", default: ["https://other.example/rss"] },
+        mode: { type: "enum", values: ["a", "b"], default: "c" },
+        "Bad Key": { type: "string", default: "x" },
+        n: { type: "float" },
+      },
+      providers: [{ id: "list", type: "local-list", params: { x: "$settings.missing" } }],
+    };
+    const errors = checkManifest(m, PROVIDERS).join("\n");
+    for (const want of [/settings.feeds.default: other.example isn't one of this room's hosts/, /settings.mode.default: one of a, b/, /settings.Bad Key: a key/, /settings.n.type/, /params.x: no setting called missing/]) {
+      assert.match(errors, want);
+    }
   });
 
   it("names what's wrong", () => {
