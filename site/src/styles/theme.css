@@ -70,10 +70,17 @@
   --sl-color-current-text: #7a2f17;
 }
 
-/* Every sidebar click is a full page load. Cross-fade between pages instead of
-   repainting from blank, and keep the canvas the theme's color before the first paint. */
+/* Every sidebar click is a full page load. A view transition holds the old frame
+   until the new page is ready, then swaps it in one frame: no blank repaint and no
+   cross-fade (two pages of text blended for a moment read as a flicker). The canvas
+   keeps the theme's color before the first paint. */
 @view-transition {
   navigation: auto;
+}
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation: none;
 }
 html {
   background-color: var(--sl-color-black);
@@ -81,40 +88,6 @@ html {
 /* The homepage's wave spans 100vw, which counts the scrollbar: clip it at the frame. */
 [data-has-hero] .main-frame {
   overflow-x: clip;
-}
-/* Only the content changes between pages. Give the header and both sidebars
-   their own names so they hold still, and keep the content's fade short. */
-header.header {
-  view-transition-name: sl-header;
-}
-.sidebar-pane {
-  view-transition-name: sl-sidebar;
-}
-.right-sidebar-panel {
-  view-transition-name: sl-toc;
-}
-::view-transition-group(sl-header),
-::view-transition-group(sl-sidebar) {
-  animation: none;
-}
-::view-transition-old(sl-header),
-::view-transition-old(sl-sidebar) {
-  display: none;
-}
-::view-transition-new(sl-header),
-::view-transition-new(sl-sidebar) {
-  animation: none;
-}
-::view-transition-old(root),
-::view-transition-new(root),
-::view-transition-old(sl-toc),
-::view-transition-new(sl-toc) {
-  animation-duration: 120ms;
-}
-@media (prefers-reduced-motion: reduce) {
-  @view-transition {
-    navigation: none;
-  }
 }
 
 /* Header: one hairline, no shade. */
