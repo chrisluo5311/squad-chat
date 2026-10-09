@@ -64,17 +64,20 @@ const install = "claude plugin marketplace add chrisluo5311/squad-chat";
 }
 
 <script>
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
-    button.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(button.dataset.copy ?? "");
-        button.textContent = "copied";
-        setTimeout(() => (button.textContent = "copy"), 1500);
-      } catch {
-        button.textContent = "select it";
-      }
-    });
-  }
+  // The client router swaps pages in place, so bind on every page load, not once.
+  document.addEventListener("astro:page-load", () => {
+    for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(button.dataset.copy ?? "");
+          button.textContent = "copied";
+          setTimeout(() => (button.textContent = "copy"), 1500);
+        } catch {
+          button.textContent = "select it";
+        }
+      });
+    }
+  });
 </script>
 
 <style>

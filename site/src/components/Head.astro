@@ -1,0 +1,40 @@
+---
+// Starlight's head, plus Astro's client router: a sidebar click swaps the page in
+// place instead of loading a new document, so the header, sidebar and fonts never
+// repaint (as on glowup's docs). Starlight expects full page loads, so the script
+// below carries over what a reload would have restored.
+import Default from "@astrojs/starlight/components/Head.astro";
+import { ClientRouter } from "astro:transitions";
+---
+
+<Default />
+<ClientRouter />
+
+<script>
+  let sidebarScroll = 0;
+
+  document.addEventListener("astro:before-swap", (event) => {
+    const next = event.newDocument;
+    // The new page is rendered dark. Keep the theme the reader picked.
+    next.documentElement.dataset.theme = document.documentElement.dataset.theme;
+    // Keep the sidebar groups the reader opened or closed, and its scroll.
+    const open = [...document.querySelectorAll<HTMLDetailsElement>("#starlight__sidebar details")].map((d) => d.open);
+    next.querySelectorAll<HTMLDetailsElement>("#starlight__sidebar details").forEach((d, i) => {
+      if (i < open.length) d.open = open[i];
+    });
+    sidebarScroll = document.getElementById("starlight__sidebar")?.scrollTop ?? 0;
+    // An inline script reveals the search box's ⌘K hint on the first load only.
+    const search = document.querySelector("button[data-open-modal]");
+    const nextSearch = next.querySelector("button[data-open-modal]");
+    if (search && nextSearch) {
+      nextSearch.innerHTML = search.innerHTML;
+      const keys = search.getAttribute("aria-keyshortcuts");
+      if (keys) nextSearch.setAttribute("aria-keyshortcuts", keys);
+    }
+  });
+
+  document.addEventListener("astro:after-swap", () => {
+    const sidebar = document.getElementById("starlight__sidebar");
+    if (sidebar) sidebar.scrollTop = sidebarScroll;
+  });
+</script>

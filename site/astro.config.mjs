@@ -22,6 +22,7 @@ export default defineConfig({
       lastUpdated: true,
       customCss: ["./src/styles/theme.css"],
       components: {
+        Head: "./src/components/Head.astro",
         SiteTitle: "./src/components/SiteTitle.astro",
         PageTitle: "./src/components/PageTitle.astro",
         Hero: "./src/components/Hero.astro",
