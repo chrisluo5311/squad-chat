@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="squad-chat logo">
+  <rect width="96" height="96" rx="22" fill="#D97757"/>
+  <path d="M24 26h48a8 8 0 0 1 8 8v24a8 8 0 0 1-8 8H44l-14 12v-12h-6a8 8 0 0 1-8-8V34a8 8 0 0 1 8-8z" fill="#1F1E1D"/>
+  <circle cx="36" cy="46" r="5" fill="#E2B86B"/>
+  <circle cx="50" cy="46" r="5" fill="#6CC070"/>
+  <circle cx="64" cy="46" r="5" fill="#7FB6E2"/>
+</svg>

@@ -23,7 +23,7 @@
   <br />
   Friends online, right beside your Claude Code session. Zero tokens, zero leaks to Claude.
   <br />
-  <a href="#usage"><strong>Explore the commands »</strong></a>
+  <a href="https://chrisluo5311.github.io/squad-chat/"><strong>Read the docs »</strong></a>
   <br />
   <br />
   <a href="#about-the-project">View Demo</a>
@@ -93,6 +93,8 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 * **Fits any terminal.** Docked beside the transcript in a wide terminal, compact above the prompt in a narrow one, and a one-line summary when the pane is closed.
 
 It is a Claude Code mod: a plugin of function hooks, plus a small Node process that holds the connection to Supabase. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit.
+
+The full guide, with search, lives at **[chrisluo5311.github.io/squad-chat](https://chrisluo5311.github.io/squad-chat/)**, along with a [sharp video of the whole thing](https://chrisluo5311.github.io/squad-chat/#see-it-run): chat, the Usage, Git and Agents rooms, and sharing a snapshot.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

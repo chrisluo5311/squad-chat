@@ -1,0 +1,33 @@
+---
+// Starlight's site title, plus the plugin's version as a small badge (as in glowup's header).
+import Default from "@astrojs/starlight/components/SiteTitle.astro";
+import plugin from "../../../plugins/squad-chat/.claude-plugin/plugin.json";
+---
+
+<div class="title-row">
+  <Default />
+  <span class="version" translate="no">v{plugin.version}</span>
+</div>
+
+<style>
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .version {
+    font-family: var(--__sl-font-mono);
+    font-size: var(--sl-text-2xs);
+    color: var(--sl-color-gray-3);
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: 0.375rem;
+    padding: 0.0625rem 0.5rem;
+    white-space: nowrap;
+  }
+  @media (max-width: 30em) {
+    .version {
+      display: none;
+    }
+  }
+</style>

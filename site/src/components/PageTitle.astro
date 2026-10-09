@@ -1,0 +1,64 @@
+---
+// The page title with its sidebar group above it ("Use / Commands") and the
+// page's description below it as a lead paragraph.
+// Starlight links "skip to content" and the TOC overview to this id.
+const PAGE_TITLE_ID = "_top";
+
+const { entry, sidebar } = Astro.locals.starlightRoute;
+type Entry = (typeof sidebar)[number];
+const findGroup = (entries: Entry[]): string | undefined => {
+  for (const e of entries) {
+    if (e.type === "group" && e.entries.some((c) => c.type === "link" && c.isCurrent)) return e.label;
+    if (e.type === "group") {
+      const inner = findGroup(e.entries);
+      if (inner) return inner;
+    }
+  }
+};
+const group = findGroup(sidebar);
+const { title, description } = entry.data;
+---
+
+{
+  group && (
+    <div class="crumb">
+      {group} <span class="sep">/</span> <span class="here">{title}</span>
+    </div>
+  )
+}
+<h1 id={PAGE_TITLE_ID}>{title}</h1>
+{description && <p class="lede">{description}</p>}
+
+<style>
+  .crumb {
+    margin-top: 1rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  .sep {
+    color: var(--sl-color-gray-5);
+  }
+  .here {
+    color: var(--sl-color-gray-2);
+  }
+  h1 {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-h1);
+    line-height: var(--sl-line-height-headings);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--sl-color-white);
+  }
+  .crumb + h1 {
+    margin-top: 0.5rem;
+  }
+  h1:first-child {
+    margin-top: 1rem;
+  }
+  .lede {
+    margin-top: 0.75rem;
+    font-size: var(--sl-text-lg);
+    line-height: 1.55;
+    color: var(--sl-color-gray-3);
+  }
+</style>

@@ -1,0 +1,220 @@
+---
+// The homepage hero: a terminal-style headline over a warm dot-matrix wave,
+// then the live pane demo. Other pages with a `hero` keep Starlight's own.
+import Default from "@astrojs/starlight/components/Hero.astro";
+import PaneDemo from "./PaneDemo.astro";
+import plugin from "../../../plugins/squad-chat/.claude-plugin/plugin.json";
+
+const isHome = Astro.locals.starlightRoute.entry.id === "";   // src/content/docs/index.mdx
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// The wave: warm colors only, a diagonal ripple across the grid.
+const COLS = 40, ROWS = 14;
+const WARM = ["var(--wave-1)", "var(--wave-2)", "var(--wave-3)", "var(--wave-4)"];
+const dots = Array.from({ length: COLS * ROWS }, (_, i) => {
+  const c = i % COLS, r = Math.floor(i / COLS);
+  return { color: WARM[(Math.floor(c / 10) + r) % WARM.length], delay: ((c + r * 0.6) * 0.07).toFixed(2) };
+});
+const install = "claude plugin marketplace add chrisluo5311/squad-chat";
+---
+
+{
+  isHome ? (
+    <div class="home-hero not-content">
+      <div class="wave" aria-hidden="true">
+        {dots.map((d) => (
+          <span style={`background:${d.color};animation-delay:${d.delay}s`} />
+        ))}
+      </div>
+
+      <div class="intro">
+        <div class="where">
+          ~/your-project <span class="acc">❯</span> claude
+        </div>
+        <h1 id="_top">
+          <span class="acc">❯</span> <span class="typed">/chat</span>
+          <span class="caret" aria-hidden="true" />
+        </h1>
+        <p class="tagline">
+          One command opens a group chat beside your Claude Code session. Claude keeps cooking on the left. Your squad
+          talks on the right. Zero tokens, zero leaks.
+        </p>
+        <div class="actions">
+          <div class="install">
+            <span class="dollar">$</span>
+            <code>{install}</code>
+            <button type="button" data-copy={install}>copy</button>
+          </div>
+          <a class="primary" href={`${base}/start/install/`}>
+            read the docs →
+          </a>
+        </div>
+        <div class="meta">
+          v{plugin.version} · MIT · <a href="https://github.com/chrisluo5311/squad-chat">github ↗</a>
+        </div>
+      </div>
+
+      <div class="demo">
+        <PaneDemo />
+      </div>
+    </div>
+  ) : (
+    <Default />
+  )
+}
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy ?? "");
+        button.textContent = "copied";
+        setTimeout(() => (button.textContent = "copy"), 1500);
+      } catch {
+        button.textContent = "select it";
+      }
+    });
+  }
+</script>
+
+<style>
+  .home-hero {
+    --wave-1: #d97757;
+    --wave-2: #e2b86b;
+    --wave-3: #f5c4b0;
+    --wave-4: #b5512f;
+    position: relative;
+    padding-bottom: 2rem;
+  }
+  :global([data-theme="light"]) .home-hero {
+    --wave-1: #d97757;
+    --wave-2: #d99a2b;
+    --wave-3: #e8a184;
+    --wave-4: #9c3f1f;
+  }
+
+  /* Full-bleed behind the content panel. */
+  .wave {
+    position: absolute;
+    top: -3rem;
+    left: 50%;
+    width: 100vw;
+    margin-left: -50vw;
+    height: 34rem;
+    display: grid;
+    grid-template-columns: repeat(40, minmax(0, 1fr));
+    grid-auto-rows: 2.25rem;
+    align-items: center;
+    justify-items: center;
+    padding: 0 1.25rem;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(#000 45%, transparent);
+    mask-image: linear-gradient(#000 45%, transparent);
+    z-index: 0;
+  }
+  .wave span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    animation: wave 5s ease-in-out infinite both;
+  }
+  @keyframes wave {
+    0%, 100% { opacity: 0.12; transform: scale(0.6); }
+    12% { opacity: 1; transform: scale(1); }
+    30% { opacity: 0.12; transform: scale(0.6); }
+  }
+
+  .intro {
+    position: relative;
+    z-index: 1;
+    padding: 3.5rem 0 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.375rem;
+    font-family: var(--__sl-font-mono);
+  }
+  .where { font-size: var(--sl-text-sm); color: var(--sl-color-gray-3); }
+  .acc { color: var(--sl-color-accent); }
+  h1 {
+    margin: 0;
+    font-family: var(--__sl-font-mono);
+    font-size: clamp(3.5rem, 9vw, 5.75rem);
+    line-height: 0.95;
+    font-weight: 800;
+    letter-spacing: -0.05em;
+    color: var(--sl-color-white);
+  }
+  .typed {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    vertical-align: bottom;
+    animation: type 1.4s steps(5) 0.3s both;
+  }
+  @keyframes type { from { width: 0; } to { width: 5ch; } }
+  .caret {
+    display: inline-block;
+    width: 0.5ch;
+    height: 0.85em;
+    margin-left: 0.375rem;
+    vertical-align: -0.05em;
+    background: var(--sl-color-white);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .tagline {
+    margin: 0;
+    max-width: 45rem;
+    font-family: var(--__sl-font);
+    font-size: clamp(1.0625rem, 2vw, 1.3125rem);
+    line-height: 1.5;
+    color: var(--sl-color-gray-2);
+  }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+  .install {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: 100%;
+    padding: 0.375rem 0.375rem 0.375rem 1rem;
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: 0.625rem;
+    background: var(--sl-color-bg-raised);
+    font-size: var(--sl-text-sm);
+  }
+  .install code { overflow-x: auto; white-space: nowrap; color: var(--sl-color-white); }
+  .dollar { color: var(--sl-color-gray-4); }
+  .install button {
+    min-height: 2.5rem;
+    padding: 0 0.875rem;
+    border-radius: 0.4375rem;
+    border: 1px solid var(--sl-color-gray-5);
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    font: inherit;
+    font-size: var(--sl-text-xs);
+    cursor: pointer;
+  }
+  .install button:hover { border-color: var(--sl-color-accent); color: var(--sl-color-white); }
+  .primary {
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 1.125rem;
+    border-radius: 0.625rem;
+    background: var(--sl-color-accent);
+    color: #141413;
+    font-weight: 700;
+    font-size: var(--sl-text-sm);
+    text-decoration: none;
+  }
+  .primary:hover { filter: brightness(1.08); color: #141413; }
+  .meta { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); }
+  .meta a { color: var(--sl-color-gray-2); }
+  .demo { position: relative; z-index: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wave span, .typed, .caret { animation: none; }
+    .wave span { opacity: 0.25; }
+  }
+</style>

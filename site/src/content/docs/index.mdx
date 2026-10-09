@@ -1,0 +1,45 @@
+---
+title: squad-chat
+description: A group chat next to your Claude Code conversation. Zero tokens, zero leaks to Claude.
+template: splash
+hero:
+  title: squad-chat
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+<div class="checks not-content">
+  <div><span class="tick">✓</span> <b>private</b> <span>nothing typed in the pane enters the conversation</span></div>
+  <div><span class="tick">✓</span> <b>rooms</b> <span>joined with a passcode, enforced by row-level security</span></div>
+  <div><span class="tick">✓</span> <b>presence</b> <span>who's online and typing, across every room</span></div>
+  <div><span class="tick">✓</span> <b>share</b> <span>your selection, Claude's code block or `git diff`, previewed first</span></div>
+  <div><span class="tick">✓</span> <b>usage</b> <span>context, rate limits, spend, each tool's p50 and p95</span></div>
+  <div><span class="tick">✓</span> <b>git</b> <span>branch, this PR's checks, reviews, Actions and alerts</span></div>
+  <div><span class="tick">✓</span> <b>agents</b> <span>every Claude Code session and its subagents, live</span></div>
+  <div><span class="tick">✓</span> <b>resilient</b> <span>reconnects and fetches exactly what you missed</span></div>
+</div>
+
+## See it run
+
+A real session, recorded at 2× resolution: chat with your squad while Claude works, then the Agents, Usage and Git rooms, and a Usage snapshot shared back to the room.
+
+<video class="demo-video" src="/squad-chat/media/demo.mp4" poster="/squad-chat/media/demo-poster.jpg" controls muted loop playsinline preload="metadata" aria-label="squad-chat demo: chatting with sam and ana while Claude runs a subagent, then the Agents, Usage and Git rooms, and a Usage snapshot shared to the room"></video>
+
+## Three rooms that need no server
+
+Next to your chat rooms, every session gets these tabs. Nothing in them leaves your computer unless you share it.
+
+<div class="rooms not-content">
+  <a href="/squad-chat/use/built-in-rooms/#-usage" style="--room: #e2b86b"><span class="glyph">◔</span><b>Usage</b><span>Context as a forecast, the 5-hour and 7-day windows, spend and tool timings.</span></a>
+  <a href="/squad-chat/use/built-in-rooms/#-git" style="--room: #6cc070"><span class="glyph">⎇</span><b>Git</b><span>Your branch and pull request, its checks as they run, reviews and Actions, through `gh`.</span></a>
+  <a href="/squad-chat/use/built-in-rooms/#-agents" style="--room: #7fb6e2"><span class="glyph">⟡</span><b>Agents</b><span>Every session on this computer, its subagents as a tree, and a live tool feed.</span></a>
+</div>
+
+## Where to next
+
+<CardGrid>
+  <LinkCard title="Install" description="Add the marketplace, install the plugin and open the pane." href="/squad-chat/start/install/" />
+  <LinkCard title="Connect to a server" description="Point squad-chat at your squad's Supabase project." href="/squad-chat/start/connect/" />
+  <LinkCard title="Commands" description="Every slash command, with examples." href="/squad-chat/use/commands/" />
+  <LinkCard title="Host your own server" description="Set up a Supabase project for your group, once." href="/squad-chat/host/server/" />
+</CardGrid>

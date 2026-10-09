@@ -1,0 +1,17 @@
+{
+  "name": "squad-chat-docs",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/sync.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/sync.mjs",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.5",
+    "astro": "7.3.7",
+    "sharp": "0.35.5"
+  }
+}
