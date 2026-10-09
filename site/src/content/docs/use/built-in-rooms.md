@@ -39,8 +39,8 @@ Where your branch stands on GitHub, read through the [`gh` CLI](https://cli.gith
 It refreshes every minute while you look at it, every five minutes otherwise, and shortly after a `git push`. Type `r` in the pane to refresh now, and press ⧉ to copy a link.
 
 <figure class="shot">
-  <img src="/squad-chat/media/git.gif" alt="The Git room for the squad-chat repository: the branch, PR #7 with its checks going from three passed and two running to all five passed, the merge state turning from blocked to mergeable, and the Actions runs finishing, refreshed with r." />
-  <figcaption>PR #7's checks finish while the room refreshes: blocked becomes mergeable.</figcaption>
+  <img src="/squad-chat/media/git.gif" alt="The Git room for the squad-chat repository on a merged branch: PR #8 merged with all five checks passed, no other open pull requests, the latest Actions runs and no assigned issues, then r refreshes it." />
+  <figcaption>A merged branch: PR #8 and its five checks, the latest Actions runs, and a refresh with r.</figcaption>
 </figure>
 
 ## ⟡ Agents

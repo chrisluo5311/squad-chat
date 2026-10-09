@@ -70,9 +70,10 @@
 
 ## About The Project
 
+https://github.com/user-attachments/assets/b83d9a2c-673a-40d0-90a3-a2c717b6c79a
+
 <div align="center">
-  <a href="https://chrisluo5311.github.io/squad-chat/#see-it-run"><img src="docs/assets/demo-play.jpg" alt="squad-chat demo video: chatting with sam and ana while Claude runs a subagent, then the Agents, Usage and Git rooms, and a Usage snapshot shared to the room. Click to watch." width="100%"></a>
-  <sub>Click to watch the demo: chatting while Claude works, the Agents, Usage and Git rooms, and a snapshot shared to the room.</sub>
+  <sub>Chatting with the squad while Claude runs a subagent, then the Agents, Usage and Git rooms, and a Usage snapshot shared to the room.</sub>
 </div>
 
 <br />
@@ -249,8 +250,8 @@ Where your branch stands on GitHub, read through the [`gh` CLI](https://cli.gith
 It refreshes every minute while you look at it, every five minutes otherwise, and shortly after a `git push`. Type `r` in the pane to refresh now, and press ⧉ to copy a link.
 
 <div align="center">
-  <img src="docs/assets/git.gif" alt="The Git room for the squad-chat repository: the branch, PR #7 with its checks going from three passed and two running to all five passed, the merge state turning from blocked to mergeable, and the Actions runs finishing, refreshed with r." width="100%">
-  <sub>PR #7's checks finish while the room refreshes: blocked becomes mergeable.</sub>
+  <img src="docs/assets/git.gif" alt="The Git room for the squad-chat repository on a merged branch: PR #8 merged with all five checks passed, no other open pull requests, the latest Actions runs and no assigned issues, then r refreshes it." width="100%">
+  <sub>A merged branch: PR #8 and its five checks, the latest Actions runs, and a refresh with r.</sub>
 </div>
 
 <br />
