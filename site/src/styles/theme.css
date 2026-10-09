@@ -70,10 +70,11 @@
   --sl-color-current-text: #7a2f17;
 }
 
-/* Every sidebar click is a full page load. A view transition holds the old frame
-   until the new page is ready, then swaps it in one frame: no blank repaint and no
-   cross-fade (two pages of text blended for a moment read as a flicker). The canvas
-   keeps the theme's color before the first paint. */
+/* Sidebar clicks go through Astro's client router (components/Head.astro), which
+   swaps the page in place. Its view transition swaps in one frame: a cross-fade
+   blends two pages of text for a moment and reads as a flicker. @view-transition
+   covers the full page loads that remain, like the back button after a reload.
+   The canvas keeps the theme's color before the first paint. */
 @view-transition {
   navigation: auto;
 }
