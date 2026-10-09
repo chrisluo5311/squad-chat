@@ -23353,14 +23353,23 @@ ${discuss}`}`
 var PER_FEED = 10;
 var TOTAL = 30;
 var ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+function stripTags(s) {
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(/<[^<>]*>/g, "");
+  } while (s !== prev);
+  return s;
+}
 function decode(s) {
-  return String(s ?? "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]*>/g, "").replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+  const text = String(s ?? "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  return stripTags(text).replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
     if (e[0] === "#") {
       const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1));
       return Number.isFinite(n) && n > 0 && n < 1114112 ? String.fromCodePoint(n) : "";
     }
     return ENTITIES[e.toLowerCase()] ?? m;
-  }).replace(/\s+/g, " ").trim();
+  }).replace(/</g, "\u2039").replace(/>/g, "\u203A").replace(/\s+/g, " ").trim();
 }
 var tag = (xml, name) => new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "i").exec(xml)?.[1];
 function parseFeed(xml) {

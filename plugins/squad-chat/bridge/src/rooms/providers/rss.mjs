@@ -10,10 +10,19 @@ const TOTAL = 30;
 
 const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " " };
 
+// A feed's text as plain text: markup gone (stripped until none is left,
+// so "<scr<script>ipt>" can't put one back together), entities decoded,
+// and any "<" or ">" the entities made drawn as "‹" and "›", so what comes
+// out can never be read as a tag, here or wherever it's shared.
+function stripTags(s) {
+  let prev;
+  do { prev = s; s = s.replace(/<[^<>]*>/g, ""); } while (s !== prev);
+  return s;
+}
+
 export function decode(s) {
-  return String(s ?? "")
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/<[^>]*>/g, "")
+  const text = String(s ?? "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  return stripTags(text)
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
       if (e[0] === "#") {
         const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1));
@@ -21,6 +30,8 @@ export function decode(s) {
       }
       return ENTITIES[e.toLowerCase()] ?? m;
     })
+    .replace(/</g, "‹")
+    .replace(/>/g, "›")
     .replace(/\s+/g, " ")
     .trim();
 }

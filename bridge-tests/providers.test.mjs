@@ -89,15 +89,20 @@ describe("rss", () => {
 
   it("reads RSS and Atom, entities, CDATA and all", () => {
     assert.deepEqual(parseFeed(RSS), { title: "iThome News", items: [{ title: "台積電 & AI 晶片", link: "https://www.ithome.com.tw/news/1", at: Date.parse("2026-10-09T02:00:00Z") }] });
-    assert.deepEqual(parseFeed(ATOM).items, [{ title: "Apple’s new <thing>", link: "https://www.theverge.com/a", at: Date.parse("2026-10-09T05:00:00Z") }]);
+    assert.deepEqual(parseFeed(ATOM).items, [{ title: "Apple’s new ‹thing›", link: "https://www.theverge.com/a", at: Date.parse("2026-10-09T05:00:00Z") }]);
     assert.equal(parseFeed(ATOM).title, "The Verge - All Posts");
     assert.equal(decode("a <b>bold</b>&nbsp;&#x41;&bogus; z"), "a bold A&bogus; z");
+    // Nothing that reads as a tag comes out, however it went in.
+    for (const evil of ["<scr<script>ipt>alert(1)</script>", "&lt;script&gt;alert(1)&lt;/script&gt;", "&#60;img src=x onerror=alert(1)&#62;", "<<b>script>x"]) {
+      assert.doesNotMatch(decode(evil), /[<>]/, evil);
+    }
+    assert.equal(decode("&lt;script&gt;"), "‹script›");
   });
 
   it("merges feeds newest first, and keeps going when one fails", async () => {
     const ctx = fakeCtx({ "https://www.ithome.com.tw/rss": [200, RSS], "https://www.theverge.com/rss": [200, ATOM], "https://techcrunch.com/feed/": [503, "down"] });
     const d = await rss.fetch({ feeds: ["https://www.ithome.com.tw/rss", "https://www.theverge.com/rss", "https://techcrunch.com/feed/"] }, ctx);
-    assert.deepEqual(d.items.map((x) => `${x.source}: ${x.title}`), ["The Verge: Apple’s new <thing>", "iThome News: 台積電 & AI 晶片"]);
+    assert.deepEqual(d.items.map((x) => `${x.source}: ${x.title}`), ["The Verge: Apple’s new ‹thing›", "iThome News: 台積電 & AI 晶片"]);
     assert.equal(d.failed, "techcrunch.com");
     await assert.rejects(rss.fetch({ feeds: ["https://techcrunch.com/feed/"] }, ctx), /answered 503/);
   });
