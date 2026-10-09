@@ -53,6 +53,17 @@ describe("open-meteo", () => {
     assert.match(ctx.seen.find((u) => u.includes("/v1/forecast")), /temperature_unit=fahrenheit&wind_speed_unit=mph/);
   });
 
+  it("tells a busy service from a city that doesn't exist, and names hazardous air", async () => {
+    const busy = fakeCtx({ "https://geocoding-api.open-meteo.com/": [429, { error: true, reason: "Too many requests" }] });
+    await assert.rejects(openMeteo.fetch({ cities: ["Springfield"] }, busy), /place search answered 429/);
+    const smoky = fakeCtx({
+      "https://geocoding-api.open-meteo.com/": [200, { results: [{ name: "Delhi", country_code: "IN", latitude: 28.6, longitude: 77.2 }] }],
+      "https://api.open-meteo.com/v1/forecast": [200, FORECAST],
+      "https://air-quality-api.open-meteo.com/": [200, { current: { us_aqi: 342 } }],
+    });
+    assert.equal((await openMeteo.fetch({ cities: ["Delhi"] }, smoky)).first.aqiText, "AQI 342 hazardous");
+  });
+
   it("fails as a whole only when every city does", async () => {
     const ctx = fakeCtx({ "https://geocoding-api.open-meteo.com/": [200, { results: [] }] });
     await assert.rejects(openMeteo.fetch({ cities: ["Nowhere"] }, ctx), /no place called Nowhere/);
@@ -77,6 +88,8 @@ describe("hn", () => {
     });
     assert.equal(d.items[1].url, "https://news.ycombinator.com/item?id=2");   // an Ask HN links to itself
     assert.deepEqual(await hn.fetch({ list: "off" }, ctx), { items: [], count: 0, off: true });
+    // An error answer is an error, not an empty front page.
+    await assert.rejects(hn.fetch({ list: "top" }, fakeCtx({ "https://hacker-news.firebaseio.com/": [503, null] })), /Hacker News answered 503/);
   });
 });
 

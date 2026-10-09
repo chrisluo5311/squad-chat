@@ -134,6 +134,30 @@ describe("function rooms in the bridge", () => {
 
     r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "default" });
     assert.deepEqual(r.values, { cities: ["Taipei"], units: "imperial" });
+    // Setting a default by hand keeps nothing, so a later default still reaches you.
+    await b.ok("POST", "/fnroom/settings", { room: "weather", key: "units", value: "metric" });
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {});
+  });
+
+  it("loses no setting when two sessions change them at once", async () => {
+    const other = new Bridge("rooms-3", { url: null, configDir: b.configDir });
+    await other.start();
+    try {
+      await Promise.all([
+        b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "Kyoto" }),
+        other.ok("POST", "/fnroom/settings", { room: "weather", key: "units", value: "imperial" }),
+        b.ok("POST", "/fnroom/settings", { room: "news", key: "hn", value: "best" }),
+        other.ok("POST", "/fnroom/settings", { room: "news", key: "feeds", value: "-https://techcrunch.com/feed/" }),
+      ]);
+      const read = (id) => JSON.parse(readFileSync(join(b.configDir, "room-data", id, "settings.json"), "utf8"));
+      assert.deepEqual(read("weather"), { cities: ["Kyoto"], units: "imperial" });
+      assert.equal(read("news").hn, "best");
+      assert.equal(read("news").feeds.length, 3);
+    } finally {
+      await other.stop();
+      rmSync(other.socketDir, { recursive: true, force: true });
+    }
+    for (const [room, key] of [["weather", "cities"], ["weather", "units"], ["news", "hn"], ["news", "feeds"]]) await b.ok("POST", "/fnroom/settings", { room, key, value: "default" });
   });
 
   it("keeps the list across restarts", async () => {

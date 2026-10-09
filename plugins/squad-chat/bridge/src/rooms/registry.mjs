@@ -19,10 +19,11 @@
 // A run asked for while one is going waits for it and then runs once more,
 // so an action's change is never overwritten by an older answer.
 
-import { readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync, chmodSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { checkManifest, parseInterval, settingError } from "./manifest.mjs";
 import { allowedHosts, limitedFetch, clean, RoomError } from "./net.mjs";
+import { locked } from "./lock.mjs";
 import localList from "./providers/local-list.mjs";
 import openMeteo from "./providers/open-meteo.mjs";
 import hn from "./providers/hn.mjs";
@@ -206,20 +207,24 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
       const settings = new Map(Object.entries(m.settings ?? {}));
       if (!settings.has(String(k))) throw new RoomError(404, `${m.name} has no setting ${k}${settings.size ? `. It has ${[...settings.keys()].join(", ")}` : ""}.`);
       const st = settings.get(String(k));
-      const saved = savedSettings(id);
-      if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
-      else {
-        const v = parseSetting(st, value, settingsOf(id)[k]);
-        const bad = settingError(st, v, hostsOf(m));
-        if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
-        saved[k] = v;
-      }
-      const dir = join(dataDir, id);
-      mkdirSync(dir, { recursive: true, mode: 0o700 });
-      chmodSync(dir, 0o700);
-      const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
-      writeFileSync(tmp, JSON.stringify(saved, null, 1), { mode: 0o600 });
-      renameSync(tmp, settingsFile(id));
+      // Every session's bridge shares the file: read, change and write it
+      // holding its lock, so two changes at once both land.
+      await locked(join(dataDir, id), "settings", () => {
+        const saved = savedSettings(id);
+        if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
+        else {
+          const v = parseSetting(st, value, settingsOf(id)[k]);
+          const bad = settingError(st, v, hostsOf(m));
+          if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
+          // Only what differs from the default is kept, so a room's new
+          // default reaches people who never changed it.
+          if (JSON.stringify(v) === JSON.stringify(st.default)) delete saved[k];
+          else saved[k] = v;
+        }
+        const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
+        writeFileSync(tmp, JSON.stringify(saved, null, 1), { mode: 0o600 });
+        renameSync(tmp, settingsFile(id));
+      });
       emitSettings(id);
       if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };

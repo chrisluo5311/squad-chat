@@ -4396,8 +4396,8 @@ var require_RealtimeChannel = __commonJS({
       }
       /** @internal */
       _notThisChannelEvent(event, ref) {
-        const { close, error, leave, join: join6 } = constants_1.CHANNEL_EVENTS;
-        const events = [close, error, leave, join6];
+        const { close, error, leave, join: join7 } = constants_1.CHANNEL_EVENTS;
+        const events = [close, error, leave, join7];
         return ref && events.includes(event) && ref !== this.joinPush.ref;
       }
       /** @internal */
@@ -13908,7 +13908,7 @@ var require_main3 = __commonJS({
 import { createServer } from "node:http";
 import { mkdirSync as mkdirSync5, rmSync as rmSync3, chmodSync as chmodSync5 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 
 // node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -22827,8 +22827,8 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
 }
 
 // src/rooms/registry.mjs
-import { readdirSync as readdirSync2, readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4, mkdirSync as mkdirSync4, chmodSync as chmodSync4 } from "node:fs";
-import { join as join4 } from "node:path";
+import { readdirSync as readdirSync2, readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4 } from "node:fs";
+import { join as join5 } from "node:path";
 
 // src/rooms/manifest.mjs
 var SCHEMA = 1;
@@ -23080,20 +23080,57 @@ function clean(value, depth = 0) {
   return typeof value === "number" || typeof value === "boolean" || value == null ? value : null;
 }
 
-// src/rooms/providers/local-list.mjs
-import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, renameSync as renameSync3, mkdirSync as mkdirSync3, chmodSync as chmodSync3, rmdirSync, statSync as statSync2 } from "node:fs";
+// src/rooms/lock.mjs
+import { mkdirSync as mkdirSync3, chmodSync as chmodSync3, rmdirSync, statSync as statSync2 } from "node:fs";
 import { join as join3 } from "node:path";
+var WAIT_MS = 5e3;
+var STALE_MS = 15e3;
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+async function locked(dir, name, fn) {
+  mkdirSync3(dir, { recursive: true, mode: 448 });
+  chmodSync3(dir, 448);
+  const lock = join3(dir, `${name}.lock`);
+  const until = Date.now() + WAIT_MS;
+  for (; ; ) {
+    try {
+      mkdirSync3(lock);
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - statSync2(lock).mtimeMs > STALE_MS) {
+          rmdirSync(lock);
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() > until) throw new RoomError(503, "Another session is changing this. Try again in a moment.");
+      await sleep2(20 + Math.random() * 30);
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      rmdirSync(lock);
+    } catch {
+    }
+  }
+}
+
+// src/rooms/providers/local-list.mjs
+import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, renameSync as renameSync3, mkdirSync as mkdirSync4, chmodSync as chmodSync4 } from "node:fs";
+import { join as join4 } from "node:path";
 import { randomBytes } from "node:crypto";
+var locked2 = (dir, fn) => locked(dir, "list", fn);
 var MAX_ITEMS = 200;
 var MAX_BODY = 2e4;
 var NAME2 = /^[^\n\r\t]{1,40}$/;
 var LANG2 = /^[a-z0-9+#._-]{1,20}$/;
-var LOCK_WAIT_MS = 5e3;
-var LOCK_STALE_MS = 15e3;
-var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 var isItem = (x) => x && typeof x === "object" && typeof x.name === "string" && typeof x.body === "string";
 function load(dir) {
-  const file = join3(dir, "list.json");
+  const file = join4(dir, "list.json");
   let text;
   try {
     text = readFileSync3(file, "utf8");
@@ -23110,42 +23147,10 @@ function load(dir) {
   if (!Array.isArray(data?.items) || !data.items.every(isItem)) throw new RoomError(500, `${file} doesn't hold a list of snippets. Fix or move it: nothing was changed.`);
   return data.items;
 }
-async function locked(dir, fn) {
-  mkdirSync3(dir, { recursive: true, mode: 448 });
-  chmodSync3(dir, 448);
-  const lock = join3(dir, "list.lock");
-  const until = Date.now() + LOCK_WAIT_MS;
-  for (; ; ) {
-    try {
-      mkdirSync3(lock);
-      break;
-    } catch (err) {
-      if (err.code !== "EEXIST") throw err;
-      try {
-        if (Date.now() - statSync2(lock).mtimeMs > LOCK_STALE_MS) {
-          rmdirSync(lock);
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      if (Date.now() > until) throw new RoomError(503, "Another session is changing the list. Try again in a moment.");
-      await sleep2(20 + Math.random() * 30);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    try {
-      rmdirSync(lock);
-    } catch {
-    }
-  }
-}
 function save(dir, items) {
-  mkdirSync3(dir, { recursive: true, mode: 448 });
-  chmodSync3(dir, 448);
-  const file = join3(dir, "list.json");
+  mkdirSync4(dir, { recursive: true, mode: 448 });
+  chmodSync4(dir, 448);
+  const file = join4(dir, "list.json");
   const tmp = `${file}.${process.pid}.tmp`;
   writeFileSync3(tmp, JSON.stringify({ v: 1, items }, null, 1), { mode: 384 });
   renameSync3(tmp, file);
@@ -23171,7 +23176,7 @@ var local_list_default = {
     return { items, count: items.length };
   },
   actions: {
-    add: (params, args, ctx) => locked(ctx.dataDir, () => {
+    add: (params, args, ctx) => locked2(ctx.dataDir, () => {
       const items = load(ctx.dataDir);
       const name = cleanName(args.name);
       const body = String(args.body ?? "").replace(/^(\s*\n)+/, "").trimEnd();
@@ -23186,13 +23191,13 @@ var local_list_default = {
       save(ctx.dataDir, items);
       return { ok: true, item };
     }),
-    delete: (params, args, ctx) => locked(ctx.dataDir, () => {
+    delete: (params, args, ctx) => locked2(ctx.dataDir, () => {
       const items = load(ctx.dataDir);
       const [item] = items.splice(find(items, args.name), 1);
       save(ctx.dataDir, items);
       return { ok: true, item };
     }),
-    rename: (params, args, ctx) => locked(ctx.dataDir, () => {
+    rename: (params, args, ctx) => locked2(ctx.dataDir, () => {
       const items = load(ctx.dataDir);
       const i = find(items, args.name);
       const to = cleanName(args.to);
@@ -23226,7 +23231,8 @@ function aqiWord(aqi) {
   if (aqi <= 100) return "moderate";
   if (aqi <= 150) return "unhealthy for some";
   if (aqi <= 200) return "unhealthy";
-  return "very unhealthy";
+  if (aqi <= 300) return "very unhealthy";
+  return "hazardous";
 }
 function spark(values) {
   return values.map((v) => v > 0 ? SPARKS[Math.min(7, Math.max(0, Math.round(v / 100 * 7)))] : SPARKS[0]).join("");
@@ -23238,6 +23244,7 @@ async function place(name, ctx) {
   const k = name.toLowerCase();
   if (geocoded.has(k)) return geocoded.get(k);
   const r = await ctx.fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);
+  if (!r.ok) throw new RoomError(502, `Open-Meteo's place search answered ${r.status}`);
   const hit = r.json().results?.[0];
   if (!hit) throw new RoomError(404, `no place called ${name}`);
   const p = { name: hit.name, country: hit.country_code ?? "", lat: hit.latitude, lon: hit.longitude };
@@ -23328,8 +23335,10 @@ var hn_default = {
     const list = LISTS[params.list] ? params.list : params.list === "off" ? "off" : "top";
     if (list === "off") return { items: [], count: 0, off: true };
     const count = Math.min(30, Math.max(1, Number(params.count) || 12));
-    const ids = (await ctx.fetch(`https://hacker-news.firebaseio.com/v0/${LISTS[list]}.json`)).json();
-    const stories = await Promise.all((Array.isArray(ids) ? ids : []).slice(0, count).map((id) => ctx.fetch(`https://hacker-news.firebaseio.com/v0/item/${Number(id)}.json`).then((r) => r.json()).catch(() => null)));
+    const r = await ctx.fetch(`https://hacker-news.firebaseio.com/v0/${LISTS[list]}.json`);
+    if (!r.ok) throw new RoomError(502, `Hacker News answered ${r.status}`);
+    const ids = r.json();
+    const stories = await Promise.all((Array.isArray(ids) ? ids : []).slice(0, count).map((id) => ctx.fetch(`https://hacker-news.firebaseio.com/v0/item/${Number(id)}.json`).then((res) => res.ok ? res.json() : null).catch(() => null)));
     const now = Date.now();
     const items = stories.filter((s) => s?.title).map((s) => {
       const discuss = `https://news.ycombinator.com/item?id=${s.id}`;
@@ -23459,17 +23468,17 @@ function readRooms(dir, providers) {
     return { rooms, invalid };
   }
   for (const name of names.sort()) {
-    const file = join4(dir, name, "room.json");
+    const file = join5(dir, name, "room.json");
     let m;
     try {
       m = JSON.parse(readFileSync4(file, "utf8"));
     } catch (err) {
-      invalid.push({ dir: join4(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
+      invalid.push({ dir: join5(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
       continue;
     }
     const errors = checkManifest(m, providers);
     if (!errors.length && m.id !== name) errors.push(`id: "${m.id}" but its folder is "${name}"`);
-    if (errors.length) invalid.push({ dir: join4(dir, name), errors });
+    if (errors.length) invalid.push({ dir: join5(dir, name), errors });
     else rooms.push(m);
   }
   return { rooms, invalid };
@@ -23482,7 +23491,7 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
     const found = readRooms(dir, providers);
     invalid.push(...found.invalid);
     for (const m of found.rooms) {
-      if (rooms.has(m.id)) invalid.push({ dir: join4(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
+      if (rooms.has(m.id)) invalid.push({ dir: join5(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
       else rooms.set(m.id, m);
     }
   }
@@ -23494,7 +23503,7 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
   const queued = /* @__PURE__ */ new Map();
   const key = (id, pid) => `${id}/${pid}`;
   const hostsOf = (m) => (m.permissions?.hosts ?? []).map((h) => h.toLowerCase());
-  const settingsFile = (id) => join4(dataDir, id, "settings.json");
+  const settingsFile = (id) => join5(dataDir, id, "settings.json");
   function savedSettings(id) {
     try {
       const data = JSON.parse(readFileSync4(settingsFile(id), "utf8"));
@@ -23528,7 +23537,7 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
     const def = providers[p.type];
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
     return {
-      dataDir: join4(dataDir, m.id),
+      dataDir: join5(dataDir, m.id),
       // Only headers come from the provider: the time and size limits stay ours.
       fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts })
     };
@@ -23587,20 +23596,20 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
       const settings = new Map(Object.entries(m.settings ?? {}));
       if (!settings.has(String(k))) throw new RoomError(404, `${m.name} has no setting ${k}${settings.size ? `. It has ${[...settings.keys()].join(", ")}` : ""}.`);
       const st = settings.get(String(k));
-      const saved = savedSettings(id);
-      if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
-      else {
-        const v = parseSetting(st, value, settingsOf(id)[k]);
-        const bad = settingError(st, v, hostsOf(m));
-        if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
-        saved[k] = v;
-      }
-      const dir = join4(dataDir, id);
-      mkdirSync4(dir, { recursive: true, mode: 448 });
-      chmodSync4(dir, 448);
-      const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
-      writeFileSync4(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
-      renameSync4(tmp, settingsFile(id));
+      await locked(join5(dataDir, id), "settings", () => {
+        const saved = savedSettings(id);
+        if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
+        else {
+          const v = parseSetting(st, value, settingsOf(id)[k]);
+          const bad = settingError(st, v, hostsOf(m));
+          if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
+          if (JSON.stringify(v) === JSON.stringify(st.default)) delete saved[k];
+          else saved[k] = v;
+        }
+        const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
+        writeFileSync4(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
+        renameSync4(tmp, settingsFile(id));
+      });
       emitSettings(id);
       if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };
@@ -23671,11 +23680,11 @@ if (!token) {
 }
 var configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
 if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
-var configDir = env.SQUAD_CONFIG_DIR || join5(env.XDG_CONFIG_HOME || join5(homedir(), ".config"), "squad-chat");
-var socketDir = env.SQUAD_SOCKET_DIR || join5(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
+var configDir = env.SQUAD_CONFIG_DIR || join6(env.XDG_CONFIG_HOME || join6(homedir(), ".config"), "squad-chat");
+var socketDir = env.SQUAD_SOCKET_DIR || join6(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
 mkdirSync5(socketDir, { recursive: true, mode: 448 });
 chmodSync5(socketDir, 448);
-var socketPath = join5(socketDir, `${process.pid}.sock`);
+var socketPath = join6(socketDir, `${process.pid}.sock`);
 rmSync3(socketPath, { force: true });
 var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
@@ -23685,10 +23694,10 @@ var chat = configured ? new Chat({
   log,
   debug: env.SQUAD_DEBUG === "1"
 }) : null;
-var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join5(socketDir, "sessions"), emit });
+var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join6(socketDir, "sessions"), emit });
 var fnRooms = roomRegistry({
-  dirs: [env.SQUAD_ROOMS_DIR, join5(configDir, "rooms")],
-  dataDir: join5(configDir, "room-data"),
+  dirs: [env.SQUAD_ROOMS_DIR, join6(configDir, "rooms")],
+  dataDir: join6(configDir, "room-data"),
   emit,
   log
 });

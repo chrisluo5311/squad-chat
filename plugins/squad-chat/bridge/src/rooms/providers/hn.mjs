@@ -1,6 +1,8 @@
 // Hacker News through its public Firebase API: a list of ids, then one
 // request per story. `list` is top, best, new or off.
 
+import { RoomError } from "../net.mjs";
+
 const LISTS = { top: "topstories", best: "beststories", new: "newstories" };
 
 export function ago(sec, now = Date.now()) {
@@ -21,9 +23,11 @@ export default {
     const list = LISTS[params.list] ? params.list : params.list === "off" ? "off" : "top";
     if (list === "off") return { items: [], count: 0, off: true };
     const count = Math.min(30, Math.max(1, Number(params.count) || 12));
-    const ids = (await ctx.fetch(`https://hacker-news.firebaseio.com/v0/${LISTS[list]}.json`)).json();
+    const r = await ctx.fetch(`https://hacker-news.firebaseio.com/v0/${LISTS[list]}.json`);
+    if (!r.ok) throw new RoomError(502, `Hacker News answered ${r.status}`);
+    const ids = r.json();
     const stories = await Promise.all((Array.isArray(ids) ? ids : []).slice(0, count).map((id) =>
-      ctx.fetch(`https://hacker-news.firebaseio.com/v0/item/${Number(id)}.json`).then((r) => r.json()).catch(() => null)));
+      ctx.fetch(`https://hacker-news.firebaseio.com/v0/item/${Number(id)}.json`).then((res) => (res.ok ? res.json() : null)).catch(() => null)));
     const now = Date.now();
     const items = stories.filter((s) => s?.title).map((s) => {
       const discuss = `https://news.ycombinator.com/item?id=${s.id}`;

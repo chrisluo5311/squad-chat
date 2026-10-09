@@ -59,7 +59,7 @@ These two are off until you turn them on, and each says where it goes when you d
 
 The bridge holds each room to its own sites, so a room can't reach anywhere else, and a feed you add has to be on one of them. What comes back is cleaned of terminal escapes before it's drawn, and none of it reaches Claude. The settings you pick stay in `~/.config/squad-chat/room-data/<room>/settings.json`, readable only by you.
 
-Only `/chat-share usage|git|agents|snippet`, or a snippet's **⇪**, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
+Only `/chat-share usage|git|agents|snippet|weather|news`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 
 ## Abuse limits
 

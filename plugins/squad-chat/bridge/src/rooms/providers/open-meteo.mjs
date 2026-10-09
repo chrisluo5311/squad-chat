@@ -28,7 +28,8 @@ function aqiWord(aqi) {
   if (aqi <= 100) return "moderate";
   if (aqi <= 150) return "unhealthy for some";
   if (aqi <= 200) return "unhealthy";
-  return "very unhealthy";
+  if (aqi <= 300) return "very unhealthy";
+  return "hazardous";
 }
 
 // Chances of rain, 0-100, as blocks: a full block is a sure thing, so a
@@ -46,6 +47,8 @@ async function place(name, ctx) {
   const k = name.toLowerCase();
   if (geocoded.has(k)) return geocoded.get(k);
   const r = await ctx.fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);
+  // A busy or failing service isn't a city that doesn't exist.
+  if (!r.ok) throw new RoomError(502, `Open-Meteo's place search answered ${r.status}`);
   const hit = r.json().results?.[0];
   if (!hit) throw new RoomError(404, `no place called ${name}`);
   const p = { name: hit.name, country: hit.country_code ?? "", lat: hit.latitude, lon: hit.longitude };
