@@ -1226,8 +1226,18 @@ test('a room new in this version gets a tab once, even for people who chose thei
   expect(await ui.find({ key: 'sys-snippet' })).toBeDefined()
   expect(await ui.find({ key: 'sys-agents' })).toBeUndefined()   // still their choice
   await ui.unmount()
-  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet'])
-  expect(store.sysRooms).toEqual(['usage', 'git', 'snippet'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'monitor'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'snippet', 'monitor'])
+})
+
+test('a room added later gets its tab once too, and a room taken away stays away', SLOW, async ($, on) => {
+  // Offered Snippets before, and took it away: Monitor is new, Snippets isn't.
+  const store: Record<string, unknown> = { sysRooms: ['usage', 'git'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  expect(store.sysRooms).toEqual(['usage', 'git', 'monitor'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'monitor'])
 })
 
 test('tabs that would wrap show the rooms not on show as their icon', SLOW, async ($, on) => {
@@ -1403,4 +1413,85 @@ test('Tech News room: stories with their links to copy and share', SLOW, async (
   await settle()
   expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: 'Deno Is Joining Cloudflare\nhttps://deno.com/blog/cloudflare', room: LOBBY.id, kind: 'code' } })
   await ui.unmount()
+})
+
+// rooms/monitor/room.json, as the bridge reports it.
+const MONITOR_ROOM = {"schema": 1, "id": "monitor", "version": "1.0.0", "name": "Monitor", "icon": "▦", "color": "teal", "description": "This computer's CPU, memory, GPU, network, disk and battery, and temperatures and power with macmon. Nothing leaves it.", "author": "squad-chat", "permissions": {"hosts": []}, "settings": {"alerts": {"type": "bool", "label": "Alerts", "default": true}, "cpu_temp": {"type": "int", "label": "CPU alert at °C", "default": 95, "min": 50, "max": 110}, "memory": {"type": "int", "label": "Memory alert at %", "default": 95, "min": 50, "max": 100}}, "providers": [{"id": "sys", "type": "sysinfo", "params": {"alerts": "$settings.alerts", "cpu_temp": "$settings.cpu_temp", "memory": "$settings.memory"}, "interval": {"visible": "2s", "background": "30s"}}], "layout": {"cards": [{"title": "CPU", "meta": "{sys.cpu.meta}", "body": [{"type": "meter", "label": "CPU", "value": "sys.cpu.pct", "right": "{sys.cpu.load}"}, {"type": "text", "text": "{sys.cpu.spark}", "color": "teal"}]}, {"title": "MEMORY", "when": "sys.mem", "meta": "{sys.mem.usedText}", "body": [{"type": "meter", "label": "Memory", "value": "sys.mem.pct", "right": "{sys.mem.usedText}"}, {"type": "meter", "label": "Pressure", "value": "sys.mem.pressure"}, {"type": "meter", "label": "Swap", "value": "sys.mem.swapPct", "right": "{sys.mem.swapText}"}]}, {"title": "GPU & POWER", "when": "sys.gpu", "meta": "{sys.gpu.tempText}", "body": [{"type": "meter", "label": "GPU", "value": "sys.gpu.pct", "right": "{sys.gpu.power}"}, {"type": "text", "text": "{sys.power}\n{sys.fans}\n{sys.sensorHint}"}]}, {"title": "NETWORK", "body": [{"type": "tiles", "tiles": [{"value": "↓ {sys.net.rxText}", "sub": "in", "color": "teal"}, {"value": "↑ {sys.net.txText}", "sub": "out", "color": "sky"}]}, {"type": "text", "text": "↓ {sys.net.rxSpark}\n↑ {sys.net.txSpark}"}]}, {"title": "DISK", "when": "sys.disk", "meta": "{sys.disk.freeText}", "body": {"type": "meter", "label": "Disk", "value": "sys.disk.pct", "right": "{sys.disk.usedText}"}}, {"title": "BATTERY", "when": "sys.battery", "meta": "{sys.battery.detail}", "body": {"type": "meter", "label": "Battery", "value": "sys.battery.pct", "right": "{sys.battery.state}"}}], "inline": [{"type": "meter", "label": "CPU", "value": "sys.cpu.pct", "right": "{sys.cpu.tempText}"}, {"type": "meter", "label": "Memory", "value": "sys.mem.pct", "right": "{sys.mem.usedText}"}, {"type": "text", "text": "↓ {sys.net.rxText}  ↑ {sys.net.txText}"}], "band": "{sys.band}", "hint": "/set cpu_temp 90 · /set alerts off · /chat set monitor", "placeholder": "/set memory 90 · /set alerts on · /help"}}
+const SYS = (over: Record<string, any> = {}) => ({
+  cpu: { pct: 42, cores: 12, load: 'load 4.90', spark: '▃▅▂', tempText: '56°C', power: '1.9 W', meta: '12 cores · 56°C · 1.9 W' },
+  mem: { pct: 85, usedText: '27.1 GB / 32 GB', swapPct: 67, swapText: '3.3 GB / 5 GB', pressure: 57, spark: '▇▇' },
+  gpu: null,
+  power: '',
+  fans: '',
+  net: { rxText: '367 KB/s', txText: '4.2 KB/s', rxSpark: '▁█', txSpark: '▁▁' },
+  disk: { pct: 80, usedText: '737 GB / 926 GB', freeText: '189 GB free' },
+  battery: null,
+  sensorHint: 'brew install macmon for temperatures, power and fans',
+  band: 'CPU 42% · mem 85% · ↓367 KB/s ↑4.2 KB/s',
+  alerts: [],
+  ...over,
+})
+const monitorLoaded = () => [
+  { type: 'fnrooms', rooms: [SNIPPET_ROOM, MONITOR_ROOM], invalid: [] },
+  { type: 'fnsettings', id: 'monitor', values: { alerts: true, cpu_temp: 95, memory: 95 } },
+]
+
+test('Monitor room: meters for CPU, memory, network and disk; cards without data stay out', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'monitor' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...monitorLoaded(), { type: 'fnroom', id: 'monitor', provider: 'sys', data: SYS(), at: Date.now() })
+  await settle()
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet', 'monitor'], shown: null })
+  // 30 rows fit CPU, memory and network: the rest is named for a taller pane.
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await settle()
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet', 'monitor'], shown: 'monitor' })
+  expect(await ui.find({ type: 'Text', text: '+ DISK  (a taller pane shows them)' })).toBeDefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } } })
+  const missing = []
+  for (const text of ['CPU', '12 cores · 56°C · 1.9 W', '42%', 'load 4.90', '▃▅▂', 'MEMORY', '85%', 'Pressure', 'Swap', 'NETWORK', '↓ 367 KB/s', '↑ 4.2 KB/s', 'DISK', '189 GB free', '80%']) {
+    if (!(await ui.find({ type: 'Text', text }))) missing.push(text)
+  }
+  expect(missing).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'GPU & POWER' })).toBeUndefined()   // no GPU reading
+  expect(await ui.find({ type: 'Text', text: 'BATTERY' })).toBeUndefined()       // a desktop
+  await ui.unmount()
+
+  bridge.emit({ type: 'fnroom', id: 'monitor', provider: 'sys', data: SYS({ gpu: { pct: 9, tempText: '51°C', power: '0.5 W' }, power: 'CPU 1.9 W · GPU 0.5 W · all 2.4 W', fans: '', sensorHint: '', battery: { pct: 85, state: 'charging', detail: 'charging · 31 W in' } }), at: Date.now() })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } } })
+  expect(await ui.find({ type: 'Text', text: 'GPU & POWER' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'CPU 1.9 W · GPU 0.5 W · all 2.4 W' })).toBeDefined()   // the empty fan and hint lines take no room
+  expect(await ui.find({ type: 'Text', text: 'BATTERY' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'charging · 31 W in' })).toBeDefined()
+  await ui.unmount()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '▦ Monitor' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: 'CPU 42% · mem 85% · ↓367 KB/s ↑4.2 KB/s' })).toBeDefined()
+  await band.unmount()
+})
+
+test('a room\'s alerts toast once each, again only after they clear, and never while quiet', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...monitorLoaded())
+  const hot = SYS({ alerts: [{ id: 'cpu-temp', text: '▦ CPU at 97°C' }] })
+  const sample = (data: any) => ({ type: 'fnroom', id: 'monitor', provider: 'sys', data, at: Date.now() })
+  bridge.emit(sample(hot))
+  await settle()
+  bridge.emit(sample(hot), sample(SYS({ alerts: [{ id: 'cpu-temp', text: '▦ CPU at 98°C' }, { id: 'memory', text: '▦ Memory 96% used' }] })))
+  await settle()
+  expect(seen.toasts).toEqual(['▦ CPU at 97°C', '▦ Memory 96% used'])
+  bridge.emit(sample(SYS()), sample(hot))   // cleared, then back
+  await settle()
+  expect(seen.toasts.at(-1)).toBe('▦ CPU at 97°C')
+
+  await $.command.run({ command: 'chat', args: 'dnd on' })
+  bridge.emit(sample(SYS()), sample(hot))
+  await settle()
+  expect(seen.toasts.filter((t) => t === '▦ CPU at 97°C')).toHaveLength(2)   // held back while quiet
 })

@@ -48,6 +48,10 @@ To show other sessions, each session keeps a small heartbeat file in `/tmp/squad
 
 Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. The Snippets room never touches the network.
 
+## What Monitor runs
+
+Monitor never touches the network. It reads this computer through a fixed set of commands in squad-chat's own code (on a Mac `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg` and, if you installed it, `macmon`, on Linux files in `/proc` and `/sys` and `nvidia-smi`), with no shell and no sudo. A room's manifest can't name a command. The numbers stay in the bridge's memory, the last two minutes at most, and are drawn, never sent anywhere or shown to Claude.
+
 ## What Weather and Tech News reach
 
 These two are off until you turn them on, and each says where it goes when you do. They ask only for what they show, with no account, key or cookie, and send nothing about you or your session:
@@ -59,7 +63,7 @@ These two are off until you turn them on, and each says where it goes when you d
 
 The bridge holds each room to its own sites, so a room can't reach anywhere else, and a feed you add has to be on one of them. What comes back is cleaned of terminal escapes before it's drawn, and none of it reaches Claude. The settings you pick stay in `~/.config/squad-chat/room-data/<room>/settings.json`, readable only by you.
 
-Only `/chat-share usage|git|agents|snippet|weather|news`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
+Only `/chat-share usage|git|agents|snippet|monitor|weather|news`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 
 ## Abuse limits
 

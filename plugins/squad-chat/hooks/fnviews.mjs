@@ -29,6 +29,9 @@ export function fill(template, data) {
   return String(template ?? "").replace(/\{([A-Za-z0-9_.]+)\}/g, (_, p) => show(lookup(data, p)));
 }
 
+// A text widget's text: a line whose holes came out empty takes no room.
+const fillText = (template, data) => fill(template, data).split("\n").filter((l) => l.trim()).join("\n");
+
 const firstLine = (s) => String(s ?? "").split("\n").find((l) => l.trim()) ?? "";
 const color = (name, fallback) => palette[name] ?? fallback;
 const muted = (els, key, text) => els.Text({ key, color: theme.muted, wrap: "truncate-end", children: text });
@@ -98,9 +101,26 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     const pct = Number(lookup(data, b.value));
     return { nodes: [meter(els, { key, label: fill(b.label, data), pct: Number.isFinite(pct) ? pct : undefined, width: w, right: b.right ? fill(b.right, data) : "", color: b.color ? color(b.color) : undefined })], height: 1 };
   }
-  const text = fill(b.text, data);
+  const text = fillText(b.text, data);
+  if (!text) return { nodes: [], height: 0 };
   return { nodes: [Box({ key, children: [Text({ key: "t", color: color(b.color), wrap: "wrap", children: text })] })], height: rowsFor(text, w) };
 }
+
+// A card's body: one widget, or a column of them, within `limit` rows.
+function body(els, b, data, w, handlers, { limit = Infinity, accent, key }) {
+  if (!Array.isArray(b)) return widget(els, b, data, w, handlers, { limit, accent, key });
+  const nodes = [];
+  let height = 0;
+  b.forEach((one, i) => {
+    const part = widget(els, one, data, w, handlers, { limit: Math.max(1, limit - height), accent, key: `${key}-${i}` });
+    nodes.push(...part.nodes);
+    height += part.height;
+  });
+  return { nodes, height };
+}
+
+// The cards whose `when` holds (a card without one always shows).
+const shownCards = (layout, data) => layout.cards.filter((c) => !c.when || !!lookup(data, c.when));
 
 // ---------------------------------------------------------------- the pane
 
@@ -116,12 +136,12 @@ export function fnDock(els, id, w, capacity, handlers) {
   }
   const cards = [];
   let used = 0;
-  room.manifest.layout.cards.forEach((c, i) => {
+  shownCards(room.manifest.layout, data).forEach((c, i) => {
     const gap = cards.length ? CARD_GAP : 0;
     const limit = Math.max(1, capacity - used - gap - 3);
-    const body = widget(els, c.body, data, w, handlers, { limit, accent: meta.color, key: `c${i}` });
-    const rows = [...body.nodes];
-    let height = body.height;
+    const filled = body(els, c.body, data, w, handlers, { limit, accent: meta.color, key: `c${i}` });
+    const rows = [...filled.nodes];
+    let height = filled.height;
     if (i === 0 && error) { rows.unshift(els.Text({ key: "err", color: theme.warn, wrap: "truncate-end", children: `⚠ ${error}` })); height++; }
     cards.push({
       name: c.title,
@@ -145,8 +165,8 @@ export function fnInline(els, id, w, handlers) {
     { text: loaded && first.meta ? `  ${fill(first.meta, data)}` : "", color: theme.muted, grow: true },
   ]);
   if (!loaded) return [head, muted(els, "wait", error ? `⚠ ${error}` : "Loading…")];
-  const body = widget(els, room.manifest.layout.inline ?? first.body, data, w, handlers, { limit: 4, accent: meta.color, key: "in" });
-  return [head, ...(error ? [els.Text({ key: "err", color: theme.warn, wrap: "truncate-end", children: `⚠ ${error}` })] : []), ...body.nodes];
+  const filled = body(els, room.manifest.layout.inline ?? first.body, data, w, handlers, { limit: 4, accent: meta.color, key: "in" });
+  return [head, ...(error ? [els.Text({ key: "err", color: theme.warn, wrap: "truncate-end", children: `⚠ ${error}` })] : []), ...filled.nodes];
 }
 
 // The band's line, as colored pieces.
@@ -182,7 +202,7 @@ function widgetText(b, data) {
     const pct = Number(lookup(data, b.value));
     return [`${fill(b.label, data)}  ${Number.isFinite(pct) ? `${Math.round(pct)}%` : "–"}${b.right ? `  ${fill(b.right, data)}` : ""}`];
   }
-  return [fill(b.text, data)];
+  return [fillText(b.text, data)].filter(Boolean);
 }
 
 // A function room as plain text, for a snippet card in a chat room.
@@ -193,9 +213,9 @@ export function fnSnapshot(id) {
   if (!loaded) return `${room.manifest.name} · not loaded yet`;
   if (l.snapshot) return fill(l.snapshot, data);
   const out = [room.manifest.name];
-  for (const c of l.cards) {
+  for (const c of shownCards(l, data)) {
     out.push(`${c.title}${c.meta ? ` · ${fill(c.meta, data)}` : ""}`);
-    out.push(...widgetText(c.body, data).map((t) => `  ${t}`));
+    for (const b of [c.body].flat()) out.push(...widgetText(b, data).flatMap((t) => t.split("\n")).map((t) => `  ${t}`));
   }
   return out.join("\n");
 }
