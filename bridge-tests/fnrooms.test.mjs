@@ -5,7 +5,7 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, statSync, existsSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { Bridge } from "./helpers.mjs";
@@ -63,6 +63,44 @@ describe("function rooms in the bridge", () => {
     await b.ok("POST", "/fnroom/action", { room: "snippet", action: "delete", args: { name: "CURL JSON" } });
     assert.deepEqual(latest(b, "snippet").data.items.map((x) => x.name), ["jq tidy"]);
     assert.equal((await b.call("POST", "/fnroom/action", { room: "snippet", action: "delete", args: { name: "gone" } })).status, 404);
+  });
+
+  it("leaves a list it can't read alone, and says so", async () => {
+    const file = join(b.configDir, "room-data", "snippet", "list.json");
+    const good = readFileSync(file, "utf8");
+    writeFileSync(file, "{ not json");
+    const r = await b.call("POST", "/fnroom/action", { room: "snippet", action: "add", args: { name: "new", body: "x" } });
+    assert.equal(r.status, 500);
+    assert.match(r.body.error, /isn't valid JSON\. Fix or move it: nothing was changed\./);
+    assert.equal(readFileSync(file, "utf8"), "{ not json");
+    await b.ok("POST", "/fnroom/refresh", { room: "snippet" });
+    const ev = latest(b, "snippet");
+    assert.match(ev.error, /isn't valid JSON/);
+    assert.equal(ev.stale, true);
+    assert.deepEqual(ev.data.items.map((x) => x.name), ["jq tidy"]);   // the last good list, still shown
+    writeFileSync(file, JSON.stringify({ items: "nope" }));
+    assert.equal((await b.call("POST", "/fnroom/action", { room: "snippet", action: "delete", args: { name: "jq tidy" } })).status, 500);
+    writeFileSync(file, good);
+  });
+
+  it("loses nothing when two sessions change the list at once", async () => {
+    const other = new Bridge("rooms-2", { url: null, configDir: b.configDir });
+    await other.start();
+    try {
+      const adds = [];
+      for (let i = 0; i < 10; i++) {
+        const who = i % 2 ? other : b;
+        adds.push(who.ok("POST", "/fnroom/action", { room: "snippet", action: "add", args: { name: `n${i}`, body: `echo ${i}` } }));
+      }
+      await Promise.all(adds);
+      await b.ok("POST", "/fnroom/refresh", { room: "snippet" });
+      assert.equal(count(b), 11);
+      assert.ok(!existsSync(join(b.configDir, "room-data", "snippet", "list.lock")));
+    } finally {
+      await other.stop();
+      rmSync(other.socketDir, { recursive: true, force: true });
+    }
+    for (let i = 0; i < 10; i++) await b.ok("POST", "/fnroom/action", { room: "snippet", action: "delete", args: { name: `n${i}` } });
   });
 
   it("keeps the list across restarts", async () => {

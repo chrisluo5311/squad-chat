@@ -11,6 +11,8 @@
 // A provider runs when its room is enabled: once at the start, after each
 // of its actions, and on its interval, the `visible` one while its room is
 // on show and the `background` one otherwise (none: it waits for an action).
+// A run asked for while one is going waits for it and then runs once more,
+// so an action's change is never overwritten by an older answer.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +21,14 @@ import { allowedHosts, limitedFetch, clean, RoomError } from "./net.mjs";
 import localList from "./providers/local-list.mjs";
 
 export const PROVIDERS = Object.fromEntries([localList].map((p) => [p.type, p]));
+
+// A provider's actions by name. A Map, so a name from a request can only
+// ever find an action the provider declared, never something inherited.
+const actionsOf = new WeakMap();
+function actionTable(def) {
+  if (!actionsOf.has(def)) actionsOf.set(def, new Map(Object.entries(def.actions ?? {}).filter(([, fn]) => typeof fn === "function")));
+  return actionsOf.get(def);
+}
 
 function readRooms(dir, providers) {
   const rooms = [];
@@ -54,7 +64,8 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
   let shown = null;
   const last = new Map();      // "room/provider" → { data, at }
   const timers = new Map();    // "room/provider" → timeout
-  const running = new Set();
+  const inflight = new Map();  // "room/provider" → the run going now
+  const queued = new Map();    // "room/provider" → the run after it
 
   const key = (id, pid) => `${id}/${pid}`;
 
@@ -63,17 +74,29 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
     return {
       dataDir: join(dataDir, m.id),
-      fetch: (url, init) => limitedFetch(url, { ...init, hosts }),
+      // Only headers come from the provider: the time and size limits stay ours.
+      fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts }),
     };
   }
 
-  async function run(id, pid) {
+  // Runs a provider now, or once more after the run going now. Resolves
+  // when the run that sees the latest state has emitted.
+  function run(id, pid) {
+    const k = key(id, pid);
+    if (inflight.has(k)) {
+      if (!queued.has(k)) queued.set(k, inflight.get(k).then(() => { queued.delete(k); return run(id, pid); }));
+      return queued.get(k);
+    }
+    const going = runOnce(id, pid).finally(() => inflight.delete(k));
+    inflight.set(k, going);
+    return going;
+  }
+
+  async function runOnce(id, pid) {
     const m = rooms.get(id);
     const p = m?.providers.find((x) => x.id === pid);
     if (!p) return;
     const k = key(id, pid);
-    if (running.has(k)) return;
-    running.add(k);
     clearTimeout(timers.get(k));
     try {
       const data = clean(await providers[p.type].fetch(p.params ?? {}, ctxFor(m, p)));
@@ -85,7 +108,6 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
       const prev = last.get(k);
       emit({ type: "fnroom", id, provider: pid, data: prev?.data ?? null, at: prev?.at ?? null, error: err?.message ?? String(err), stale: !!prev });
     } finally {
-      running.delete(k);
       schedule(id, pid);
     }
   }
@@ -135,9 +157,10 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
       if (!m) throw new RoomError(404, `no room called ${id}`);
       const p = m.providers.find((x) => x.id === pid) ?? (pid ? null : m.providers[0]);
       if (!p) throw new RoomError(404, `room ${id} has no provider ${pid}`);
-      const fn = providers[p.type].actions?.[action];
-      if (typeof fn !== "function") throw new RoomError(404, `${p.type} has no action ${action}`);
-      const r = await fn(p.params ?? {}, args && typeof args === "object" ? args : {}, ctxFor(m, p));
+      const table = actionTable(providers[p.type]);
+      const name = String(action);
+      if (!table.has(name)) throw new RoomError(404, `${p.type} has no action ${name}`);
+      const r = await table.get(name)(p.params ?? {}, args && typeof args === "object" ? args : {}, ctxFor(m, p));
       await run(id, p.id);
       return clean(r ?? { ok: true });
     },

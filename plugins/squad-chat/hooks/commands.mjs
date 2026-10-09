@@ -259,7 +259,7 @@ const SNIPPET_HELP = "Use /snippet add <name>, /snippet rename <old> -> <new>, /
 // `copy(text)` puts text on the clipboard, `setView(id)` shows a room.
 export async function snippet(call, args, say, { sources, copy, setView, inPane = false } = {}) {
   const [verb = "", ...rest] = String(args ?? "").trim().split(/\s+/).filter(Boolean);
-  const name = rest.filter((w) => !(verb === "share" && w.startsWith("#"))).join(" ");
+  const name = rest.filter((w) => !(verb.toLowerCase() === "share" && w.startsWith("#"))).join(" ");
   if (!isFnRoom("snippet")) return say("The Snippet room hasn't loaded yet. Try again in a moment.");
   const act = (action, a) => call("/fnroom/action", { room: "snippet", provider: "list", action, args: a });
   const find = async (n) => {

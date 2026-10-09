@@ -28,7 +28,7 @@
         }
       }
     ],
-    "inline": { "type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <name>" },
+    "inline": { "type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "share": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <name>" },
     "band": "{list.count} snippets",
     "hint": "⧉ copies · ⇪ shares · /snippet add|rename|delete",
     "placeholder": "/snippet add <name> · /snippet delete <name> · /help"

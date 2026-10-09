@@ -1081,7 +1081,7 @@ test('band: a built-in room shows its one-line summary above the prompt', SLOW, 
 // ---------------------------------------------------------------- function rooms
 
 // rooms/snippet/room.json as the bridge reports it (the bridge tests check the file itself).
-const SNIPPET_ROOM = {"schema": 1, "id": "snippet", "version": "1.0.0", "name": "Snippets", "icon": "⌘", "color": "amber", "description": "Code you reuse, kept on this computer, one click from your clipboard.", "author": "squad-chat", "permissions": {"hosts": []}, "providers": [{"id": "list", "type": "local-list", "params": {"max": 200}}], "layout": {"cards": [{"title": "SNIPPETS", "meta": "{list.count} saved", "body": {"type": "list", "items": "list.items", "title": "name", "tag": "lang", "preview": "body", "copy": "body", "share": "body", "empty": "Nothing saved yet. Select some code, or let Claude write some, then /snippet add <name>."}}], "inline": {"type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <name>"}, "band": "{list.count} snippets", "hint": "⧉ copies · ⇪ shares · /snippet add|rename|delete", "placeholder": "/snippet add <name> · /snippet delete <name> · /help"}}
+const SNIPPET_ROOM = {"schema": 1, "id": "snippet", "version": "1.0.0", "name": "Snippets", "icon": "⌘", "color": "amber", "description": "Code you reuse, kept on this computer, one click from your clipboard.", "author": "squad-chat", "permissions": {"hosts": []}, "providers": [{"id": "list", "type": "local-list", "params": {"max": 200}}], "layout": {"cards": [{"title": "SNIPPETS", "meta": "{list.count} saved", "body": {"type": "list", "items": "list.items", "title": "name", "tag": "lang", "preview": "body", "copy": "body", "share": "body", "empty": "Nothing saved yet. Select some code, or let Claude write some, then /snippet add <name>."}}], "inline": {"type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "share": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <name>"}, "band": "{list.count} snippets", "hint": "⧉ copies · ⇪ shares · /snippet add|rename|delete", "placeholder": "/snippet add <name> · /snippet delete <name> · /help"}}
 const SNIPS = [
   { id: 's1', name: 'curl json', lang: 'sh', body: "curl -sH 'accept: application/json' $URL", at: '2026-10-09T01:00:00Z' },
   { id: 's2', name: 'jq tidy', lang: null, body: '\njq . file.json\n# then less', at: '2026-10-09T02:00:00Z' },
@@ -1187,6 +1187,9 @@ test('/snippet saves the selection or the last code block, and renames, deletes,
 
   await $.command.run({ command: 'snippet', args: 'share curl json' })
   expect(logs).toContain('Ready to share to #lobby: code · sh · 1 line')
+  await $.command.run({ command: 'chat-share', args: 'cancel' })
+  await $.command.run({ command: 'snippet', args: 'SHARE curl json #lobby' })   // the room isn't part of the name
+  expect(logs.filter((l) => l === 'Ready to share to #lobby: code · sh · 1 line')).toHaveLength(2)
 
   bridge.replies['/fnroom/action'] = () => [409, { error: 'There\'s already a snippet called "hello". Rename or delete it first.' }]
   selection = 'x'
@@ -1276,6 +1279,19 @@ test('a function room shows what went wrong, and keeps its last data marked stal
   await settle()
   ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
   expect(await ui.find({ type: 'Text', text: '⚠ disk full' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stale' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'curl json' })).toBeDefined()
+  await ui.unmount()
+
+  // A restarted bridge has nothing cached: its failed first run keeps what's here.
+  bridge.emit(
+    { type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] },
+    { type: 'fnroom', id: 'snippet', provider: 'list', data: { items: SNIPS, count: 2 }, at: Date.now() },
+    { type: 'fnroom', id: 'snippet', provider: 'list', data: null, at: null, error: 'list.json isn\'t valid JSON', stale: false },
+  )
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /isn't valid JSON/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'stale' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'curl json' })).toBeDefined()
   await ui.unmount()

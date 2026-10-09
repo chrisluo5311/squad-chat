@@ -239,10 +239,15 @@ export function applyEvent(event) {
     case "fnroom": {
       const room = state.fn.get(event.id);
       if (!room) return false;
-      room.data[event.provider] = event.data;
-      room.at[event.provider] = event.at;
+      // A failed run with nothing to show (a new bridge has no cache yet)
+      // keeps what this pane already has, marked stale.
+      const keep = event.error && event.data == null && room.data[event.provider] != null;
+      if (!keep) {
+        room.data[event.provider] = event.data;
+        room.at[event.provider] = event.at;
+      }
       room.error[event.provider] = event.error ?? null;
-      room.stale[event.provider] = !!event.stale;
+      room.stale[event.provider] = keep || !!event.stale;
       return true;
     }
     case "sessions":

@@ -5712,7 +5712,7 @@ var require_helpers = __commonJS({
     exports.generateCallbackId = generateCallbackId;
     exports.parseParametersFromURL = parseParametersFromURL;
     exports.decodeJWT = decodeJWT;
-    exports.sleep = sleep2;
+    exports.sleep = sleep3;
     exports.retryable = retryable;
     exports.generatePKCEVerifier = generatePKCEVerifier;
     exports.generatePKCEChallenge = generatePKCEChallenge;
@@ -5857,7 +5857,7 @@ var require_helpers = __commonJS({
       };
       return data;
     }
-    async function sleep2(time) {
+    async function sleep3(time) {
       return await new Promise((accept) => {
         setTimeout(() => accept(null), time);
       });
@@ -23016,19 +23016,65 @@ function clean(value, depth = 0) {
 }
 
 // src/rooms/providers/local-list.mjs
-import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, renameSync as renameSync3, mkdirSync as mkdirSync3, chmodSync as chmodSync3 } from "node:fs";
+import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, renameSync as renameSync3, mkdirSync as mkdirSync3, chmodSync as chmodSync3, rmdirSync, statSync as statSync2 } from "node:fs";
 import { join as join3 } from "node:path";
 import { randomBytes } from "node:crypto";
 var MAX_ITEMS = 200;
 var MAX_BODY = 2e4;
 var NAME2 = /^[^\n\r\t]{1,40}$/;
 var LANG2 = /^[a-z0-9+#._-]{1,20}$/;
+var LOCK_WAIT_MS = 5e3;
+var LOCK_STALE_MS = 15e3;
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+var isItem = (x) => x && typeof x === "object" && typeof x.name === "string" && typeof x.body === "string";
 function load(dir) {
+  const file = join3(dir, "list.json");
+  let text;
   try {
-    const data = JSON.parse(readFileSync3(join3(dir, "list.json"), "utf8"));
-    return Array.isArray(data.items) ? data.items : [];
+    text = readFileSync3(file, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw new RoomError(500, `Couldn't read ${file}: ${err.code ?? err.message}. Nothing was changed.`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
   } catch {
-    return [];
+    throw new RoomError(500, `${file} isn't valid JSON. Fix or move it: nothing was changed.`);
+  }
+  if (!Array.isArray(data?.items) || !data.items.every(isItem)) throw new RoomError(500, `${file} doesn't hold a list of snippets. Fix or move it: nothing was changed.`);
+  return data.items;
+}
+async function locked(dir, fn) {
+  mkdirSync3(dir, { recursive: true, mode: 448 });
+  chmodSync3(dir, 448);
+  const lock = join3(dir, "list.lock");
+  const until = Date.now() + LOCK_WAIT_MS;
+  for (; ; ) {
+    try {
+      mkdirSync3(lock);
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - statSync2(lock).mtimeMs > LOCK_STALE_MS) {
+          rmdirSync(lock);
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() > until) throw new RoomError(503, "Another session is changing the list. Try again in a moment.");
+      await sleep2(20 + Math.random() * 30);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      rmdirSync(lock);
+    } catch {
+    }
   }
 }
 function save(dir, items) {
@@ -23060,7 +23106,7 @@ var local_list_default = {
     return { items, count: items.length };
   },
   actions: {
-    add(params, args, ctx) {
+    add: (params, args, ctx) => locked(ctx.dataDir, () => {
       const items = load(ctx.dataDir);
       const name = cleanName(args.name);
       const body = String(args.body ?? "").replace(/^(\s*\n)+/, "").trimEnd();
@@ -23074,14 +23120,14 @@ var local_list_default = {
       items.push(item);
       save(ctx.dataDir, items);
       return { ok: true, item };
-    },
-    delete(params, args, ctx) {
+    }),
+    delete: (params, args, ctx) => locked(ctx.dataDir, () => {
       const items = load(ctx.dataDir);
       const [item] = items.splice(find(items, args.name), 1);
       save(ctx.dataDir, items);
       return { ok: true, item };
-    },
-    rename(params, args, ctx) {
+    }),
+    rename: (params, args, ctx) => locked(ctx.dataDir, () => {
       const items = load(ctx.dataDir);
       const i = find(items, args.name);
       const to = cleanName(args.to);
@@ -23089,12 +23135,17 @@ var local_list_default = {
       items[i] = { ...items[i], name: to };
       save(ctx.dataDir, items);
       return { ok: true, item: items[i] };
-    }
+    })
   }
 };
 
 // src/rooms/registry.mjs
 var PROVIDERS = Object.fromEntries([local_list_default].map((p) => [p.type, p]));
+var actionsOf = /* @__PURE__ */ new WeakMap();
+function actionTable(def) {
+  if (!actionsOf.has(def)) actionsOf.set(def, new Map(Object.entries(def.actions ?? {}).filter(([, fn]) => typeof fn === "function")));
+  return actionsOf.get(def);
+}
 function readRooms(dir, providers) {
   const rooms = [];
   const invalid = [];
@@ -23136,23 +23187,36 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
   let shown = null;
   const last = /* @__PURE__ */ new Map();
   const timers = /* @__PURE__ */ new Map();
-  const running = /* @__PURE__ */ new Set();
+  const inflight = /* @__PURE__ */ new Map();
+  const queued = /* @__PURE__ */ new Map();
   const key = (id, pid) => `${id}/${pid}`;
   function ctxFor(m, p) {
     const def = providers[p.type];
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
     return {
       dataDir: join4(dataDir, m.id),
-      fetch: (url, init) => limitedFetch(url, { ...init, hosts })
+      // Only headers come from the provider: the time and size limits stay ours.
+      fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts })
     };
   }
-  async function run(id, pid) {
+  function run(id, pid) {
+    const k = key(id, pid);
+    if (inflight.has(k)) {
+      if (!queued.has(k)) queued.set(k, inflight.get(k).then(() => {
+        queued.delete(k);
+        return run(id, pid);
+      }));
+      return queued.get(k);
+    }
+    const going = runOnce(id, pid).finally(() => inflight.delete(k));
+    inflight.set(k, going);
+    return going;
+  }
+  async function runOnce(id, pid) {
     const m = rooms.get(id);
     const p = m?.providers.find((x) => x.id === pid);
     if (!p) return;
     const k = key(id, pid);
-    if (running.has(k)) return;
-    running.add(k);
     clearTimeout(timers.get(k));
     try {
       const data = clean(await providers[p.type].fetch(p.params ?? {}, ctxFor(m, p)));
@@ -23164,7 +23228,6 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
       const prev = last.get(k);
       emit2({ type: "fnroom", id, provider: pid, data: prev?.data ?? null, at: prev?.at ?? null, error: err?.message ?? String(err), stale: !!prev });
     } finally {
-      running.delete(k);
       schedule(id, pid);
     }
   }
@@ -23216,9 +23279,10 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
       if (!m) throw new RoomError(404, `no room called ${id}`);
       const p = m.providers.find((x) => x.id === pid) ?? (pid ? null : m.providers[0]);
       if (!p) throw new RoomError(404, `room ${id} has no provider ${pid}`);
-      const fn = providers[p.type].actions?.[action];
-      if (typeof fn !== "function") throw new RoomError(404, `${p.type} has no action ${action}`);
-      const r = await fn(p.params ?? {}, args && typeof args === "object" ? args : {}, ctxFor(m, p));
+      const table = actionTable(providers[p.type]);
+      const name = String(action);
+      if (!table.has(name)) throw new RoomError(404, `${p.type} has no action ${name}`);
+      const r = await table.get(name)(p.params ?? {}, args && typeof args === "object" ? args : {}, ctxFor(m, p));
       await run(id, p.id);
       return clean(r ?? { ok: true });
     },
