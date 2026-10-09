@@ -13906,7 +13906,7 @@ var require_main3 = __commonJS({
 
 // src/bridge.mjs
 import { createServer } from "node:http";
-import { mkdirSync as mkdirSync4, rmSync as rmSync3, chmodSync as chmodSync4 } from "node:fs";
+import { mkdirSync as mkdirSync5, rmSync as rmSync3, chmodSync as chmodSync5 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join as join5 } from "node:path";
 
@@ -22827,7 +22827,7 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
 }
 
 // src/rooms/registry.mjs
-import { readdirSync as readdirSync2, readFileSync as readFileSync4 } from "node:fs";
+import { readdirSync as readdirSync2, readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4, mkdirSync as mkdirSync4, chmodSync as chmodSync4 } from "node:fs";
 import { join as join4 } from "node:path";
 
 // src/rooms/manifest.mjs
@@ -22846,6 +22846,65 @@ var WIDGETS = {
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" }
 };
+var SETTING_TYPES = ["list", "enum", "string", "bool", "int"];
+var SETTING_KEY = /^[a-z][a-z0-9_]{0,19}$/;
+function checkSettings(settings, hosts, errors) {
+  if (settings == null) return;
+  if (typeof settings !== "object" || Array.isArray(settings)) return errors.push("settings: an object");
+  const keys = Object.keys(settings);
+  if (keys.length > 8) errors.push("settings: at most 8");
+  for (const key of keys) {
+    const st = settings[key];
+    const where = `settings.${key}`;
+    if (!SETTING_KEY.test(key)) errors.push(`${where}: a key of 1-20 lowercase letters, digits or _`);
+    if (!SETTING_TYPES.includes(st?.type)) {
+      errors.push(`${where}.type: one of ${SETTING_TYPES.join(", ")}`);
+      continue;
+    }
+    if (st.label != null && !str(st.label, 40)) errors.push(`${where}.label: 1-40 characters`);
+    if (st.type === "enum" && !(Array.isArray(st.values) && st.values.length && st.values.length <= 10 && st.values.every((v) => str(v, 30)))) errors.push(`${where}.values: 1-10 choices`);
+    if (st.type === "list" && st.item != null && !["string", "url"].includes(st.item)) errors.push(`${where}.item: string or url`);
+    if (st.type === "list" && st.max != null && !(Number.isInteger(st.max) && st.max > 0 && st.max <= 20)) errors.push(`${where}.max: 1-20`);
+    if (st.type === "int" && [st.min, st.max].some((v) => v != null && !Number.isInteger(v))) errors.push(`${where}: min and max are whole numbers`);
+    const bad = settingError(st, st.default, hosts);
+    if (bad) errors.push(`${where}.default: ${bad}`);
+  }
+}
+function settingError(st, value, hosts = []) {
+  switch (st.type) {
+    case "list": {
+      if (!Array.isArray(value)) return "a list";
+      if (value.length > (st.max ?? 10)) return `at most ${st.max ?? 10}`;
+      for (const v of value) {
+        if (!str(v, st.item === "url" ? 300 : 100)) return `each one 1-${st.item === "url" ? 300 : 100} characters`;
+        if (st.item === "url") {
+          let u;
+          try {
+            u = new URL(v);
+          } catch {
+            return `not a URL: ${v}`;
+          }
+          if (u.protocol !== "https:") return `not https: ${v}`;
+          if (!hosts.includes(u.hostname.toLowerCase())) return `${u.hostname} isn't one of this room's hosts (${hosts.join(", ")})`;
+        }
+      }
+      return null;
+    }
+    case "enum":
+      return st.values?.includes(value) ? null : `one of ${(st.values ?? []).join(", ")}`;
+    case "string":
+      return str(value, 100) ? null : "1-100 characters";
+    case "bool":
+      return typeof value === "boolean" ? null : "on or off";
+    case "int":
+      if (!Number.isInteger(value)) return "a whole number";
+      if (st.min != null && value < st.min) return `at least ${st.min}`;
+      if (st.max != null && value > st.max) return `at most ${st.max}`;
+      return null;
+    default:
+      return "unknown setting";
+  }
+}
 function parseInterval(s) {
   if (s == null) return null;
   const m = /^(\d+)(ms|s|m|h)$/.exec(String(s));
@@ -22912,12 +22971,17 @@ function checkManifest(m, providers) {
       else seen.add(p.id);
       if (!providers[p?.type]) errors.push(`${where}.type: no provider called "${p?.type}"`);
       if (p?.params != null && (typeof p.params !== "object" || Array.isArray(p.params))) errors.push(`${where}.params: an object`);
+      for (const [k, v] of Object.entries(p?.params ?? {})) {
+        const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
+        if (ref && !(m.settings && Object.hasOwn(m.settings, ref[1]))) errors.push(`${where}.params.${k}: no setting called ${ref[1]}`);
+      }
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];
         if (v != null && !(INTERVAL.test(v) && parseInterval(v) >= 1e3)) errors.push(`${where}.interval.${k}: like 30s or 10m, at least 1s`);
       }
     });
   }
+  checkSettings(m.settings, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
   const l = m.layout;
   if (!l || typeof l !== "object") errors.push("layout: missing");
   else {
@@ -22944,8 +23008,9 @@ var TIMEOUT_MS = 1e4;
 var MAX_BYTES = 1024 * 1024;
 var MAX_STRING = 2e4;
 function allowedHosts(providerHosts = [], manifestHosts = []) {
-  const declared = new Set(manifestHosts.map((h) => String(h).toLowerCase()));
-  return providerHosts.map((h) => String(h).toLowerCase()).filter((h) => declared.has(h));
+  const declared = manifestHosts.map((h) => String(h).toLowerCase());
+  if (providerHosts === "*") return declared;
+  return providerHosts.map((h) => String(h).toLowerCase()).filter((h) => declared.includes(h));
 }
 async function limitedFetch(url, { hosts, timeoutMs = TIMEOUT_MS, maxBytes = MAX_BYTES, headers = {} } = {}) {
   let target;
@@ -23139,8 +23204,237 @@ var local_list_default = {
   }
 };
 
+// src/rooms/providers/open-meteo.mjs
+var MAX_CITIES = 6;
+var SPARKS = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588";
+function sky(code, isDay = 1) {
+  if (code === 0 || code === 1) return isDay ? ["\u2600", code ? "Mostly clear" : "Clear"] : ["\u263E", code ? "Mostly clear" : "Clear"];
+  if (code === 2) return ["\u2601", "Partly cloudy"];
+  if (code === 3) return ["\u2601", "Overcast"];
+  if (code === 45 || code === 48) return ["\u2261", "Fog"];
+  if (code >= 51 && code <= 57) return ["\u2602", "Drizzle"];
+  if (code >= 61 && code <= 67) return ["\u2602", "Rain"];
+  if (code >= 71 && code <= 77) return ["\u2744", "Snow"];
+  if (code >= 80 && code <= 82) return ["\u2602", "Showers"];
+  if (code === 85 || code === 86) return ["\u2744", "Snow showers"];
+  if (code >= 95) return ["\u2607", "Thunderstorm"];
+  return ["\xB7", "\u2014"];
+}
+function aqiWord(aqi) {
+  if (aqi == null) return "";
+  if (aqi <= 50) return "good";
+  if (aqi <= 100) return "moderate";
+  if (aqi <= 150) return "unhealthy for some";
+  if (aqi <= 200) return "unhealthy";
+  return "very unhealthy";
+}
+function spark(values) {
+  return values.map((v) => v > 0 ? SPARKS[Math.min(7, Math.max(0, Math.round(v / 100 * 7)))] : SPARKS[0]).join("");
+}
+var round = (n) => Number.isFinite(n) ? Math.round(n) : null;
+var DAY = (iso) => (/* @__PURE__ */ new Date(`${iso}T12:00:00Z`)).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+var geocoded = /* @__PURE__ */ new Map();
+async function place(name, ctx) {
+  const k = name.toLowerCase();
+  if (geocoded.has(k)) return geocoded.get(k);
+  const r = await ctx.fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);
+  const hit = r.json().results?.[0];
+  if (!hit) throw new RoomError(404, `no place called ${name}`);
+  const p = { name: hit.name, country: hit.country_code ?? "", lat: hit.latitude, lon: hit.longitude };
+  geocoded.set(k, p);
+  return p;
+}
+async function city(name, units, ctx) {
+  const p = await place(name, ctx);
+  const imperial = units === "imperial";
+  const q = `latitude=${p.lat}&longitude=${p.lon}&timezone=auto`;
+  const [fr, ar] = await Promise.all([
+    ctx.fetch(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,is_day&hourly=precipitation_probability&forecast_hours=24&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=7${imperial ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : ""}`),
+    ctx.fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${q}&current=us_aqi`).catch(() => null)
+  ]);
+  if (!fr.ok) throw new RoomError(502, `Open-Meteo answered ${fr.status} for ${p.name}`);
+  const f = fr.json();
+  const c = f.current ?? {};
+  const d = f.daily ?? {};
+  const [icon, desc] = sky(c.weather_code, c.is_day);
+  const aqi = ar?.ok ? round(ar.json().current?.us_aqi) : null;
+  const rainHours = (f.hourly?.precipitation_probability ?? []).map((v) => Number(v) || 0);
+  const peak = Math.max(0, ...rainHours);
+  const peakAt = rainHours.indexOf(peak);
+  const peakTime = peakAt >= 0 && f.hourly?.time?.[peakAt] ? f.hourly.time[peakAt].slice(11, 16) : "";
+  const deg = "\xB0";
+  const days = (d.time ?? []).map((t, i) => {
+    const [di] = sky(d.weather_code?.[i]);
+    return {
+      day: i === 0 ? "Today" : DAY(t),
+      icon: di,
+      range: `${round(d.temperature_2m_max?.[i])}${deg} / ${round(d.temperature_2m_min?.[i])}${deg}`,
+      rain: `\u2602 ${round(d.precipitation_probability_max?.[i]) ?? 0}%`
+    };
+  });
+  const temp = round(c.temperature_2m);
+  return {
+    name: p.name,
+    country: p.country,
+    icon,
+    desc,
+    temp,
+    tempText: `${temp}${deg}`,
+    feels: `feels ${round(c.apparent_temperature)}${deg}`,
+    range: days[0]?.range ?? "",
+    rain: round(d.precipitation_probability_max?.[0]) ?? 0,
+    rainText: `\u2602 ${round(d.precipitation_probability_max?.[0]) ?? 0}%`,
+    humidity: `${round(c.relative_humidity_2m)}%`,
+    wind: `${round(c.wind_speed_10m)} ${imperial ? "mph" : "km/h"}`,
+    aqi,
+    aqiText: aqi == null ? "" : `AQI ${aqi} ${aqiWord(aqi)}`,
+    rainLine: rainHours.length ? `\u2602 ${spark(rainHours)}  ${peak ? `peak ${peak}% at ${peakTime}` : "no rain"}` : "",
+    days
+  };
+}
+var open_meteo_default = {
+  type: "open-meteo",
+  hosts: ["api.open-meteo.com", "geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"],
+  async fetch(params, ctx) {
+    const names = (Array.isArray(params.cities) ? params.cities : []).slice(0, MAX_CITIES);
+    if (!names.length) return { cities: [], first: null, days: [] };
+    const settled = await Promise.allSettled(names.map((n) => city(n, params.units, ctx)));
+    const cities = settled.map((r, i) => r.status === "fulfilled" ? r.value : { name: names[i], icon: "?", tempText: "\u2013", range: "", rainText: "", aqiText: r.reason?.message ?? "failed", days: [] });
+    if (settled.every((r) => r.status === "rejected")) throw settled[0].reason;
+    const first = cities.find((c) => c.days?.length) ?? cities[0];
+    return { cities, first, days: first.days ?? [], updated: (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5) };
+  }
+};
+
+// src/rooms/providers/hn.mjs
+var LISTS = { top: "topstories", best: "beststories", new: "newstories" };
+function ago(sec, now = Date.now()) {
+  const s = Math.max(0, Math.round(now / 1e3 - sec));
+  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+function host(url) {
+  try {
+    return url ? new URL(url).hostname.replace(/^www\./, "") : null;
+  } catch {
+    return null;
+  }
+}
+var hn_default = {
+  type: "hn",
+  hosts: ["hacker-news.firebaseio.com"],
+  async fetch(params, ctx) {
+    const list = LISTS[params.list] ? params.list : params.list === "off" ? "off" : "top";
+    if (list === "off") return { items: [], count: 0, off: true };
+    const count = Math.min(30, Math.max(1, Number(params.count) || 12));
+    const ids = (await ctx.fetch(`https://hacker-news.firebaseio.com/v0/${LISTS[list]}.json`)).json();
+    const stories = await Promise.all((Array.isArray(ids) ? ids : []).slice(0, count).map((id) => ctx.fetch(`https://hacker-news.firebaseio.com/v0/item/${Number(id)}.json`).then((r) => r.json()).catch(() => null)));
+    const now = Date.now();
+    const items = stories.filter((s) => s?.title).map((s) => {
+      const discuss = `https://news.ycombinator.com/item?id=${s.id}`;
+      const url = s.url || discuss;
+      return {
+        id: String(s.id),
+        title: s.title,
+        url,
+        source: host(s.url) ?? "HN",
+        meta: `\u25B2 ${s.score ?? 0} \xB7 ${s.descendants ?? 0} comments \xB7 ${ago(s.time, now)}`,
+        share: `${s.title}
+${url}${url === discuss ? "" : `
+${discuss}`}`
+      };
+    });
+    return { items, count: items.length, list };
+  }
+};
+
+// src/rooms/providers/rss.mjs
+var PER_FEED = 10;
+var TOTAL = 30;
+var ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+function decode(s) {
+  return String(s ?? "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]*>/g, "").replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+    if (e[0] === "#") {
+      const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+      return Number.isFinite(n) && n > 0 && n < 1114112 ? String.fromCodePoint(n) : "";
+    }
+    return ENTITIES[e.toLowerCase()] ?? m;
+  }).replace(/\s+/g, " ").trim();
+}
+var tag = (xml, name) => new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "i").exec(xml)?.[1];
+function parseFeed(xml) {
+  const head2 = xml.split(/<item[\s>]|<entry[\s>]/i)[0];
+  const feedTitle = decode(tag(head2, "title"));
+  const entries = xml.match(/<item[\s>][\s\S]*?<\/item>|<entry[\s>][\s\S]*?<\/entry>/gi) ?? [];
+  const items = entries.map((e) => {
+    const atomLink = /<link\b[^>]*\brel=["']alternate["'][^>]*>/i.exec(e)?.[0] ?? /<link\b[^>]*\bhref=[^>]*>/i.exec(e)?.[0];
+    const link = decode(tag(e, "link")) || (atomLink ? /\bhref=["']([^"']+)["']/i.exec(atomLink)?.[1] : "") || decode(tag(e, "guid"));
+    const when = decode(tag(e, "pubDate") ?? tag(e, "published") ?? tag(e, "updated") ?? tag(e, "dc:date"));
+    const at = Date.parse(when);
+    return { title: decode(tag(e, "title")), link: decode(link), at: Number.isFinite(at) ? at : 0 };
+  }).filter((x) => x.title && /^https?:\/\//.test(x.link));
+  return { title: feedTitle, items };
+}
+var shortName = (title, url) => (title.split(/\s+[-|–:—]\s+|：/)[0] || new URL(url).hostname.replace(/^www\./, "")).slice(0, 24);
+var rss_default = {
+  type: "rss",
+  hosts: "*",
+  async fetch(params, ctx) {
+    const feeds = Array.isArray(params.feeds) ? params.feeds : [];
+    const results = await Promise.allSettled(feeds.map(async (url) => {
+      const r = await ctx.fetch(url);
+      if (!r.ok) throw new Error(`${new URL(url).hostname} answered ${r.status}`);
+      const feed = parseFeed(r.text);
+      const source = shortName(feed.title, url);
+      return feed.items.slice(0, PER_FEED).map((x) => ({ ...x, source }));
+    }));
+    const failed = results.map((r, i) => r.status === "rejected" ? new URL(feeds[i]).hostname : null).filter(Boolean);
+    if (feeds.length && failed.length === feeds.length) throw results[0].reason;
+    const now = Date.now();
+    const items = results.flatMap((r) => r.status === "fulfilled" ? r.value : []).sort((a, b) => b.at - a.at).slice(0, TOTAL).map((x, i) => ({
+      id: `r${i}`,
+      title: x.title,
+      url: x.link,
+      source: x.source,
+      meta: `${x.source}${x.at ? ` \xB7 ${ago(x.at / 1e3, now)}` : ""}`,
+      share: `${x.title}
+${x.link}`
+    }));
+    return { items, count: items.length, failed: failed.join(", ") };
+  }
+};
+
 // src/rooms/registry.mjs
-var PROVIDERS = Object.fromEntries([local_list_default].map((p) => [p.type, p]));
+var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default].map((p) => [p.type, p]));
+function parseSetting(st, raw, current) {
+  const text = String(raw ?? "").trim();
+  switch (st.type) {
+    case "list": {
+      const parts = text.split(",").map((x) => x.trim()).filter(Boolean);
+      if (parts.length && parts.every((x) => /^[+-]/.test(x))) {
+        let list = [...current ?? []];
+        for (const x of parts) {
+          const v = x.slice(1).trim();
+          list = list.filter((y) => y.toLowerCase() !== v.toLowerCase());
+          if (x[0] === "+") list.push(v);
+        }
+        return list;
+      }
+      return parts;
+    }
+    case "bool":
+      if (/^(on|true|yes|1)$/i.test(text)) return true;
+      if (/^(off|false|no|0)$/i.test(text)) return false;
+      return text;
+    case "int":
+      return /^-?\d+$/.test(text) ? Number(text) : text;
+    case "enum":
+      return st.values.find((v) => v.toLowerCase() === text.toLowerCase()) ?? text;
+    default:
+      return text;
+  }
+}
 var actionsOf = /* @__PURE__ */ new WeakMap();
 function actionTable(def) {
   if (!actionsOf.has(def)) actionsOf.set(def, new Map(Object.entries(def.actions ?? {}).filter(([, fn]) => typeof fn === "function")));
@@ -23190,6 +23484,37 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
   const inflight = /* @__PURE__ */ new Map();
   const queued = /* @__PURE__ */ new Map();
   const key = (id, pid) => `${id}/${pid}`;
+  const hostsOf = (m) => (m.permissions?.hosts ?? []).map((h) => h.toLowerCase());
+  const settingsFile = (id) => join4(dataDir, id, "settings.json");
+  function savedSettings(id) {
+    try {
+      const data = JSON.parse(readFileSync4(settingsFile(id), "utf8"));
+      return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+    } catch {
+      return {};
+    }
+  }
+  function settingsOf(id) {
+    const m = rooms.get(id);
+    const saved = savedSettings(id);
+    const out = {};
+    for (const [k, st] of Object.entries(m?.settings ?? {})) {
+      out[k] = Object.hasOwn(saved, k) && !settingError(st, saved[k], hostsOf(m)) ? saved[k] : st.default;
+    }
+    return out;
+  }
+  function emitSettings(id) {
+    if (rooms.get(id)?.settings) emit2({ type: "fnsettings", id, values: settingsOf(id) });
+  }
+  function paramsOf(m, p) {
+    const values = settingsOf(m.id);
+    const out = {};
+    for (const [k, v] of Object.entries(p.params ?? {})) {
+      const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
+      out[k] = ref ? values[ref[1]] : v;
+    }
+    return out;
+  }
   function ctxFor(m, p) {
     const def = providers[p.type];
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
@@ -23219,7 +23544,7 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
     const k = key(id, pid);
     clearTimeout(timers.get(k));
     try {
-      const data = clean(await providers[p.type].fetch(p.params ?? {}, ctxFor(m, p)));
+      const data = clean(await providers[p.type].fetch(paramsOf(m, p), ctxFor(m, p)));
       const at = Date.now();
       last.set(k, { data, at });
       emit2({ type: "fnroom", id, provider: pid, data, at });
@@ -23243,6 +23568,33 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
   return {
     report() {
       emit2({ type: "fnrooms", rooms: [...rooms.values()], invalid });
+      for (const id of rooms.keys()) emitSettings(id);
+    },
+    // Changes one setting from what was typed ("default" puts it back), then
+    // runs the room's providers with it.
+    async setSetting({ room: id, key: k, value } = {}) {
+      const m = rooms.get(id);
+      if (!m) throw new RoomError(404, `no room called ${id}`);
+      const settings = new Map(Object.entries(m.settings ?? {}));
+      if (!settings.has(String(k))) throw new RoomError(404, `${m.name} has no setting ${k}${settings.size ? `. It has ${[...settings.keys()].join(", ")}` : ""}.`);
+      const st = settings.get(String(k));
+      const saved = savedSettings(id);
+      if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
+      else {
+        const v = parseSetting(st, value, settingsOf(id)[k]);
+        const bad = settingError(st, v, hostsOf(m));
+        if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
+        saved[k] = v;
+      }
+      const dir = join4(dataDir, id);
+      mkdirSync4(dir, { recursive: true, mode: 448 });
+      chmodSync4(dir, 448);
+      const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
+      writeFileSync4(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
+      renameSync4(tmp, settingsFile(id));
+      emitSettings(id);
+      if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
+      return { ok: true, values: settingsOf(id) };
     },
     // Which rooms have tabs, and which is on show. A room just enabled, or
     // just shown with data older than its visible interval, runs now.
@@ -23282,7 +23634,7 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
       const table = actionTable(providers[p.type]);
       const name = String(action);
       if (!table.has(name)) throw new RoomError(404, `${p.type} has no action ${name}`);
-      const r = await table.get(name)(p.params ?? {}, args && typeof args === "object" ? args : {}, ctxFor(m, p));
+      const r = await table.get(name)(paramsOf(m, p), args && typeof args === "object" ? args : {}, ctxFor(m, p));
       await run(id, p.id);
       return clean(r ?? { ok: true });
     },
@@ -23312,8 +23664,8 @@ var configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
 if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
 var configDir = env.SQUAD_CONFIG_DIR || join5(env.XDG_CONFIG_HOME || join5(homedir(), ".config"), "squad-chat");
 var socketDir = env.SQUAD_SOCKET_DIR || join5(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
-mkdirSync4(socketDir, { recursive: true, mode: 448 });
-chmodSync4(socketDir, 448);
+mkdirSync5(socketDir, { recursive: true, mode: 448 });
+chmodSync5(socketDir, 448);
 var socketPath = join5(socketDir, `${process.pid}.sock`);
 rmSync3(socketPath, { force: true });
 var chat = configured ? new Chat({
@@ -23338,6 +23690,7 @@ var localRoutes = {
   "POST /fnroom/visible": (b) => fnRooms.setVisible(b),
   "POST /fnroom/refresh": (b) => fnRooms.refresh(b.room),
   "POST /fnroom/action": (b) => fnRooms.action(b),
+  "POST /fnroom/settings": (b) => fnRooms.setSetting(b),
   "POST /shutdown": () => {
     setTimeout(() => shutdown(0), 0);
     return { ok: true };
@@ -23421,7 +23774,7 @@ var watch2 = setInterval(() => {
   if (process.ppid !== parent) shutdown(0);
 }, 5e3);
 server.listen(socketPath, () => {
-  chmodSync4(socketPath, 384);
+  chmodSync5(socketPath, 384);
   emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
   board.report();
   fnRooms.report();

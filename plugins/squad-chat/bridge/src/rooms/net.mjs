@@ -17,10 +17,13 @@ const TIMEOUT_MS = 10_000;
 const MAX_BYTES = 1024 * 1024;
 const MAX_STRING = 20_000;
 
-// The hosts a room's provider may reach: both lists, lowercased.
+// The hosts a room's provider may reach: both lists, lowercased. A provider
+// that reads whatever the room points it at (a feed reader) says "*", and
+// the manifest's list alone decides.
 export function allowedHosts(providerHosts = [], manifestHosts = []) {
-  const declared = new Set(manifestHosts.map((h) => String(h).toLowerCase()));
-  return providerHosts.map((h) => String(h).toLowerCase()).filter((h) => declared.has(h));
+  const declared = manifestHosts.map((h) => String(h).toLowerCase());
+  if (providerHosts === "*") return declared;
+  return providerHosts.map((h) => String(h).toLowerCase()).filter((h) => declared.includes(h));
 }
 
 // fetch, held to `hosts`. Resolves { status, text, json() } or throws a RoomError.

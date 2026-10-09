@@ -154,8 +154,49 @@ export async function sysRooms(args, say, save) {
   } else list = words.map((w) => w.replace(/^\+/, ""));
   // Keep rooms the bridge hasn't reported yet as they were.
   const pending = state.sysRooms.filter((x) => !known.includes(x));
+  const before = enabledRooms();
   await save([...known.filter((x) => list.includes(x)), ...pending]);
-  return say(enabledRooms().length ? `Rooms with tabs: ${names()}.` : "Room tabs hidden.");
+  // A room that goes online says where, the moment it gets a tab.
+  const online = enabledRooms().filter((id) => !before.includes(id) && state.fn.get(id)?.manifest.permissions?.hosts?.length)
+    .map((id) => { const m = state.fn.get(id).manifest; return `${m.name} reaches ${m.permissions.hosts.join(", ")}.`; });
+  return say([enabledRooms().length ? `Rooms with tabs: ${names()}.` : "Room tabs hidden.", ...online].join("\n"));
+}
+
+// A setting's value as typed back: "Taipei, Tokyo", "on".
+function showSetting(v) {
+  if (Array.isArray(v)) return v.length ? v.join(", ") : "(none)";
+  if (typeof v === "boolean") return v ? "on" : "off";
+  return String(v ?? "");
+}
+
+// "/chat set weather cities Taipei, Tokyo": a function room's settings.
+// Without a value it shows them; "+Osaka" or "-Tokyo" changes a list,
+// "default" puts one back. In the pane, "/set cities …" is for the room on
+// show (`room`).
+export async function roomSettings(call, args, say, { room: here = null } = {}) {
+  const words = String(args ?? "").trim().split(/\s+/).filter(Boolean);
+  const id = here ?? (words.shift() ?? "").toLowerCase();
+  const c = here ? "/set" : `/chat set ${id}`;
+  const withSettings = roomIds().filter((x) => state.fn.get(x)?.manifest.settings);
+  if (!isFnRoom(id)) return say(here ? "Open a room with settings first." : `Which room? ${withSettings.length ? `These have settings: ${withSettings.join(", ")}.` : "No room has settings."} /chat set <room> <setting> <value>`);
+  const room = state.fn.get(id);
+  const schema = room.manifest.settings ?? {};
+  const keys = Object.keys(schema);
+  if (!keys.length) return say(`${room.manifest.name} has no settings.`);
+  const [key, ...rest] = words;
+  if (!key) {
+    return say([`${room.manifest.name} settings:`, ...keys.map((k) => `  ${k}: ${showSetting(room.settings[k] ?? schema[k].default)}`), `Change one with ${c} <setting> <value>.`].join("\n"));
+  }
+  const k = key.toLowerCase();
+  if (!keys.includes(k)) return say(`${room.manifest.name} has no setting ${key}. It has ${keys.join(", ")}.`);
+  const st = schema[k];
+  if (!rest.length) {
+    const how = st.type === "list" ? "a list split by commas, +one to add, -one to drop" : st.type === "enum" ? st.values.join(", ") : st.type === "bool" ? "on or off" : st.type;
+    return say(`${st.label ?? k}: ${showSetting(room.settings[k] ?? st.default)}. Set it with ${c} ${k} <${how}>, or ${c} ${k} default.`);
+  }
+  const r = await call("/fnroom/settings", { room: id, key: k, value: rest.join(" ") });
+  room.settings = r.values ?? room.settings;
+  return say(`${st.label ?? k}: ${showSetting(room.settings[k])}.`);
 }
 
 const SHARE_HOLD_MS = 120_000;   // a preview waits this long for a send
@@ -365,7 +406,7 @@ function showView(view, say, setView) {
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /usage · /git · /agents · /chat · /logout · anything else is a message";
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
@@ -399,6 +440,7 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
       case "dnd": return dnd(args, say, setDnd);
       case "share": return share(call, args, say, sources);
       case "snippet": return snippet(call, args, say, { sources, copy, setView, inPane: true });
+      case "set": return roomSettings(call, args, say, { room: isFnRoom(view) ? view : null });
       case "help": return say(HELP);
       default:
         if (isFnRoom(cmd)) return showView(cmd, say, setView);

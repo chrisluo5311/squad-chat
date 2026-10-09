@@ -48,6 +48,17 @@ To show other sessions, each session keeps a small heartbeat file in `/tmp/squad
 
 Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. The Snippets room never touches the network.
 
+## What Weather and Tech News reach
+
+These two are off until you turn them on, and each says where it goes when you do. They ask only for what they show, with no account, key or cookie, and send nothing about you or your session:
+
+| Room | Reaches | Sends |
+| --- | --- | --- |
+| ☀ Weather | `geocoding-api.open-meteo.com`, `api.open-meteo.com`, `air-quality-api.open-meteo.com` | the names of the cities you picked, then their coordinates |
+| ✦ Tech News | `hacker-news.firebaseio.com`, `www.ithome.com.tw`, `www.theverge.com`, `feeds.arstechnica.com`, `techcrunch.com` | requests for the story lists and feeds |
+
+The bridge holds each room to its own sites, so a room can't reach anywhere else, and a feed you add has to be on one of them. What comes back is cleaned of terminal escapes before it's drawn, and none of it reaches Claude. The settings you pick stay in `~/.config/squad-chat/room-data/<room>/settings.json`, readable only by you.
+
 Only `/chat-share usage|git|agents|snippet`, or a snippet's **⇪**, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 
 ## Abuse limits

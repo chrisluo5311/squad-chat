@@ -43,7 +43,7 @@ export const state = {
   // The built-in rooms.
   view: "chat",           // chat | usage | git | agents: what the pane shows, kept in $.store
   sysRooms: [...DEFAULT_ROOMS],   // which built-in and function rooms have tabs (/chat rooms), kept in $.store
-  fn: new Map(),          // function room id → { manifest, data: { provider: data }, at, error, stale }
+  fn: new Map(),          // function room id → { manifest, settings, data: { provider: data }, at, error, stale }
   fnInvalid: [],          // manifests the bridge refused: [{ dir, errors }]
   usage: createUsage(),   // this session's numbers (metrics.mjs)
   git: emptyGit(),        // the Git room's snapshot (github.mjs)
@@ -230,10 +230,16 @@ export function applyEvent(event) {
       const next = new Map();
       for (const manifest of event.rooms ?? []) {
         const had = state.fn.get(manifest.id);
-        next.set(manifest.id, { manifest, data: had?.data ?? {}, at: had?.at ?? {}, error: had?.error ?? {}, stale: had?.stale ?? {} });
+        next.set(manifest.id, { manifest, settings: had?.settings ?? {}, data: had?.data ?? {}, at: had?.at ?? {}, error: had?.error ?? {}, stale: had?.stale ?? {} });
       }
       state.fn = next;
       state.fnInvalid = event.invalid ?? [];
+      return true;
+    }
+    case "fnsettings": {
+      const room = state.fn.get(event.id);
+      if (!room) return false;
+      room.settings = event.values ?? {};
       return true;
     }
     case "fnroom": {

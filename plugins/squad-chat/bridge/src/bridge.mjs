@@ -87,6 +87,7 @@ const localRoutes = {
   "POST /fnroom/visible": (b) => fnRooms.setVisible(b),
   "POST /fnroom/refresh": (b) => fnRooms.refresh(b.room),
   "POST /fnroom/action": (b) => fnRooms.action(b),
+  "POST /fnroom/settings": (b) => fnRooms.setSetting(b),
   "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },
 };
 

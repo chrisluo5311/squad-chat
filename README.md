@@ -212,9 +212,9 @@ Until a server is set, the pane says so and shows these steps.
 
 ### Built-in rooms
 
-Four tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents** and **⌘ Snippets**. They need no server and no sign-in, and nothing in them leaves your computer unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
+Four tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents** and **⌘ Snippets**. Two more, **☀ Weather** and **✦ Tech News**, wait until you turn them on with `/chat rooms +weather` or `+news`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
-Open one with `/chat usage`, `/chat git`, `/chat agents` or `/chat snippet`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat weather` or `/chat news`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
 #### ◔ Usage
 
@@ -281,6 +281,20 @@ Code you reach for again and again, kept on this computer and one click from you
 
 The list lives in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. Snippets is the first *function room*: a room drawn from a small manifest that names where its data comes from, so more rooms can follow without new drawing code. [ARCHITECTURE.md](docs/ARCHITECTURE.md#function-rooms) explains how they work.
 
+#### ☀ Weather
+
+Now, the next 24 hours and the week, for the cities you pick, from [Open-Meteo](https://open-meteo.com) with no key:
+
+* **Now.** Each city's sky, temperature, today's high and low, the chance of rain and the air quality (US AQI).
+* **The next 24 hours** for the first city: what it feels like, humidity, wind, and the chance of rain hour by hour.
+* **This week**: each day's sky, high and low, and chance of rain.
+
+Pick cities with `/chat set weather cities Taipei, Tokyo` (or `+Osaka`, `-Tokyo`), and units with `/chat set weather units imperial`. Inside the room, `/set cities …` does the same. It refreshes every 10 minutes while you look at it and every 30 otherwise.
+
+#### ✦ Tech News
+
+[Hacker News](https://news.ycombinator.com) and tech feeds (iThome, The Verge, Ars Technica and TechCrunch to start), newest first. **⧉** copies a story's link and **⇪** shares it to a chat room. `/chat set news hn best` picks the Hacker News list (`top`, `best`, `new` or `off`), and `/chat set news feeds -https://techcrunch.com/feed/` drops a feed. A feed has to come from one of the room's sites. It refreshes every 15 minutes while you look at it and every 30 otherwise.
+
 To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`. `/chat rooms usage,git` picks which tabs you want, `/chat rooms -snippet` or `+snippet` drops or brings back one, and `/chat rooms none` hides them all.
 
 ### Commands
@@ -304,14 +318,15 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat usage` / `git` / `agents` / `snippet` / `weather` / `news` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `weather`, `news`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+| `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. |
 | `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git and Snippets rooms, `r` refreshes. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/set`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes. Type passcodes there: it never touches the conversation.
 
 #### Examples
 
