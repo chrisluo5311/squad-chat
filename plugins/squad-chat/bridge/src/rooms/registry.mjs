@@ -21,6 +21,9 @@
 
 import { readdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { cpus, loadavg } from "node:os";
 import { checkManifest, parseInterval, settingError } from "./manifest.mjs";
 import { allowedHosts, limitedFetch, clean, RoomError } from "./net.mjs";
 import { locked } from "./lock.mjs";
@@ -28,8 +31,18 @@ import localList from "./providers/local-list.mjs";
 import openMeteo from "./providers/open-meteo.mjs";
 import hn from "./providers/hn.mjs";
 import rss from "./providers/rss.mjs";
+import sysinfo from "./providers/sysinfo.mjs";
 
-export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss].map((p) => [p.type, p]));
+export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysinfo].map((p) => [p.type, p]));
+
+// What a provider runs on this computer: a command its own code names (a
+// manifest can't name one), with no shell, a time limit and an output limit.
+// Resolves its stdout, or null when it's missing, fails or overruns.
+function runCommand(argv, { timeoutMs = 3_000, maxBytes = 4 * 1024 * 1024 } = {}) {
+  return new Promise((resolve) => {
+    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve(err ? null : String(stdout)));
+  });
+}
 
 // "Taipei, Tokyo" for a list, "on" for a bool: what's typed, as the
 // setting's kind. A list also takes "+Osaka" or "-Tokyo" to add or drop.
@@ -146,6 +159,12 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
     return {
       dataDir: join(dataDir, m.id),
+      platform: process.platform,
+      run: runCommand,
+      read: (file) => readFile(file, "utf8").catch(() => null),
+      cpus,
+      loadavg,
+      now: Date.now,
       // Only headers come from the provider: the time and size limits stay ours.
       fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts }),
     };

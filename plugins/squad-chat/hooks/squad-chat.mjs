@@ -177,6 +177,11 @@ function afterChange($) {
     state.mention = null;
     if (state.notify) $.ui.toast(`💬 ${m.user} in #${m.slug}: ${m.body.slice(0, 80)}`);
   }
+  // A function room's alert (Monitor's "CPU at 96°C"): toasted unless quiet.
+  while (state.fnToasts.length) {
+    const text = state.fnToasts.shift();
+    if (!isQuiet()) $.ui.toast(text);
+  }
 }
 
 // ---------------------------------------------------------------- function rooms
@@ -509,7 +514,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|weather|news | rooms <list> | set <room> <setting> <value> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|monitor|weather|news | rooms <list> | set <room> <setting> <value> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },

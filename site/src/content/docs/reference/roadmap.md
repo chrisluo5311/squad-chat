@@ -20,7 +20,8 @@ description: What's done and what's next.
 - [x] Function rooms framework: rooms from a JSON manifest, fed by providers in the bridge
 - [x] The Snippets room
 - [x] Room settings, and the Weather and Tech News rooms
-- [ ] Monitor, Stock and Lo-fi rooms
+- [x] The Monitor room
+- [ ] Stock and Lo-fi rooms
 - [ ] A room marketplace: browse, install and update rooms from the pane
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 

@@ -1,11 +1,11 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Snippets, Weather and Tech News tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Snippets, Monitor, Weather and Tech News tabs that sit before your chat rooms.
 ---
 
-Four tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents** and **⌘ Snippets**. Two more, **☀ Weather** and **✦ Tech News**, wait until you turn them on with `/chat rooms +weather` or `+news`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
+Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Two more, **☀ Weather** and **✦ Tech News**, wait until you turn them on with `/chat rooms +weather` or `+news`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
-Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat weather` or `/chat news`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather` or `/chat news`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
 ## ◔ Usage
 
@@ -65,6 +65,19 @@ Code you reach for again and again, kept on this computer and one click from you
 - **Tidy up** with `/snippet rename <old> -> <new>` and `/snippet delete <name>`. `/snippet copy <name>` and `/snippet share <name> [#room]` work from the prompt too.
 
 The list lives in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. Snippets is the first *function room*: a room drawn from a small manifest that names where its data comes from, so more rooms can follow without new drawing code. [Architecture](/squad-chat/reference/architecture/#function-rooms) explains how they work.
+
+## ▦ Monitor
+
+This computer, as it runs, with no sudo:
+
+- **CPU** use with a chart of the last couple of minutes, the load, and with [macmon](https://github.com/vladkens/macmon) the temperature and power.
+- **Memory** used, memory pressure and swap.
+- **GPU and power**: GPU use, and with macmon its temperature, the power each part draws, and the fans.
+- **Network** in and out, with a chart, **disk** space, and the **battery**: charge, charging or not, time left and the watts going in or out.
+
+Temperatures and power need macmon on a Mac (`brew install macmon`), since macOS keeps them from anything without root. Without it those parts are left out and the room says how to add them. On Linux it reads `/proc`, `/sys` and `nvidia-smi`. It samples every 2 seconds while you look at it and every 30 otherwise, for the line above the prompt.
+
+It toasts when the CPU runs hot, memory or the disk is nearly full, or the battery is nearly flat, once each until it passes, and never during do not disturb. `/chat set monitor cpu_temp 90` and `/chat set monitor memory 90` move the thresholds, and `/chat set monitor alerts off` stops them.
 
 ## ☀ Weather
 

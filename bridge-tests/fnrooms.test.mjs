@@ -29,7 +29,7 @@ describe("function rooms in the bridge", () => {
   it("reports the shipped rooms, and refuses the ones that don't check out", async () => {
     await b.start();
     const ev = await b.waitFor((e) => e.type === "fnrooms");
-    assert.deepEqual(ev.rooms.map((r) => r.id), ["news", "snippet", "weather"]);
+    assert.deepEqual(ev.rooms.map((r) => r.id), ["monitor", "news", "snippet", "weather"]);
     const why = Object.fromEntries(ev.invalid.map((x) => [x.dir.split("/").at(-1), x.errors.join("; ")]));
     assert.match(why.broken, /no provider called "shell"/);
     assert.match(why.snippet, /already a room/);
@@ -203,7 +203,7 @@ describe("what a provider may fetch", () => {
 
 describe("manifests", () => {
   it("every room squad-chat ships checks out", () => {
-    for (const id of ["snippet", "weather", "news"]) {
+    for (const id of ["snippet", "weather", "news", "monitor"]) {
       const m = JSON.parse(readFileSync(new URL(`../plugins/squad-chat/rooms/${id}/room.json`, import.meta.url), "utf8"));
       assert.deepEqual(checkManifest(m, PROVIDERS), [], id);
     }
@@ -225,6 +225,14 @@ describe("manifests", () => {
     for (const want of [/settings.feeds.default: other.example isn't one of this room's hosts/, /settings.mode.default: one of a, b/, /settings.Bad Key: a key/, /settings.n.type/, /params.x: no setting called missing/]) {
       assert.match(errors, want);
     }
+  });
+
+  it("takes a column of widgets for a body, and a card shown only `when` its data is there", () => {
+    const m = { ...SNIPPET, layout: { cards: [{ title: "X", when: "list.items", body: [{ type: "text", text: "a" }, { type: "meter", label: "M", value: "list.count" }] }], inline: [{ type: "text", text: "b" }] } };
+    assert.deepEqual(checkManifest(m, PROVIDERS), []);
+    const bad = { ...SNIPPET, layout: { cards: [{ title: "X", when: "a b", body: [] }], inline: [{ type: "nope" }] } };
+    const errors = checkManifest(bad, PROVIDERS).join("\n");
+    for (const want of [/cards\[0\].when: not a path/, /cards\[0\].body: 1-6 widgets/, /inline\[0\]: unknown widget "nope"/]) assert.match(errors, want);
   });
 
   it("names what's wrong", () => {

@@ -11,7 +11,7 @@ export const MAX_MESSAGES = 100;   // per room
 export const SYS_ROOMS = ["usage", "git", "agents"];
 // Function rooms come from the bridge (manifests in rooms/<id>/room.json).
 // These have tabs until /chat rooms says otherwise.
-export const DEFAULT_ROOMS = [...SYS_ROOMS, "snippet"];
+export const DEFAULT_ROOMS = [...SYS_ROOMS, "snippet", "monitor"];
 export const ROOM_ID = /^[a-z][a-z0-9-]{1,23}$/;
 
 export const state = {
@@ -45,6 +45,7 @@ export const state = {
   sysRooms: [...DEFAULT_ROOMS],   // which built-in and function rooms have tabs (/chat rooms), kept in $.store
   fn: new Map(),          // function room id → { manifest, settings, data: { provider: data }, at, error, stale }
   fnInvalid: [],          // manifests the bridge refused: [{ dir, errors }]
+  fnToasts: [],           // function rooms' new alerts, waiting to be toasted
   usage: createUsage(),   // this session's numbers (metrics.mjs)
   git: emptyGit(),        // the Git room's snapshot (github.mjs)
   sessionId: null,
@@ -254,6 +255,13 @@ export function applyEvent(event) {
       }
       room.error[event.provider] = event.error ?? null;
       room.stale[event.provider] = keep || !!event.stale;
+      // A provider's alerts ({ id, text }) toast once each, until they clear.
+      if (Array.isArray(event.data?.alerts)) {
+        const was = room.alerted ?? new Set();
+        const now = event.data.alerts.filter((a) => a?.id && a.text);
+        for (const a of now) if (!was.has(`${event.provider}/${a.id}`)) state.fnToasts.push(String(a.text).slice(0, 120));
+        room.alerted = new Set(now.map((a) => `${event.provider}/${a.id}`));
+      }
       return true;
     }
     case "sessions":

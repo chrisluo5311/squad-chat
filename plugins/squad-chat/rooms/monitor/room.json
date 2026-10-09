@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "id": "monitor",
+  "version": "1.0.0",
+  "name": "Monitor",
+  "icon": "▦",
+  "color": "teal",
+  "description": "This computer's CPU, memory, GPU, network, disk and battery, and temperatures and power with macmon. Nothing leaves it.",
+  "author": "squad-chat",
+  "permissions": { "hosts": [] },
+  "settings": {
+    "alerts": { "type": "bool", "label": "Alerts", "default": true },
+    "cpu_temp": { "type": "int", "label": "CPU alert at °C", "default": 95, "min": 50, "max": 110 },
+    "memory": { "type": "int", "label": "Memory alert at %", "default": 95, "min": 50, "max": 100 }
+  },
+  "providers": [
+    { "id": "sys", "type": "sysinfo", "params": { "alerts": "$settings.alerts", "cpu_temp": "$settings.cpu_temp", "memory": "$settings.memory" }, "interval": { "visible": "2s", "background": "30s" } }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "CPU",
+        "meta": "{sys.cpu.meta}",
+        "body": [
+          { "type": "meter", "label": "CPU", "value": "sys.cpu.pct", "right": "{sys.cpu.load}" },
+          { "type": "text", "text": "{sys.cpu.spark}", "color": "teal" }
+        ]
+      },
+      {
+        "title": "MEMORY",
+        "when": "sys.mem",
+        "meta": "{sys.mem.usedText}",
+        "body": [
+          { "type": "meter", "label": "Memory", "value": "sys.mem.pct", "right": "{sys.mem.usedText}" },
+          { "type": "meter", "label": "Pressure", "value": "sys.mem.pressure" },
+          { "type": "meter", "label": "Swap", "value": "sys.mem.swapPct", "right": "{sys.mem.swapText}" }
+        ]
+      },
+      {
+        "title": "GPU & POWER",
+        "when": "sys.gpu",
+        "meta": "{sys.gpu.tempText}",
+        "body": [
+          { "type": "meter", "label": "GPU", "value": "sys.gpu.pct", "right": "{sys.gpu.power}" },
+          { "type": "text", "text": "{sys.power}\n{sys.fans}\n{sys.sensorHint}" }
+        ]
+      },
+      {
+        "title": "NETWORK",
+        "body": [
+          { "type": "tiles", "tiles": [{ "value": "↓ {sys.net.rxText}", "sub": "in", "color": "teal" }, { "value": "↑ {sys.net.txText}", "sub": "out", "color": "sky" }] },
+          { "type": "text", "text": "↓ {sys.net.rxSpark}\n↑ {sys.net.txSpark}" }
+        ]
+      },
+      {
+        "title": "DISK",
+        "when": "sys.disk",
+        "meta": "{sys.disk.freeText}",
+        "body": { "type": "meter", "label": "Disk", "value": "sys.disk.pct", "right": "{sys.disk.usedText}" }
+      },
+      {
+        "title": "BATTERY",
+        "when": "sys.battery",
+        "meta": "{sys.battery.detail}",
+        "body": { "type": "meter", "label": "Battery", "value": "sys.battery.pct", "right": "{sys.battery.state}" }
+      }
+    ],
+    "inline": [
+      { "type": "meter", "label": "CPU", "value": "sys.cpu.pct", "right": "{sys.cpu.tempText}" },
+      { "type": "meter", "label": "Memory", "value": "sys.mem.pct", "right": "{sys.mem.usedText}" },
+      { "type": "text", "text": "↓ {sys.net.rxText}  ↑ {sys.net.txText}" }
+    ],
+    "band": "{sys.band}",
+    "hint": "/set cpu_temp 90 · /set alerts off · /chat set monitor",
+    "placeholder": "/set memory 90 · /set alerts on · /help"
+  }
+}

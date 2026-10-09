@@ -87,6 +87,13 @@ export function parseInterval(s) {
 
 const str = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max;
 
+// A card's body: one widget, or a column of up to 6.
+function checkBody(body, where, errors) {
+  if (!Array.isArray(body)) return checkWidget(body, where, errors);
+  if (!body.length || body.length > 6) return errors.push(`${where}: 1-6 widgets`);
+  body.forEach((b, i) => checkWidget(b, `${where}[${i}]`, errors));
+}
+
 function checkWidget(body, where, errors) {
   if (!body || typeof body !== "object") return errors.push(`${where}: not an object`);
   const spec = WIDGETS[body.type];
@@ -168,9 +175,10 @@ export function checkManifest(m, providers) {
     else l.cards.forEach((c, i) => {
       if (!str(c?.title, 30)) errors.push(`layout.cards[${i}].title: 1-30 characters`);
       if (c?.meta != null && !str(c.meta, 100)) errors.push(`layout.cards[${i}].meta: 1-100 characters`);
-      checkWidget(c?.body, `layout.cards[${i}].body`, errors);
+      if (c?.when != null && !(typeof c.when === "string" && PATH.test(c.when))) errors.push(`layout.cards[${i}].when: not a path`);
+      checkBody(c?.body, `layout.cards[${i}].body`, errors);
     });
-    if (l.inline != null) checkWidget(l.inline, "layout.inline", errors);
+    if (l.inline != null) checkBody(l.inline, "layout.inline", errors);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
   }
   return errors;

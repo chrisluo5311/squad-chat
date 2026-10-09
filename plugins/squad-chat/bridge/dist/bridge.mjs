@@ -1199,7 +1199,7 @@ var require_serializer = __commonJS({
         const metaLength = this.USER_BROADCAST_PUSH_META_LENGTH + joinRef.length + ref.length + topic.length + userEvent.length + metadata.length;
         const header = new ArrayBuffer(this.HEADER_LENGTH + metaLength);
         const view = new DataView(header);
-        const bytes = new Uint8Array(header);
+        const bytes2 = new Uint8Array(header);
         let offset = 0;
         view.setUint8(offset++, this.KINDS.userBroadcastPush);
         view.setUint8(offset++, joinRef.length);
@@ -1208,15 +1208,15 @@ var require_serializer = __commonJS({
         view.setUint8(offset++, userEvent.length);
         view.setUint8(offset++, metadata.length);
         view.setUint8(offset++, encodingType);
-        bytes.set(joinRef, offset);
+        bytes2.set(joinRef, offset);
         offset += joinRef.length;
-        bytes.set(ref, offset);
+        bytes2.set(ref, offset);
         offset += ref.length;
-        bytes.set(topic, offset);
+        bytes2.set(topic, offset);
         offset += topic.length;
-        bytes.set(userEvent, offset);
+        bytes2.set(userEvent, offset);
         offset += userEvent.length;
-        bytes.set(metadata, offset);
+        bytes2.set(metadata, offset);
         offset += metadata.length;
         var combined = new Uint8Array(header.byteLength + encodedPayload.byteLength);
         combined.set(new Uint8Array(header), 0);
@@ -1789,7 +1789,7 @@ var require_phoenix_cjs = __commonJS({
        * Destroys and stops related timers.
        */
       teardown() {
-        this.pushBuffer.forEach((push) => push.destroy());
+        this.pushBuffer.forEach((push2) => push2.destroy());
         this.pushBuffer = [];
         this.rejoinTimer.reset();
         this.joinPush.destroy();
@@ -2118,10 +2118,10 @@ var require_phoenix_cjs = __commonJS({
     };
     var arrayBufferToBase64 = (buffer) => {
       let binary = "";
-      let bytes = new Uint8Array(buffer);
-      let len = bytes.byteLength;
+      let bytes2 = new Uint8Array(buffer);
+      let len = bytes2.byteLength;
       for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
+        binary += String.fromCharCode(bytes2[i]);
       }
       return btoa(binary);
     };
@@ -3533,9 +3533,9 @@ var require_channelAdapter = __commonJS({
         return this.channel.onError(callback);
       }
       push(event, payload, timeout) {
-        let push;
+        let push2;
         try {
-          push = this.channel.push(event, payload, timeout);
+          push2 = this.channel.push(event, payload, timeout);
         } catch (error) {
           throw new Error(`tried to push '${event}' to '${this.channel.topic}' before joining. Use channel.subscribe() before pushing events`);
         }
@@ -3544,7 +3544,7 @@ var require_channelAdapter = __commonJS({
           removedPush.cancelTimeout();
           this.socket.log("channel", `discarded push due to buffer overflow: ${removedPush.event}`, removedPush.payload());
         }
-        return push;
+        return push2;
       }
       updateJoinPayload(payload) {
         const oldPayload = this.channel.joinPush.payload();
@@ -4271,13 +4271,13 @@ var require_RealtimeChannel = __commonJS({
         } else {
           return new Promise((resolve) => {
             var _a2, _b2, _c;
-            const push = this.channelAdapter.push(args.type, args, opts.timeout || this.timeout);
+            const push2 = this.channelAdapter.push(args.type, args, opts.timeout || this.timeout);
             if (args.type === "broadcast" && !((_c = (_b2 = (_a2 = this.params) === null || _a2 === void 0 ? void 0 : _a2.config) === null || _b2 === void 0 ? void 0 : _b2.broadcast) === null || _c === void 0 ? void 0 : _c.ack)) {
               resolve("ok");
             }
-            push.receive("ok", () => resolve("ok"));
-            push.receive("error", () => resolve("error"));
-            push.receive("timeout", () => resolve("timed out"));
+            push2.receive("ok", () => resolve("ok"));
+            push2.receive("error", () => resolve("error"));
+            push2.receive("timeout", () => resolve("timed out"));
           });
         }
       }
@@ -5689,13 +5689,13 @@ var require_base64url = __commonJS({
       stringToUTF8(str2, (byte) => result.push(byte));
       return new Uint8Array(result);
     }
-    function bytesToBase64URL(bytes) {
+    function bytesToBase64URL(bytes2) {
       const result = [];
       const state = { queue: 0, queuedBits: 0 };
       const onChar = (char) => {
         result.push(char);
       };
-      bytes.forEach((byte) => byteToBase64URL(byte, state, onChar));
+      bytes2.forEach((byte) => byteToBase64URL(byte, state, onChar));
       byteToBase64URL(null, state, onChar);
       return result.join("");
     }
@@ -5712,7 +5712,7 @@ var require_helpers = __commonJS({
     exports.generateCallbackId = generateCallbackId;
     exports.parseParametersFromURL = parseParametersFromURL;
     exports.decodeJWT = decodeJWT;
-    exports.sleep = sleep3;
+    exports.sleep = sleep4;
     exports.retryable = retryable;
     exports.generatePKCEVerifier = generatePKCEVerifier;
     exports.generatePKCEChallenge = generatePKCEChallenge;
@@ -5857,7 +5857,7 @@ var require_helpers = __commonJS({
       };
       return data;
     }
-    async function sleep3(time) {
+    async function sleep4(time) {
       return await new Promise((accept) => {
         setTimeout(() => accept(null), time);
       });
@@ -5906,8 +5906,8 @@ var require_helpers = __commonJS({
       const encoder = new TextEncoder();
       const encodedData = encoder.encode(randomString);
       const hash = await crypto.subtle.digest("SHA-256", encodedData);
-      const bytes = new Uint8Array(hash);
-      return Array.from(bytes).map((c) => String.fromCharCode(c)).join("");
+      const bytes2 = new Uint8Array(hash);
+      return Array.from(bytes2).map((c) => String.fromCharCode(c)).join("");
     }
     async function generatePKCEChallenge(verifier) {
       const hasCryptoSupport = typeof crypto !== "undefined" && typeof crypto.subtle !== "undefined" && typeof TextEncoder !== "undefined";
@@ -5924,9 +5924,9 @@ var require_helpers = __commonJS({
     }
     function generatePKCEFlowId() {
       if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-        const bytes = new Uint8Array(16);
-        crypto.getRandomValues(bytes);
-        return Array.from(bytes, dec2hex).join("");
+        const bytes2 = new Uint8Array(16);
+        crypto.getRandomValues(bytes2);
+        return Array.from(bytes2, dec2hex).join("");
       }
       let flowId = "";
       for (let i = 0; i < 32; i++) {
@@ -7639,8 +7639,8 @@ var require_ethereum = __commonJS({
       return parseInt(hex, 16);
     }
     function toHex(value) {
-      const bytes = new TextEncoder().encode(value);
-      const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      const bytes2 = new TextEncoder().encode(value);
+      const hex = Array.from(bytes2, (byte) => byte.toString(16).padStart(2, "0")).join("");
       return "0x" + hex;
     }
     function createSiweMessage(parameters) {
@@ -22829,6 +22829,9 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
 // src/rooms/registry.mjs
 import { readdirSync as readdirSync2, readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4 } from "node:fs";
 import { join as join5 } from "node:path";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { cpus, loadavg } from "node:os";
 
 // src/rooms/manifest.mjs
 var SCHEMA = 1;
@@ -22912,6 +22915,11 @@ function parseInterval(s) {
   return Number(m[1]) * { ms: 1, s: 1e3, m: 6e4, h: 36e5 }[m[2]];
 }
 var str = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max;
+function checkBody(body, where, errors) {
+  if (!Array.isArray(body)) return checkWidget(body, where, errors);
+  if (!body.length || body.length > 6) return errors.push(`${where}: 1-6 widgets`);
+  body.forEach((b, i) => checkWidget(b, `${where}[${i}]`, errors));
+}
 function checkWidget(body, where, errors) {
   if (!body || typeof body !== "object") return errors.push(`${where}: not an object`);
   const spec = WIDGETS[body.type];
@@ -22989,9 +22997,10 @@ function checkManifest(m, providers) {
     else l.cards.forEach((c, i) => {
       if (!str(c?.title, 30)) errors.push(`layout.cards[${i}].title: 1-30 characters`);
       if (c?.meta != null && !str(c.meta, 100)) errors.push(`layout.cards[${i}].meta: 1-100 characters`);
-      checkWidget(c?.body, `layout.cards[${i}].body`, errors);
+      if (c?.when != null && !(typeof c.when === "string" && PATH.test(c.when))) errors.push(`layout.cards[${i}].when: not a path`);
+      checkBody(c?.body, `layout.cards[${i}].body`, errors);
     });
-    if (l.inline != null) checkWidget(l.inline, "layout.inline", errors);
+    if (l.inline != null) checkBody(l.inline, "layout.inline", errors);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
   }
   return errors;
@@ -23423,8 +23432,285 @@ ${x.link}`
   }
 };
 
+// src/rooms/providers/sysinfo.mjs
+var HISTORY2 = 60;
+var SPARKS2 = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588";
+var sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
+var samples = /* @__PURE__ */ new Map();
+var GB = 1024 ** 3;
+function bytes(n, digits = 1) {
+  if (!Number.isFinite(n)) return "\u2013";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${i === 0 ? Math.round(n) : n.toFixed(n >= 100 ? 0 : digits)} ${units[i]}`;
+}
+var rate = (n) => `${bytes(n)}/s`;
+var pctOf = (part, whole) => whole > 0 ? Math.max(0, Math.min(100, Math.round(part / whole * 100))) : null;
+var watts = (w) => Number.isFinite(w) ? `${w.toFixed(w >= 10 ? 0 : 1)} W` : "";
+var celsius = (c) => Number.isFinite(c) ? `${Math.round(c)}\xB0C` : "";
+function spark2(values, max = Math.max(...values, 0)) {
+  return values.map((v) => max > 0 && v > 0 ? SPARKS2[Math.min(7, Math.max(0, Math.round(v / max * 7)))] : SPARKS2[0]).join("");
+}
+function push(list, v) {
+  list.push(Number.isFinite(v) ? v : 0);
+  if (list.length > HISTORY2) list.shift();
+}
+function cpuTimes(list) {
+  let idle = 0;
+  let total = 0;
+  for (const c of list ?? []) {
+    const t = c.times ?? {};
+    idle += t.idle ?? 0;
+    total += (t.user ?? 0) + (t.nice ?? 0) + (t.sys ?? 0) + (t.idle ?? 0) + (t.irq ?? 0);
+  }
+  return { idle, total, cores: list?.length ?? 0 };
+}
+function parseVmStat(text) {
+  if (!text) return null;
+  const page = Number(/page size of (\d+) bytes/.exec(text)?.[1]) || 4096;
+  const get2 = (name) => Number(new RegExp(`${name}:\\s+(\\d+)`).exec(text)?.[1]) || 0;
+  return { used: (get2("Pages active") + get2("Pages wired down") + get2("Pages occupied by compressor")) * page };
+}
+function parseSysctl(text) {
+  if (!text) return null;
+  const [total, swap, level] = text.trim().split("\n");
+  const mb = (k) => Number(new RegExp(`${k} = ([\\d.]+)M`).exec(swap ?? "")?.[1]) * 1024 * 1024;
+  return { total: Number(total), swapTotal: mb("total"), swapUsed: mb("used"), free: Number(level) };
+}
+function parseNetstat(text) {
+  if (!text) return null;
+  let rx = 0;
+  let tx = 0;
+  for (const line of text.split("\n")) {
+    if (!/<Link#\d+>/.test(line)) continue;
+    const f = line.trim().split(/\s+/);
+    if (!/^(en|pdp_ip)\d+$/.test(f[0])) continue;
+    rx += Number(f.at(-5)) || 0;
+    tx += Number(f.at(-2)) || 0;
+  }
+  return { rx, tx };
+}
+function parseDf(text) {
+  const f = text?.trim().split("\n")[1]?.trim().split(/\s+/);
+  if (!f || f.length < 4) return null;
+  const total = Number(f[1]) * 1024;
+  const free = Number(f[3]) * 1024;
+  return Number.isFinite(total) && total > 0 ? { total, free, used: total - free } : null;
+}
+function parsePmset(text) {
+  const line = text?.split("\n").find((l) => /InternalBattery/.test(l));
+  if (!line) return null;
+  const pct = Number(/(\d+)%/.exec(line)?.[1]);
+  const words = line.split(";").map((x) => x.trim().toLowerCase());
+  const state = words.includes("charging") ? "charging" : words.includes("charged") ? "charged" : words.includes("discharging") ? "on battery" : "plugged in";
+  const left = /(\d+:\d+) remaining/.exec(line)?.[1];
+  return { pct, state, timeText: left && left !== "0:00" ? `${left} left` : "" };
+}
+var signed64 = (s) => {
+  try {
+    const n = BigInt(s);
+    return Number(n >= 2n ** 63n ? n - 2n ** 64n : n);
+  } catch {
+    return NaN;
+  }
+};
+function parseBatteryPower(text) {
+  if (!text) return null;
+  const get2 = (name) => new RegExp(`"${name}" ?= ?(\\d+|Yes|No)`).exec(text)?.[1];
+  if (get2("ExternalConnected") === "Yes") {
+    const mw = Number(get2("SystemPowerIn"));
+    return Number.isFinite(mw) && mw > 0 ? `${watts(mw / 1e3)} in` : "";
+  }
+  const amps = signed64(get2("InstantAmperage"));
+  const volts = Number(get2("Voltage"));
+  return Number.isFinite(amps) && Number.isFinite(volts) && amps < 0 ? `${watts(-amps * volts / 1e6)} out` : "";
+}
+function parseGpuUse(text) {
+  const n = Number(/"Device Utilization %"=(\d+)/.exec(text ?? "")?.[1]);
+  return Number.isFinite(n) ? n : null;
+}
+function parseMacmon(text) {
+  const line = text?.trim().split("\n").at(-1);
+  if (!line) return null;
+  try {
+    const m = JSON.parse(line);
+    return {
+      cpuTemp: m.temp?.cpu_temp_avg,
+      gpuTemp: m.temp?.gpu_temp_avg,
+      cpuPower: m.cpu_power,
+      gpuPower: m.gpu_power,
+      allPower: m.all_power,
+      sysPower: m.sys_power,
+      gpuUse: Number.isFinite(m.gpu_usage?.[1]) ? Math.round(m.gpu_usage[1] * 100) : null,
+      ram: m.memory ? { used: m.memory.ram_usage, total: m.memory.ram_total, swapUsed: m.memory.swap_usage, swapTotal: m.memory.swap_total } : null,
+      fans: (m.fans ?? []).map((f) => f.rpm)
+    };
+  } catch {
+    return null;
+  }
+}
+async function macos(ctx) {
+  const macmon = (argv) => ctx.run(argv, { timeoutMs: 2500 });
+  const [vm, sysctl, net, df, batt, ioBatt, ioGpu, sensors] = await Promise.all([
+    ctx.run(["vm_stat"]),
+    ctx.run(["sysctl", "-n", "hw.memsize", "vm.swapusage", "kern.memorystatus_level"]),
+    ctx.run(["netstat", "-ibn"]),
+    ctx.run(["df", "-k", "/System/Volumes/Data"]).then((t) => t ?? ctx.run(["df", "-k", "/"])),
+    ctx.run(["pmset", "-g", "batt"]),
+    ctx.run(["ioreg", "-rn", "AppleSmartBattery"]),
+    ctx.run(["ioreg", "-rc", "IOAccelerator", "-d", "1"]),
+    macmon(["macmon", "pipe", "-s", "1", "-i", "250"]).then((t) => t ?? macmon(["/opt/homebrew/bin/macmon", "pipe", "-s", "1", "-i", "250"]))
+  ]);
+  const s = parseSysctl(sysctl);
+  const mm = parseMacmon(sensors);
+  const vmUsed = parseVmStat(vm)?.used;
+  return {
+    mem: mm?.ram ?? (s ? { used: vmUsed, total: s.total, swapUsed: s.swapUsed, swapTotal: s.swapTotal } : null),
+    pressure: s && Number.isFinite(s.free) ? 100 - s.free : null,
+    net: parseNetstat(net),
+    disk: parseDf(df),
+    battery: parsePmset(batt) ? { ...parsePmset(batt), power: parseBatteryPower(ioBatt) } : null,
+    gpuUse: mm?.gpuUse ?? parseGpuUse(ioGpu),
+    sensors: mm,
+    sensorHint: mm ? "" : "brew install macmon for temperatures, power and fans"
+  };
+}
+function parseMeminfo(text) {
+  if (!text) return null;
+  const kb = (k) => (Number(new RegExp(`^${k}:\\s+(\\d+)`, "m").exec(text)?.[1]) || 0) * 1024;
+  return { used: kb("MemTotal") - kb("MemAvailable"), total: kb("MemTotal"), swapUsed: kb("SwapTotal") - kb("SwapFree"), swapTotal: kb("SwapTotal") };
+}
+function parseNetDev(text) {
+  if (!text) return null;
+  let rx = 0;
+  let tx = 0;
+  for (const line of text.split("\n").slice(2)) {
+    const [name, rest] = line.split(":");
+    if (!rest || /^\s*(lo|docker|veth|br-|virbr|tun|tap)/.test(name)) continue;
+    const f = rest.trim().split(/\s+/).map(Number);
+    rx += f[0] || 0;
+    tx += f[8] || 0;
+  }
+  return { rx, tx };
+}
+async function linux(ctx) {
+  const zones = await Promise.all(Array.from({ length: 10 }, (_, i) => Promise.all([
+    ctx.read(`/sys/class/thermal/thermal_zone${i}/type`),
+    ctx.read(`/sys/class/thermal/thermal_zone${i}/temp`)
+  ])));
+  const temps = zones.filter(([, t]) => t).map(([type, t]) => ({ type: String(type ?? "").trim(), c: Number(t) / 1e3 }));
+  const cpuZone = temps.find((z) => /x86_pkg|cpu|soc|k10temp|coretemp/i.test(z.type)) ?? temps[0];
+  const [mem, net, df, cap, status, power, gpu] = await Promise.all([
+    ctx.read("/proc/meminfo"),
+    ctx.read("/proc/net/dev"),
+    ctx.run(["df", "-k", "/"]),
+    ctx.read("/sys/class/power_supply/BAT0/capacity"),
+    ctx.read("/sys/class/power_supply/BAT0/status"),
+    ctx.read("/sys/class/power_supply/BAT0/power_now"),
+    ctx.run(["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,power.draw", "--format=csv,noheader,nounits"])
+  ]);
+  const [gUse, gTemp, gPower] = (gpu?.trim().split("\n")[0] ?? "").split(",").map((x) => Number(x.trim()));
+  const st = String(status ?? "").trim().toLowerCase();
+  return {
+    mem: parseMeminfo(mem),
+    pressure: null,
+    net: parseNetDev(net),
+    disk: parseDf(df),
+    battery: cap ? { pct: Number(cap), state: st === "charging" ? "charging" : st === "full" ? "charged" : st === "discharging" ? "on battery" : "plugged in", timeText: "", power: power ? `${watts(Number(power) / 1e6)} ${st === "discharging" ? "out" : "in"}` : "" } : null,
+    gpuUse: Number.isFinite(gUse) ? gUse : null,
+    sensors: cpuZone || Number.isFinite(gTemp) ? { cpuTemp: cpuZone?.c, gpuTemp: Number.isFinite(gTemp) ? gTemp : void 0, gpuPower: Number.isFinite(gPower) ? gPower : void 0, fans: [] } : null,
+    sensorHint: ""
+  };
+}
+var sysinfo_default = {
+  type: "sysinfo",
+  hosts: [],
+  async fetch(params, ctx) {
+    const s = samples.get(ctx.dataDir) ?? { cpu: null, net: null, hist: { cpu: [], mem: [], rx: [], tx: [] } };
+    samples.set(ctx.dataDir, s);
+    let t = cpuTimes(ctx.cpus());
+    if (!s.cpu) {
+      s.cpu = t;
+      await sleep3(250);
+      t = cpuTimes(ctx.cpus());
+    }
+    const dTotal = t.total - s.cpu.total;
+    const cpuPct = dTotal > 0 ? Math.round((1 - (t.idle - s.cpu.idle) / dTotal) * 100) : 0;
+    s.cpu = t;
+    const os = ctx.platform === "darwin" ? await macos(ctx) : await linux(ctx);
+    const now = ctx.now();
+    let rx = null;
+    let tx = null;
+    if (os.net) {
+      if (s.net && now > s.net.at) {
+        const dt = (now - s.net.at) / 1e3;
+        rx = Math.max(0, (os.net.rx - s.net.rx) / dt);
+        tx = Math.max(0, (os.net.tx - s.net.tx) / dt);
+      }
+      s.net = { ...os.net, at: now };
+    }
+    const m = os.mem;
+    const memPct = m ? pctOf(m.used, m.total) : null;
+    push(s.hist.cpu, cpuPct);
+    push(s.hist.mem, memPct);
+    push(s.hist.rx, rx);
+    push(s.hist.tx, tx);
+    const net = { rxText: rx == null ? "\u2013" : rate(rx), txText: tx == null ? "\u2013" : rate(tx) };
+    const netMax = Math.max(...s.hist.rx, ...s.hist.tx, 1);
+    const sen = os.sensors;
+    const load2 = ctx.loadavg?.() ?? [];
+    const gpu = os.gpuUse != null || Number.isFinite(sen?.gpuTemp) ? { pct: os.gpuUse, tempText: celsius(sen?.gpuTemp), power: watts(sen?.gpuPower) } : null;
+    const d = os.disk;
+    const b = os.battery;
+    const alerts = [];
+    if (params.alerts !== false) {
+      if (Number.isFinite(sen?.cpuTemp) && sen.cpuTemp >= (params.cpu_temp ?? 90)) alerts.push({ id: "cpu-temp", text: `\u25A6 CPU at ${celsius(sen.cpuTemp)}` });
+      if (memPct != null && memPct >= (params.memory ?? 90)) alerts.push({ id: "memory", text: `\u25A6 Memory ${memPct}% used` });
+      if (d && pctOf(d.used, d.total) >= 95) alerts.push({ id: "disk", text: `\u25A6 Disk ${pctOf(d.used, d.total)}% full` });
+      if (b && b.state === "on battery" && b.pct <= 10) alerts.push({ id: "battery", text: `\u25A6 Battery at ${b.pct}%` });
+    }
+    return {
+      cpu: {
+        pct: cpuPct,
+        cores: t.cores,
+        load: load2.length ? `load ${load2[0].toFixed(2)}` : "",
+        spark: spark2(s.hist.cpu, 100),
+        tempText: celsius(sen?.cpuTemp),
+        power: watts(sen?.cpuPower),
+        meta: [`${t.cores} cores`, celsius(sen?.cpuTemp), watts(sen?.cpuPower)].filter(Boolean).join(" \xB7 ")
+      },
+      mem: m ? {
+        pct: memPct,
+        usedText: `${bytes(m.used)} / ${bytes(m.total, 0)}`,
+        swapPct: m.swapTotal > 0 ? pctOf(m.swapUsed, m.swapTotal) : 0,
+        swapText: m.swapTotal > 0 ? `${bytes(m.swapUsed)} / ${bytes(m.swapTotal, 0)}` : "no swap",
+        pressure: os.pressure,
+        spark: spark2(s.hist.mem, 100)
+      } : null,
+      gpu,
+      power: sen && Number.isFinite(sen.allPower) ? `CPU ${watts(sen.cpuPower)} \xB7 GPU ${watts(sen.gpuPower)} \xB7 all ${watts(sen.allPower)}` : "",
+      fans: (sen?.fans ?? []).length ? sen.fans.map((r, i) => `fan ${i + 1} ${Math.round(r)} rpm`).join(" \xB7 ") : "",
+      net: { ...net, rxSpark: spark2(s.hist.rx, netMax), txSpark: spark2(s.hist.tx, netMax) },
+      disk: d ? { pct: pctOf(d.used, d.total), usedText: `${bytes(d.used, 0)} / ${bytes(d.total, 0)}`, freeText: `${bytes(d.free, 0)} free` } : null,
+      battery: b ? { pct: b.pct, state: b.state, detail: [b.state, b.timeText, b.power].filter(Boolean).join(" \xB7 ") } : null,
+      sensorHint: os.sensorHint,
+      band: [`CPU ${cpuPct}%`, memPct != null ? `mem ${memPct}%` : null, rx != null ? `\u2193${net.rxText} \u2191${net.txText}` : null, celsius(sen?.cpuTemp) || null, b ? `${b.state === "on battery" ? "\u25AF" : "\u26A1"}${b.pct}%` : null].filter(Boolean).join(" \xB7 "),
+      alerts
+    };
+  }
+};
+
 // src/rooms/registry.mjs
-var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default].map((p) => [p.type, p]));
+var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default].map((p) => [p.type, p]));
+function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
+  return new Promise((resolve) => {
+    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve(err ? null : String(stdout)));
+  });
+}
 function parseSetting(st, raw, current) {
   const text = String(raw ?? "").trim();
   switch (st.type) {
@@ -23538,6 +23824,12 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
     return {
       dataDir: join5(dataDir, m.id),
+      platform: process.platform,
+      run: runCommand,
+      read: (file) => readFile(file, "utf8").catch(() => null),
+      cpus,
+      loadavg,
+      now: Date.now,
       // Only headers come from the provider: the time and size limits stay ours.
       fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts })
     };
