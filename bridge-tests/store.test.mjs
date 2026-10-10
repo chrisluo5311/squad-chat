@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { Bridge } from "./helpers.mjs";
 
 const repoRoom = (id) => JSON.parse(readFileSync(new URL(`../rooms/${id}/room.json`, import.meta.url), "utf8"));
@@ -32,8 +32,12 @@ describe("the room store", () => {
   let down = false;
   const server = createServer((req, res) => {
     if (down) { res.writeHead(503); return res.end(); }
-    const file = join(served, decodeURIComponent(req.url.replace(/^\/rooms\//, "")));
-    if (!existsSync(file)) { res.writeHead(404); return res.end(); }
+    // Only files inside the store folder: "../" or an absolute path gets a 404.
+    let rel;
+    try { rel = decodeURIComponent(new URL(req.url, "http://x").pathname.replace(/^\/rooms\//, "")); } catch { rel = ""; }
+    const root = resolve(served);
+    const file = resolve(root, rel);
+    if (!file.startsWith(root + sep) || !existsSync(file)) { res.writeHead(404); return res.end(); }
     res.end(readFileSync(file));
   });
   let b;
@@ -118,6 +122,14 @@ describe("the room store", () => {
     assert.ok(!existsSync(join(b.configDir, "room-data", "dev-blogs")));
     assert.equal((await b.call("POST", "/store/uninstall", { id: "weather" })).status, 409);
     assert.equal((await b.call("POST", "/store/uninstall", { id: "dev-blogs" })).status, 404);
+  });
+
+  it("(the test store itself serves only its own folder)", async () => {
+    const { request } = await import("node:http");
+    const get = (path) => new Promise((res) => request({ host: "127.0.0.1", port: server.address().port, path }, (r) => { r.resume(); res(r.statusCode); }).end());
+    assert.equal(await get("/rooms/index.json"), 200);
+    assert.equal(await get("/rooms/..%2F..%2Fpackage.json"), 404);
+    assert.equal(await get("/rooms/%2Fetc%2Fpasswd"), 404);
   });
 
   it("says when the store can't be reached", async () => {

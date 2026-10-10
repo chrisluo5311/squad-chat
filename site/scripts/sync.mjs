@@ -39,7 +39,8 @@ ${body}`,
 
 // The room store, from the index the bridge reads.
 const { rooms } = JSON.parse(readFileSync(new URL("../../rooms/index.json", import.meta.url), "utf8"));
-const cell = (t) => String(t).replace(/\|/g, "\\|");
+// A table cell's text: backslashes first, then the pipes that would split the cell.
+const cell = (t) => String(t).replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 writeFileSync(
   new URL("../src/content/docs/rooms/store.md", import.meta.url),
   `---
