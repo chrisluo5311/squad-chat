@@ -19,7 +19,7 @@
 // A run asked for while one is going waits for it and then runs once more,
 // so an action's change is never overwritten by an older answer.
 
-import { readdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { readFile, stat, readdir } from "node:fs/promises";
@@ -131,6 +131,7 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
 
   let enabled = new Set();
   let shown = null;
+  let closed = false;          // after close() nothing runs or re-arms
   const last = new Map();      // "room/provider" → { data, at }
   const timers = new Map();    // "room/provider" → timeout
   const inflight = new Map();  // "room/provider" → the run going now
@@ -142,11 +143,24 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
   // ---- settings
 
   const settingsFile = (id) => join(dataDir, id, "settings.json");
+  // The saved file, read again only when it changes. Another session's bridge
+  // may change it, and every write is a rename, so the file's inode and
+  // mtime together say whether it's still the one read.
+  const savedCache = new Map();   // id → { stamp, data }
   function savedSettings(id) {
-    try {
-      const data = JSON.parse(readFileSync(settingsFile(id), "utf8"));
-      return data && typeof data === "object" && !Array.isArray(data) ? data : {};
-    } catch { return {}; }
+    let stamp = "none";
+    try { const st = statSync(settingsFile(id)); stamp = `${st.ino}:${st.mtimeMs}:${st.size}`; } catch { /* none saved */ }
+    const hit = savedCache.get(id);
+    if (hit && hit.stamp === stamp) return { ...hit.data };
+    let data = {};
+    if (stamp !== "none") {
+      try {
+        const parsed = JSON.parse(readFileSync(settingsFile(id), "utf8"));
+        data = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch { /* unreadable: the defaults */ }
+    }
+    savedCache.set(id, { stamp, data });
+    return { ...data };
   }
   // The manifest's defaults, with what was changed on top. A saved value
   // that no longer checks out (the manifest changed) falls back.
@@ -163,8 +177,7 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
     if (rooms.get(id)?.settings) emit({ type: "fnsettings", id, values: settingsOf(id) });
   }
   // A provider's params, with "$settings.<key>" filled in at any depth.
-  function paramsOf(m, p) {
-    const values = settingsOf(m.id);
+  function paramsOf(m, p, values = settingsOf(m.id)) {
     const fill = (v) => {
       if (typeof v === "string") { const ref = /^\$settings\.(.+)$/.exec(v); return ref ? values[ref[1]] : v; }
       if (Array.isArray(v)) return v.map(fill);
@@ -176,10 +189,12 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
 
   // The manifest's own alerts on a provider's fresh data: each row (or the
   // one value) past its threshold, as { id, text }, joined to the provider's.
-  function manifestAlerts(m, pid, data) {
+  // A threshold that's a setting turns the alert off at 0 (as the docs say);
+  // a number written in the manifest is just that number.
+  function manifestAlerts(m, pid, data, values = settingsOf(m.id)) {
     const out = [];
-    const values = settingsOf(m.id);
     const limit = (v) => (typeof v === "string" ? Number(values[/^\$settings\.(.+)$/.exec(v)?.[1]]) : Number(v));
+    const off = (v) => typeof v === "string" && limit(v) === 0;
     const fillRow = (t, row) => String(t).replace(/\{([A-Za-z0-9_.]+)\}/g, (_, path) => String(path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), row) ?? ""));
     for (const a of m.alerts ?? []) {
       const path = a.rows ?? a.value;
@@ -191,6 +206,8 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       for (const row of rows) {
         const n = Number(field.split(".").reduce((o, k) => (o == null ? undefined : o[k]), row));
         if (!Number.isFinite(n)) continue;
+        const line = a.above ?? a.below ?? a.beyond;
+        if (off(line)) break;
         const hit = a.above != null ? n >= limit(a.above)
           : a.below != null ? n <= limit(a.below)
           : limit(a.beyond) > 0 && Math.abs(n) >= limit(a.beyond);
@@ -216,6 +233,7 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       spawn: (argv, opts) => spawn(argv[0], argv.slice(1), { stdio: "ignore", ...opts }),
       connect,
       fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []) },
+      hosts: hostsOf(m),   // the manifest's own, for what a provider hands to another program (Lo-fi's mpv)
       log,
       // Only headers come from the provider: the time and size limits stay ours.
       fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts }),
@@ -225,6 +243,7 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
   // Runs a provider now, or once more after the run going now. Resolves
   // when the run that sees the latest state has emitted.
   function run(id, pid) {
+    if (closed) return Promise.resolve();
     const k = key(id, pid);
     if (inflight.has(k)) {
       if (!queued.has(k)) queued.set(k, inflight.get(k).then(() => { queued.delete(k); return run(id, pid); }));
@@ -242,8 +261,9 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
     const k = key(id, pid);
     clearTimeout(timers.get(k));
     try {
-      const data = clean(await providers[p.type].fetch(paramsOf(m, p), ctxFor(m, p)));
-      const extra = m.alerts ? manifestAlerts(m, pid, data) : [];
+      const values = settingsOf(m.id);   // once a run, for the params and the alerts alike
+      const data = clean(await providers[p.type].fetch(paramsOf(m, p, values), ctxFor(m, p)));
+      const extra = m.alerts ? manifestAlerts(m, pid, data, values) : [];
       if (extra.length || (m.alerts && data && typeof data === "object")) data.alerts = [...(Array.isArray(data.alerts) ? data.alerts : []), ...extra];
       const at = Date.now();
       last.set(k, { data, at });
@@ -261,7 +281,7 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
     const k = key(id, pid);
     clearTimeout(timers.get(k));
     timers.delete(k);
-    if (!enabled.has(id)) return;
+    if (closed || !enabled.has(id)) return;
     const p = rooms.get(id)?.providers.find((x) => x.id === pid);
     const ms = parseInterval(shown === id ? p?.interval?.visible : p?.interval?.background);
     if (ms) timers.set(k, setTimeout(() => void run(id, pid), ms));
@@ -297,23 +317,28 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
         const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
         writeFileSync(tmp, JSON.stringify(saved, null, 1), { mode: 0o600 });
         renameSync(tmp, settingsFile(id));
+        savedCache.delete(id);
       });
       emitSettings(id);
       if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };
     },
-    // The rooms' folders read again (a room installed or removed): new rooms
-    // with a tab start, gone ones stop.
-    // Every room with a tab runs again, so an updated one shows its new self.
+    // The rooms' folders read again (a room installed, updated or removed):
+    // a gone room stops, and a new or changed one with a tab runs now. The
+    // rest carry on as they were.
     reload() {
-      const wasEnabled = [...enabled];
-      const wasShown = shown;
+      const before = rooms;
       load();
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-      enabled = new Set();
+      const changed = (id) => !before.has(id) || JSON.stringify(before.get(id)) !== JSON.stringify(rooms.get(id));
+      for (const [k, t] of timers) {
+        const id = k.slice(0, k.indexOf("/"));
+        if (!rooms.has(id) || changed(id)) { clearTimeout(t); timers.delete(k); }
+      }
+      for (const id of before.keys()) if (!rooms.has(id)) savedCache.delete(id);
+      const wasEnabled = [...enabled];
+      enabled = new Set(wasEnabled.filter((id) => rooms.has(id) && !changed(id)));
       this.report();
-      this.setVisible({ enabled: wasEnabled, shown: wasShown });
+      this.setVisible({ enabled: wasEnabled, shown });
     },
     // Where a room came from: the first folder (shipped) or the second
     // (installed on this computer), and its manifest.
@@ -359,6 +384,7 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       return clean(r ?? { ok: true });
     },
     close() {
+      closed = true;
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
       // A provider that keeps something running (Lo-fi's player) stops it.

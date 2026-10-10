@@ -14,9 +14,6 @@ const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
 const INTERVAL = /^\d+(ms|s|m|h)$/;
 const ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 
-// The actions a layout's buttons, rows and keys name, checked against the
-// providers once the whole manifest is read.
-let actionsUsed = [];
 
 // The widgets a layout may use, and each one's fields: "path" (into the
 // data), "field" (of an item), "text" (a template with {path} holes),
@@ -102,13 +99,15 @@ export function parseInterval(s) {
 const str = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max;
 
 // A card's body: one widget, or a column of up to 6.
-function checkBody(body, where, errors) {
-  if (!Array.isArray(body)) return checkWidget(body, where, errors);
+// `uses` collects the actions buttons and rows name, checked against the
+// providers once the whole manifest is read.
+function checkBody(body, where, errors, uses) {
+  if (!Array.isArray(body)) return checkWidget(body, where, errors, uses);
   if (!body.length || body.length > 6) return errors.push(`${where}: 1-6 widgets`);
-  body.forEach((b, i) => checkWidget(b, `${where}[${i}]`, errors));
+  body.forEach((b, i) => checkWidget(b, `${where}[${i}]`, errors, uses));
 }
 
-function checkWidget(body, where, errors) {
+function checkWidget(body, where, errors, uses) {
   if (!body || typeof body !== "object") return errors.push(`${where}: not an object`);
   const spec = WIDGETS[body.type];
   if (!spec) return errors.push(`${where}: unknown widget "${body.type}" (${Object.keys(WIDGETS).join(", ")})`);
@@ -134,7 +133,7 @@ function checkWidget(body, where, errors) {
     if (k === "act") {
       if (!str(v?.label, 6)) errors.push(`${where}.act.label: 1-6 characters`);
       if (!(typeof v?.action === "string" && ACTION.test(v.action))) errors.push(`${where}.act.action: an action's name`);
-      else actionsUsed.push({ where: `${where}.act`, provider: v.provider, action: v.action });
+      else uses.push({ where: `${where}.act`, provider: v.provider, action: v.action });
       if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.act.field: not a path`);
     }
     if (k === "buttons") {
@@ -142,7 +141,7 @@ function checkWidget(body, where, errors) {
       else v.forEach((btn, i) => {
         if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
         if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
-        else actionsUsed.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
+        else uses.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
         if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);
       });
     }
@@ -156,6 +155,20 @@ function checkWidget(body, where, errors) {
     }
   }
   for (const key of Object.keys(body)) if (key !== "type" && !(key in spec)) errors.push(`${where}.${key}: not a field of ${body.type}`);
+}
+
+// The player's stations: mpv fetches them itself, so each must be https and
+// on the room's own hosts, as anything a provider fetches through the bridge.
+function checkStations(stations, where, hosts, errors) {
+  if (stations == null) return;
+  if (!Array.isArray(stations) || stations.length > 20) return errors.push(`${where}: up to 20 stations`);
+  stations.forEach((st, i) => {
+    let u = null;
+    try { u = new URL(String(st?.url)); } catch { /* reported below */ }
+    if (!str(st?.name, 40)) errors.push(`${where}[${i}].name: 1-40 characters`);
+    if (!u || u.protocol !== "https:") errors.push(`${where}[${i}].url: an https URL`);
+    else if (!hosts.includes(u.hostname.toLowerCase())) errors.push(`${where}[${i}].url: ${u.hostname} isn't one of this room's hosts`);
+  });
 }
 
 // http-json's params: a URL, and fields with formats it knows.
@@ -206,7 +219,7 @@ function checkAlerts(alerts, m, errors) {
 // `providers` is the bridge's table of provider types.
 export function checkManifest(m, providers) {
   const errors = [];
-  actionsUsed = [];
+  const actionsUsed = [];   // what buttons, rows and keys name
   if (!m || typeof m !== "object") return ["not a JSON object"];
   if (m.schema !== SCHEMA) errors.push(`schema: must be ${SCHEMA}`);
   if (!(typeof m.id === "string" && ID.test(m.id))) errors.push("id: 2-24 lowercase letters, digits or -, starting with a letter");
@@ -241,6 +254,7 @@ export function checkManifest(m, providers) {
       };
       refs(p?.params ?? {}, `${where}.params`);
       if (p?.type === "http-json") checkHttpJson(p.params ?? {}, `${where}.params`, errors);
+      if (p?.type === "player") checkStations(p.params?.stations, `${where}.params.stations`, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];
         if (v != null && !(INTERVAL.test(v) && parseInterval(v) >= 1000)) errors.push(`${where}.interval.${k}: like 30s or 10m, at least 1s`);
@@ -259,9 +273,9 @@ export function checkManifest(m, providers) {
       if (!str(c?.title, 30)) errors.push(`layout.cards[${i}].title: 1-30 characters`);
       if (c?.meta != null && !str(c.meta, 100)) errors.push(`layout.cards[${i}].meta: 1-100 characters`);
       if (c?.when != null && !(typeof c.when === "string" && PATH.test(c.when))) errors.push(`layout.cards[${i}].when: not a path`);
-      checkBody(c?.body, `layout.cards[${i}].body`, errors);
+      checkBody(c?.body, `layout.cards[${i}].body`, errors, actionsUsed);
     });
-    if (l.inline != null) checkBody(l.inline, "layout.inline", errors);
+    if (l.inline != null) checkBody(l.inline, "layout.inline", errors, actionsUsed);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
     if (l.keys != null) {
       const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;

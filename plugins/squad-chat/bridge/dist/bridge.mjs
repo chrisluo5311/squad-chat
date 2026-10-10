@@ -13906,7 +13906,7 @@ var require_main3 = __commonJS({
 
 // src/bridge.mjs
 import { createServer } from "node:http";
-import { mkdirSync as mkdirSync7, rmSync as rmSync4, chmodSync as chmodSync7, readFileSync as readFileSync7 } from "node:fs";
+import { mkdirSync as mkdirSync7, rmSync as rmSync5, chmodSync as chmodSync7, readFileSync as readFileSync8 } from "node:fs";
 import { homedir as homedir2, tmpdir } from "node:os";
 import { join as join8 } from "node:path";
 
@@ -22827,7 +22827,7 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
 }
 
 // src/rooms/registry.mjs
-import { readdirSync as readdirSync2, readFileSync as readFileSync5, writeFileSync as writeFileSync5, renameSync as renameSync5 } from "node:fs";
+import { readdirSync as readdirSync2, readFileSync as readFileSync6, writeFileSync as writeFileSync6, renameSync as renameSync6, statSync as statSync3 } from "node:fs";
 import { join as join6 } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { readFile, stat, readdir } from "node:fs/promises";
@@ -22844,7 +22844,6 @@ var VERSION = /^\d+\.\d+\.\d+$/;
 var HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 var INTERVAL = /^\d+(ms|s|m|h)$/;
 var ACTION = /^[a-z][a-z0-9_]{0,19}$/;
-var actionsUsed = [];
 var WIDGETS = {
   list: { items: "path!", title: "field!", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
   buttons: { buttons: "buttons!" },
@@ -22925,12 +22924,12 @@ function parseInterval(s) {
   return Number(m[1]) * { ms: 1, s: 1e3, m: 6e4, h: 36e5 }[m[2]];
 }
 var str = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max;
-function checkBody(body, where, errors) {
-  if (!Array.isArray(body)) return checkWidget(body, where, errors);
+function checkBody(body, where, errors, uses) {
+  if (!Array.isArray(body)) return checkWidget(body, where, errors, uses);
   if (!body.length || body.length > 6) return errors.push(`${where}: 1-6 widgets`);
-  body.forEach((b, i) => checkWidget(b, `${where}[${i}]`, errors));
+  body.forEach((b, i) => checkWidget(b, `${where}[${i}]`, errors, uses));
 }
-function checkWidget(body, where, errors) {
+function checkWidget(body, where, errors, uses) {
   if (!body || typeof body !== "object") return errors.push(`${where}: not an object`);
   const spec = WIDGETS[body.type];
   if (!spec) return errors.push(`${where}: unknown widget "${body.type}" (${Object.keys(WIDGETS).join(", ")})`);
@@ -22959,7 +22958,7 @@ function checkWidget(body, where, errors) {
     if (k === "act") {
       if (!str(v?.label, 6)) errors.push(`${where}.act.label: 1-6 characters`);
       if (!(typeof v?.action === "string" && ACTION.test(v.action))) errors.push(`${where}.act.action: an action's name`);
-      else actionsUsed.push({ where: `${where}.act`, provider: v.provider, action: v.action });
+      else uses.push({ where: `${where}.act`, provider: v.provider, action: v.action });
       if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.act.field: not a path`);
     }
     if (k === "buttons") {
@@ -22967,7 +22966,7 @@ function checkWidget(body, where, errors) {
       else v.forEach((btn, i) => {
         if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
         if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
-        else actionsUsed.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
+        else uses.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
         if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);
       });
     }
@@ -22981,6 +22980,20 @@ function checkWidget(body, where, errors) {
     }
   }
   for (const key of Object.keys(body)) if (key !== "type" && !(key in spec)) errors.push(`${where}.${key}: not a field of ${body.type}`);
+}
+function checkStations(stations, where, hosts, errors) {
+  if (stations == null) return;
+  if (!Array.isArray(stations) || stations.length > 20) return errors.push(`${where}: up to 20 stations`);
+  stations.forEach((st, i) => {
+    let u = null;
+    try {
+      u = new URL(String(st?.url));
+    } catch {
+    }
+    if (!str(st?.name, 40)) errors.push(`${where}[${i}].name: 1-40 characters`);
+    if (!u || u.protocol !== "https:") errors.push(`${where}[${i}].url: an https URL`);
+    else if (!hosts.includes(u.hostname.toLowerCase())) errors.push(`${where}[${i}].url: ${u.hostname} isn't one of this room's hosts`);
+  });
 }
 var FORMATS = ["text", "number", "compact", "percent", "signed", "signed-percent", "date", "age"];
 function checkHttpJson(params, where, errors) {
@@ -23026,7 +23039,7 @@ function checkAlerts(alerts, m, errors) {
 }
 function checkManifest(m, providers) {
   const errors = [];
-  actionsUsed = [];
+  const actionsUsed = [];
   if (!m || typeof m !== "object") return ["not a JSON object"];
   if (m.schema !== SCHEMA) errors.push(`schema: must be ${SCHEMA}`);
   if (!(typeof m.id === "string" && ID2.test(m.id))) errors.push("id: 2-24 lowercase letters, digits or -, starting with a letter");
@@ -23058,6 +23071,7 @@ function checkManifest(m, providers) {
       };
       refs(p?.params ?? {}, `${where}.params`);
       if (p?.type === "http-json") checkHttpJson(p.params ?? {}, `${where}.params`, errors);
+      if (p?.type === "player") checkStations(p.params?.stations, `${where}.params.stations`, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];
         if (v != null && !(INTERVAL.test(v) && parseInterval(v) >= 1e3)) errors.push(`${where}.interval.${k}: like 30s or 10m, at least 1s`);
@@ -23074,9 +23088,9 @@ function checkManifest(m, providers) {
       if (!str(c?.title, 30)) errors.push(`layout.cards[${i}].title: 1-30 characters`);
       if (c?.meta != null && !str(c.meta, 100)) errors.push(`layout.cards[${i}].meta: 1-100 characters`);
       if (c?.when != null && !(typeof c.when === "string" && PATH.test(c.when))) errors.push(`layout.cards[${i}].when: not a path`);
-      checkBody(c?.body, `layout.cards[${i}].body`, errors);
+      checkBody(c?.body, `layout.cards[${i}].body`, errors, actionsUsed);
     });
-    if (l.inline != null) checkBody(l.inline, "layout.inline", errors);
+    if (l.inline != null) checkBody(l.inline, "layout.inline", errors, actionsUsed);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
     if (l.keys != null) {
       const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;
@@ -23177,35 +23191,76 @@ function clean(value, depth = 0) {
   if (Array.isArray(value)) return value.slice(0, 500).map((v) => clean(v, depth + 1));
   if (value && typeof value === "object") {
     const out = {};
-    for (const [k, v] of Object.entries(value)) out[cleanString(k)] = clean(v, depth + 1);
+    for (const [k, v] of Object.entries(value)) {
+      const key = cleanString(k);
+      if (key === "__proto__") continue;
+      out[key] = clean(v, depth + 1);
+    }
     return out;
   }
   return typeof value === "number" || typeof value === "boolean" || value == null ? value : null;
 }
 
 // src/rooms/lock.mjs
-import { mkdirSync as mkdirSync3, chmodSync as chmodSync3, rmdirSync, statSync as statSync2 } from "node:fs";
+import { mkdirSync as mkdirSync3, chmodSync as chmodSync3, rmSync as rmSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync3, renameSync as renameSync3, statSync as statSync2 } from "node:fs";
 import { join as join3 } from "node:path";
+import { randomBytes } from "node:crypto";
 var WAIT_MS = 5e3;
-var STALE_MS = 15e3;
+var NO_OWNER_MS = 15e3;
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+function alive2(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+function ownerOf(dir) {
+  try {
+    const [pid, token2] = readFileSync3(join3(dir, "owner"), "utf8").trim().split(":");
+    return { pid: Number(pid), token: token2 };
+  } catch {
+    return null;
+  }
+}
+function stale(dir) {
+  const o = ownerOf(dir);
+  if (o) return !alive2(o.pid);
+  try {
+    return Date.now() - statSync2(dir).mtimeMs > NO_OWNER_MS;
+  } catch {
+    return false;
+  }
+}
 async function locked(dir, name, fn) {
   mkdirSync3(dir, { recursive: true, mode: 448 });
   chmodSync3(dir, 448);
   const lock = join3(dir, `${name}.lock`);
+  const token2 = randomBytes(8).toString("hex");
   const until = Date.now() + WAIT_MS;
   for (; ; ) {
     try {
       mkdirSync3(lock);
+      writeFileSync3(join3(lock, "owner"), `${process.pid}:${token2}`);
       break;
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
-      try {
-        if (Date.now() - statSync2(lock).mtimeMs > STALE_MS) {
-          rmdirSync(lock);
+      if (stale(lock)) {
+        const aside = `${lock}.${process.pid}.${token2}.stale`;
+        try {
+          renameSync3(lock, aside);
+        } catch {
           continue;
         }
-      } catch {
+        if (stale(aside)) rmSync3(aside, { recursive: true, force: true });
+        else {
+          try {
+            renameSync3(aside, lock);
+          } catch {
+            rmSync3(aside, { recursive: true, force: true });
+          }
+        }
         continue;
       }
       if (Date.now() > until) throw new RoomError(503, "Another session is changing this. Try again in a moment.");
@@ -23215,17 +23270,14 @@ async function locked(dir, name, fn) {
   try {
     return await fn();
   } finally {
-    try {
-      rmdirSync(lock);
-    } catch {
-    }
+    if (ownerOf(lock)?.token === token2) rmSync3(lock, { recursive: true, force: true });
   }
 }
 
 // src/rooms/providers/local-list.mjs
-import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, renameSync as renameSync3, mkdirSync as mkdirSync4, chmodSync as chmodSync4 } from "node:fs";
+import { readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4, mkdirSync as mkdirSync4, chmodSync as chmodSync4 } from "node:fs";
 import { join as join4 } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes as randomBytes2 } from "node:crypto";
 var locked2 = (dir, fn) => locked(dir, "list", fn);
 var MAX_ITEMS = 200;
 var MAX_BODY = 2e4;
@@ -23236,7 +23288,7 @@ function load(dir) {
   const file = join4(dir, "list.json");
   let text;
   try {
-    text = readFileSync3(file, "utf8");
+    text = readFileSync4(file, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return [];
     throw new RoomError(500, `Couldn't read ${file}: ${err.code ?? err.message}. Nothing was changed.`);
@@ -23255,8 +23307,8 @@ function save(dir, items) {
   chmodSync4(dir, 448);
   const file = join4(dir, "list.json");
   const tmp = `${file}.${process.pid}.tmp`;
-  writeFileSync3(tmp, JSON.stringify({ v: 1, items }, null, 1), { mode: 384 });
-  renameSync3(tmp, file);
+  writeFileSync4(tmp, JSON.stringify({ v: 1, items }, null, 1), { mode: 384 });
+  renameSync4(tmp, file);
 }
 var byName = (a, b) => a.name.localeCompare(b.name, void 0, { sensitivity: "base" });
 var same = (a, b) => a.toLowerCase() === b.toLowerCase();
@@ -23289,7 +23341,7 @@ var local_list_default = {
       const max = Math.min(MAX_ITEMS, Number(params.max) || MAX_ITEMS);
       if (items.length >= max) throw new RoomError(409, `That's ${max} snippets already. Delete one first.`);
       const lang = args.lang && LANG2.test(args.lang) ? args.lang : null;
-      const item = { id: randomBytes(6).toString("hex"), name, lang, body, at: (/* @__PURE__ */ new Date()).toISOString() };
+      const item = { id: randomBytes2(6).toString("hex"), name, lang, body, at: (/* @__PURE__ */ new Date()).toISOString() };
       items.push(item);
       save(ctx.dataDir, items);
       return { ok: true, item };
@@ -23841,6 +23893,10 @@ function twOpen(dataDay, now) {
   const c = clock(now, "Asia/Taipei");
   return dataDay === c.day && !c.weekend && c.minutes >= 9 * 60 && c.minutes <= 13 * 60 + 30;
 }
+function twOpensAt(now) {
+  const c = clock(now, "Asia/Taipei");
+  return !c.weekend && c.minutes < 9 * 60 ? now - now % 6e4 + (9 * 60 - c.minutes) * 6e4 : null;
+}
 async function twse(entries2, ctx) {
   if (!entries2.length) return /* @__PURE__ */ new Map();
   const ex = entries2.flatMap((e) => e.symbol === "TAIEX" ? ["tse_t00.tw"] : e.market ? [`${e.market}_${e.tw.toLowerCase()}.tw`] : [`tse_${e.tw.toLowerCase()}.tw`, `otc_${e.tw.toLowerCase()}.tw`]);
@@ -23891,7 +23947,7 @@ var quotes_default = {
     const now = ctx.now?.() ?? Date.now();
     const key = JSON.stringify([list, params.colors, params.move]);
     const was = cache.get(ctx.dataDir);
-    if (was && was.key === key && !was.data.anyOpen && now - was.at < CLOSED_REFRESH_MS) return was.data;
+    if (was && was.key === key && !was.data.anyOpen && now - was.at < CLOSED_REFRESH_MS && !(was.data.opensAt && now >= was.data.opensAt)) return was.data;
     const entries2 = list.map((e) => ({ entry: e, ...classify(e) }));
     let twError = null;
     const tw = await twse(entries2.filter((e) => e.tw), ctx).catch((err) => {
@@ -23928,11 +23984,15 @@ var quotes_default = {
         volText: volume(t ? t.volume : y.volume, isTw),
         market: isTw ? "TW" : "",
         open,
+        // The next session's start, when it's still ahead today.
+        opensAt: open ? null : isTw ? twOpensAt(now) : y?.session && y.session.start * 1e3 > now ? y.session.start * 1e3 : null,
         when: open ? "open" : "closed"
       };
     });
     if (list.length && quotes.every((q) => q.price == null)) throw twError ?? yh.find((x) => x?.error)?.error ?? new RoomError(502, "no quotes");
     const anyOpen = quotes.some((q) => q.open);
+    const starts = quotes.map((q) => q.opensAt).filter(Number.isFinite);
+    const opensAt = starts.length ? Math.min(...starts) : null;
     const tws = quotes.filter((q) => q.market === "TW");
     const others = quotes.filter((q) => q.price != null && q.market !== "TW");
     const markets = [tws.length ? `TW ${tws.some((q) => q.open) ? "open" : "closed"}` : null, others.length ? `others ${others.some((q) => q.open) ? "open" : "closed"}` : null].filter(Boolean).join(" \xB7 ");
@@ -23944,6 +24004,7 @@ var quotes_default = {
       count: quotes.length,
       markets,
       anyOpen,
+      opensAt,
       updated: new Date(now).toTimeString().slice(0, 5),
       band: quotes.filter((q) => q.price != null).slice(0, 4).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(" \xB7 ") || "no quotes",
       note: "Prices may be delayed. Not investment advice.",
@@ -23956,8 +24017,8 @@ var quotes_default = {
 
 // src/rooms/providers/player.mjs
 import { join as join5, resolve, extname, basename } from "node:path";
-import { readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4, mkdirSync as mkdirSync5, chmodSync as chmodSync5 } from "node:fs";
-import { randomBytes as randomBytes2 } from "node:crypto";
+import { readFileSync as readFileSync5, writeFileSync as writeFileSync5, renameSync as renameSync5, mkdirSync as mkdirSync5, chmodSync as chmodSync5 } from "node:fs";
+import { randomBytes as randomBytes3 } from "node:crypto";
 var AUDIO = /* @__PURE__ */ new Set([".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac", ".aiff"]);
 var MAX_ITEMS2 = 200;
 var CHANNEL_TTL_MS = 60 * 6e4;
@@ -23987,7 +24048,7 @@ function nameFor(target) {
 }
 function loadList(dir) {
   try {
-    const data = JSON.parse(readFileSync4(join5(dir, "list.json"), "utf8"));
+    const data = JSON.parse(readFileSync5(join5(dir, "list.json"), "utf8"));
     return Array.isArray(data.items) ? data.items.filter((x) => x?.id && x.target) : [];
   } catch (err) {
     if (err.code === "ENOENT") return [];
@@ -23999,11 +24060,20 @@ function saveList(dir, items) {
   chmodSync5(dir, 448);
   const file = join5(dir, "list.json");
   const tmp = `${file}.${process.pid}.tmp`;
-  writeFileSync4(tmp, JSON.stringify({ v: 1, items }, null, 1), { mode: 384 });
-  renameSync4(tmp, file);
+  writeFileSync5(tmp, JSON.stringify({ v: 1, items }, null, 1), { mode: 384 });
+  renameSync5(tmp, file);
+}
+function stationHost(url) {
+  try {
+    const u = new URL(String(url));
+    return u.protocol === "https:" ? u.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
 }
 function entries(params, ctx) {
-  const stations = (Array.isArray(params.stations) ? params.stations : []).filter((s) => s?.url && s.name).map((s, i) => ({ id: `s${i + 1}`, name: String(s.name), target: String(s.url), kind: kindOf(s.url) }));
+  const hosts = ctx.hosts ?? [];
+  const stations = (Array.isArray(params.stations) ? params.stations : []).filter((s) => s?.url && s.name).map((s, i) => ({ id: `s${i + 1}`, name: String(s.name), target: String(s.url), kind: kindOf(s.url) })).filter((s) => hosts.includes(stationHost(s.target)));
   let own = [];
   try {
     own = loadList(ctx.dataDir);
@@ -24037,6 +24107,7 @@ async function liveStreams(url, ctx) {
   return streams;
 }
 var mpv = null;
+var mine = (ctx) => !!mpv?.conn && mpv.owner === ctx.dataDir;
 function ipc(command, timeoutMs = 2e3) {
   return new Promise((resolve2, reject) => {
     if (!mpv?.conn) return reject(new RoomError(409, "Nothing's playing."));
@@ -24092,7 +24163,7 @@ async function start(ctx, volume2) {
   const args = ["--idle=yes", "--no-video", "--no-terminal", "--force-window=no", `--volume=${volume2}`, `--input-ipc-server=${sock}`, "--ytdl-format=bestaudio/best"];
   if (t.ytdlp?.startsWith("/")) args.push(`--script-opts=ytdl_hook-ytdl_path=${t.ytdlp}`);
   const child = ctx.spawn(["/bin/sh", "-c", watch3, t.mpv, ...args], { detached: true });
-  const state = { child, conn: null, pending: /* @__PURE__ */ new Map(), seq: 0, buf: "", entryId: null };
+  const state = { child, conn: null, pending: /* @__PURE__ */ new Map(), seq: 0, buf: "", entryId: null, owner: ctx.dataDir };
   mpv = state;
   child.on?.("exit", () => {
     if (mpv === state) {
@@ -24150,6 +24221,7 @@ async function playEntry(entry, ctx, params) {
   for (const url of queue.slice(1)) await ipc(["loadfile", url, "append"]);
   await ipc(["set_property", "pause", false]);
   mpv.entryId = entry.id;
+  mpv.owner = ctx.dataDir;
   return { ok: true, playing: entry.name };
 }
 var pixelCheck = { at: 0, playing: false };
@@ -24201,7 +24273,7 @@ function pick(list, args) {
   return list.find((e) => e.id === args.id) ?? list.find((e) => e.name.toLowerCase() === want) ?? null;
 }
 async function step(params, ctx, dir) {
-  if (mpv?.conn) {
+  if (mine(ctx)) {
     const [pos, count] = await Promise.all([get2("playlist-pos"), get2("playlist-count")]);
     if (Number.isInteger(pos) && Number.isInteger(count) && count > 1 && pos + dir >= 0 && pos + dir < count) {
       await ipc([dir > 0 ? "playlist-next" : "playlist-prev", "force"]);
@@ -24210,7 +24282,7 @@ async function step(params, ctx, dir) {
   }
   const list = entries(params, ctx);
   if (!list.length) throw new RoomError(404, "Nothing to play: /lofi add <url or path>");
-  const i = list.findIndex((e) => e.id === mpv?.entryId);
+  const i = mine(ctx) ? list.findIndex((e) => e.id === mpv.entryId) : -1;
   return playEntry(list[(i + dir + list.length) % list.length], ctx, params);
 }
 async function play(params, args, ctx) {
@@ -24220,12 +24292,12 @@ async function play(params, args, ctx) {
     if (!e) throw new RoomError(404, `Nothing called "${args.name ?? args.id}" to play.`);
     return playEntry(e, ctx, params);
   }
-  if (mpv?.conn && !await get2("idle-active")) {
+  if (mine(ctx) && !await get2("idle-active")) {
     await ipc(["set_property", "pause", false]);
     return { ok: true };
   }
   if (!list.length) throw new RoomError(404, "Nothing to play: /lofi add <url or path>");
-  return playEntry(list.find((e) => e.id === mpv?.entryId) ?? list[0], ctx, params);
+  return playEntry(mine(ctx) && list.find((e) => e.id === mpv.entryId) || list[0], ctx, params);
 }
 var player_default = {
   type: "player",
@@ -24242,7 +24314,7 @@ var player_default = {
       listError = err.message;
     }
     const now = { state: "stopped", title: "", source: "", timeText: "", pct: null, volume: params.volume ?? 60, mark: "\u25A0" };
-    if (mpv?.conn) {
+    if (mine(ctx)) {
       const [title, meta, pos, dur, paused, vol, idle] = await Promise.all(["media-title", "metadata", "time-pos", "duration", "pause", "volume", "idle-active"].map(get2));
       const entry = list.find((e) => e.id === mpv?.entryId);
       if (!idle) {
@@ -24262,7 +24334,7 @@ var player_default = {
       available: !!t.mpv,
       ytdlp: !!t.ytdlp,
       now,
-      entries: list.map((e) => ({ id: e.id, name: e.name, tag: TAG[e.kind] + (e.kind !== "file" && e.kind !== "stream" && !t.ytdlp ? " (needs yt-dlp)" : ""), on: e.id === mpv?.entryId && now.state !== "stopped" ? "\u266B" : "" })),
+      entries: list.map((e) => ({ id: e.id, name: e.name, tag: TAG[e.kind] + (e.kind !== "file" && e.kind !== "stream" && !t.ytdlp ? " (needs yt-dlp)" : ""), on: mine(ctx) && e.id === mpv.entryId && now.state !== "stopped" ? "\u266B" : "" })),
       count: list.length,
       hint: [hint, listError].filter(Boolean).join(" "),
       conflict,
@@ -24273,28 +24345,28 @@ var player_default = {
   actions: {
     play,
     async pause(params, args, ctx) {
-      if (!mpv?.conn || await get2("idle-active")) return play(params, {}, ctx);
+      if (!mine(ctx) || await get2("idle-active")) return play(params, {}, ctx);
       await ipc(["cycle", "pause"]);
       return { ok: true };
     },
-    async stop() {
-      if (mpv?.conn) await ipc(["stop"]);
+    async stop(params, args, ctx) {
+      if (mine(ctx)) await ipc(["stop"]);
       return { ok: true };
     },
     next: (params, args, ctx) => step(params, ctx, 1),
     prev: (params, args, ctx) => step(params, ctx, -1),
-    async up() {
-      if (mpv?.conn) await ipc(["add", "volume", 5]);
+    async up(params, args, ctx) {
+      if (mine(ctx)) await ipc(["add", "volume", 5]);
       return { ok: true };
     },
-    async down() {
-      if (mpv?.conn) await ipc(["add", "volume", -5]);
+    async down(params, args, ctx) {
+      if (mine(ctx)) await ipc(["add", "volume", -5]);
       return { ok: true };
     },
-    async volume(params, args) {
+    async volume(params, args, ctx) {
       const v = Math.max(0, Math.min(130, Number(args.level)));
       if (!Number.isFinite(v)) throw new RoomError(400, "Volume is 0-130.");
-      if (mpv?.conn) await ipc(["set_property", "volume", v]);
+      if (mine(ctx)) await ipc(["set_property", "volume", v]);
       return { ok: true, volume: v };
     },
     // A URL, a file, or a folder of audio files (each one added).
@@ -24321,7 +24393,7 @@ var player_default = {
       const known = new Set(items.map((x) => x.target));
       const added = fresh.filter((x) => !known.has(x.target)).slice(0, MAX_ITEMS2 - items.length);
       if (!added.length) throw new RoomError(409, known.size >= MAX_ITEMS2 ? `That's ${MAX_ITEMS2} already.` : "Already on the list.");
-      items.push(...added.map((x) => ({ id: `u${randomBytes2(4).toString("hex")}`, ...x })));
+      items.push(...added.map((x) => ({ id: `u${randomBytes3(4).toString("hex")}`, ...x })));
       saveList(ctx.dataDir, items);
       return { ok: true, added: added.length, first: added[0].name };
     }),
@@ -24341,7 +24413,7 @@ var player_default = {
       if (text == null) throw new RoomError(404, `No Pixel Play playlist at ${file}.`);
       const items = loadList(ctx.dataDir);
       const known = new Set(items.map((x) => x.target));
-      const added = parsePlaylist(text).filter((x) => !known.has(x.target)).slice(0, MAX_ITEMS2 - items.length).map((x) => ({ id: `u${randomBytes2(4).toString("hex")}`, target: x.target, name: x.name || nameFor(x.target) }));
+      const added = parsePlaylist(text).filter((x) => !known.has(x.target)).slice(0, MAX_ITEMS2 - items.length).map((x) => ({ id: `u${randomBytes3(4).toString("hex")}`, target: x.target, name: x.name || nameFor(x.target) }));
       items.push(...added);
       saveList(ctx.dataDir, items);
       return { ok: true, added: added.length };
@@ -24510,7 +24582,7 @@ function readRooms(dir, providers) {
     const file = join6(dir, name, "room.json");
     let m;
     try {
-      m = JSON.parse(readFileSync5(file, "utf8"));
+      m = JSON.parse(readFileSync6(file, "utf8"));
     } catch (err) {
       invalid.push({ dir: join6(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
       continue;
@@ -24550,6 +24622,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
   load2();
   let enabled = /* @__PURE__ */ new Set();
   let shown = null;
+  let closed = false;
   const last = /* @__PURE__ */ new Map();
   const timers = /* @__PURE__ */ new Map();
   const inflight = /* @__PURE__ */ new Map();
@@ -24557,13 +24630,26 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
   const key = (id, pid) => `${id}/${pid}`;
   const hostsOf = (m) => (m.permissions?.hosts ?? []).map((h) => h.toLowerCase());
   const settingsFile = (id) => join6(dataDir, id, "settings.json");
+  const savedCache = /* @__PURE__ */ new Map();
   function savedSettings(id) {
+    let stamp = "none";
     try {
-      const data = JSON.parse(readFileSync5(settingsFile(id), "utf8"));
-      return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+      const st = statSync3(settingsFile(id));
+      stamp = `${st.ino}:${st.mtimeMs}:${st.size}`;
     } catch {
-      return {};
     }
+    const hit = savedCache.get(id);
+    if (hit && hit.stamp === stamp) return { ...hit.data };
+    let data = {};
+    if (stamp !== "none") {
+      try {
+        const parsed = JSON.parse(readFileSync6(settingsFile(id), "utf8"));
+        data = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+      }
+    }
+    savedCache.set(id, { stamp, data });
+    return { ...data };
   }
   function settingsOf(id) {
     const m = rooms.get(id);
@@ -24577,8 +24663,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
   function emitSettings(id) {
     if (rooms.get(id)?.settings) emit2({ type: "fnsettings", id, values: settingsOf(id) });
   }
-  function paramsOf(m, p) {
-    const values = settingsOf(m.id);
+  function paramsOf(m, p, values = settingsOf(m.id)) {
     const fill = (v) => {
       if (typeof v === "string") {
         const ref = /^\$settings\.(.+)$/.exec(v);
@@ -24590,10 +24675,10 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     };
     return fill(p.params ?? {});
   }
-  function manifestAlerts(m, pid, data) {
+  function manifestAlerts(m, pid, data, values = settingsOf(m.id)) {
     const out = [];
-    const values = settingsOf(m.id);
     const limit = (v) => typeof v === "string" ? Number(values[/^\$settings\.(.+)$/.exec(v)?.[1]]) : Number(v);
+    const off = (v) => typeof v === "string" && limit(v) === 0;
     const fillRow = (t, row) => String(t).replace(/\{([A-Za-z0-9_.]+)\}/g, (_, path) => String(path.split(".").reduce((o, k) => o == null ? void 0 : o[k], row) ?? ""));
     for (const a of m.alerts ?? []) {
       const path = a.rows ?? a.value;
@@ -24605,6 +24690,8 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       for (const row of rows) {
         const n = Number(field.split(".").reduce((o, k) => o == null ? void 0 : o[k], row));
         if (!Number.isFinite(n)) continue;
+        const line = a.above ?? a.below ?? a.beyond;
+        if (off(line)) break;
         const hit = a.above != null ? n >= limit(a.above) : a.below != null ? n <= limit(a.below) : limit(a.beyond) > 0 && Math.abs(n) >= limit(a.beyond);
         if (hit) out.push({ id: `m:${fillRow(a.id, row)}`.slice(0, 80), text: fillRow(a.text, row).slice(0, 120) });
       }
@@ -24627,12 +24714,15 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       spawn: (argv, opts) => spawn(argv[0], argv.slice(1), { stdio: "ignore", ...opts }),
       connect,
       fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []) },
+      hosts: hostsOf(m),
+      // the manifest's own, for what a provider hands to another program (Lo-fi's mpv)
       log: log2,
       // Only headers come from the provider: the time and size limits stay ours.
       fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts })
     };
   }
   function run(id, pid) {
+    if (closed) return Promise.resolve();
     const k = key(id, pid);
     if (inflight.has(k)) {
       if (!queued.has(k)) queued.set(k, inflight.get(k).then(() => {
@@ -24652,8 +24742,9 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     const k = key(id, pid);
     clearTimeout(timers.get(k));
     try {
-      const data = clean(await providers[p.type].fetch(paramsOf(m, p), ctxFor(m, p)));
-      const extra = m.alerts ? manifestAlerts(m, pid, data) : [];
+      const values = settingsOf(m.id);
+      const data = clean(await providers[p.type].fetch(paramsOf(m, p, values), ctxFor(m, p)));
+      const extra = m.alerts ? manifestAlerts(m, pid, data, values) : [];
       if (extra.length || m.alerts && data && typeof data === "object") data.alerts = [...Array.isArray(data.alerts) ? data.alerts : [], ...extra];
       const at = Date.now();
       last.set(k, { data, at });
@@ -24670,7 +24761,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     const k = key(id, pid);
     clearTimeout(timers.get(k));
     timers.delete(k);
-    if (!enabled.has(id)) return;
+    if (closed || !enabled.has(id)) return;
     const p = rooms.get(id)?.providers.find((x) => x.id === pid);
     const ms = parseInterval(shown === id ? p?.interval?.visible : p?.interval?.background);
     if (ms) timers.set(k, setTimeout(() => void run(id, pid), ms));
@@ -24699,25 +24790,33 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
           else saved[k] = v;
         }
         const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
-        writeFileSync5(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
-        renameSync5(tmp, settingsFile(id));
+        writeFileSync6(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
+        renameSync6(tmp, settingsFile(id));
+        savedCache.delete(id);
       });
       emitSettings(id);
       if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };
     },
-    // The rooms' folders read again (a room installed or removed): new rooms
-    // with a tab start, gone ones stop.
-    // Every room with a tab runs again, so an updated one shows its new self.
+    // The rooms' folders read again (a room installed, updated or removed):
+    // a gone room stops, and a new or changed one with a tab runs now. The
+    // rest carry on as they were.
     reload() {
-      const wasEnabled = [...enabled];
-      const wasShown = shown;
+      const before = rooms;
       load2();
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-      enabled = /* @__PURE__ */ new Set();
+      const changed = (id) => !before.has(id) || JSON.stringify(before.get(id)) !== JSON.stringify(rooms.get(id));
+      for (const [k, t] of timers) {
+        const id = k.slice(0, k.indexOf("/"));
+        if (!rooms.has(id) || changed(id)) {
+          clearTimeout(t);
+          timers.delete(k);
+        }
+      }
+      for (const id of before.keys()) if (!rooms.has(id)) savedCache.delete(id);
+      const wasEnabled = [...enabled];
+      enabled = new Set(wasEnabled.filter((id) => rooms.has(id) && !changed(id)));
       this.report();
-      this.setVisible({ enabled: wasEnabled, shown: wasShown });
+      this.setVisible({ enabled: wasEnabled, shown });
     },
     // Where a room came from: the first folder (shipped) or the second
     // (installed on this computer), and its manifest.
@@ -24767,6 +24866,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       return clean(r ?? { ok: true });
     },
     close() {
+      closed = true;
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
       for (const def of new Set(Object.values(providers))) {
@@ -24781,7 +24881,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
 
 // src/rooms/store.mjs
 import { createHash } from "node:crypto";
-import { mkdirSync as mkdirSync6, chmodSync as chmodSync6, writeFileSync as writeFileSync6, renameSync as renameSync6, rmSync as rmSync3, readFileSync as readFileSync6 } from "node:fs";
+import { mkdirSync as mkdirSync6, chmodSync as chmodSync6, writeFileSync as writeFileSync7, renameSync as renameSync7, rmSync as rmSync4, readFileSync as readFileSync7 } from "node:fs";
 import { join as join7 } from "node:path";
 var DEFAULT_STORE = "https://raw.githubusercontent.com/chrisluo5311/squad-chat/main/rooms";
 var INDEX_TTL_MS = 10 * 6e4;
@@ -24818,7 +24918,7 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
     const src = registry.source(id);
     if (src && !src.shipped) return src.manifest;
     try {
-      return JSON.parse(readFileSync6(join7(configDir2, "rooms", id, "room.json"), "utf8"));
+      return JSON.parse(readFileSync7(join7(configDir2, "rooms", id, "room.json"), "utf8"));
     } catch {
       return null;
     }
@@ -24826,7 +24926,7 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
   const hostsOf = (m) => [...m?.permissions?.hosts ?? []].map((h) => h.toLowerCase()).sort();
   function describe(r) {
     const shipped = registry.source(r.id)?.shipped ?? false;
-    const mine = shipped ? null : installedManifest(r.id);
+    const mine2 = shipped ? null : installedManifest(r.id);
     return {
       id: r.id,
       name: String(r.name ?? r.id).slice(0, 20),
@@ -24836,8 +24936,8 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
       author: String(r.author ?? "").slice(0, 60),
       hosts: Array.isArray(r.hosts) ? r.hosts.map(String) : [],
       shipped,
-      installed: mine?.version ?? null,
-      update: !!mine?.version && compareVersions(r.version, mine.version) > 0,
+      installed: mine2?.version ?? null,
+      update: !!mine2?.version && compareVersions(r.version, mine2.version) > 0,
       compatible: !r.minSquadChat || !version4 || compareVersions(r.minSquadChat, version4) <= 0,
       minSquadChat: r.minSquadChat ?? null
     };
@@ -24891,8 +24991,8 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
       chmodSync6(dir, 448);
       const file = join7(dir, "room.json");
       const tmp = `${file}.${process.pid}.tmp`;
-      writeFileSync6(tmp, p.text, { mode: 384 });
-      renameSync6(tmp, file);
+      writeFileSync7(tmp, p.text, { mode: 384 });
+      renameSync7(tmp, file);
       registry.reload();
       return { ok: true, id, name: p.manifest.name, version: p.manifest.version, hosts: hostsOf(p.manifest) };
     },
@@ -24902,8 +25002,8 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
       if (src?.shipped) throw new RoomError(409, `${src.manifest.name} comes with squad-chat. /chat rooms -${id} hides it.`);
       if (!ID3.test(String(id ?? "")) || !installedManifest(id)) throw new RoomError(404, `No room called ${id} is installed.`);
       const name = installedManifest(id)?.name ?? id;
-      rmSync3(join7(configDir2, "rooms", id), { recursive: true, force: true });
-      rmSync3(join7(dataDir, id), { recursive: true, force: true });
+      rmSync4(join7(configDir2, "rooms", id), { recursive: true, force: true });
+      rmSync4(join7(dataDir, id), { recursive: true, force: true });
       registry.reload();
       return { ok: true, id, name };
     }
@@ -24932,7 +25032,7 @@ var socketDir = env.SQUAD_SOCKET_DIR || join8(process.platform === "darwin" ? "/
 mkdirSync7(socketDir, { recursive: true, mode: 448 });
 chmodSync7(socketDir, 448);
 var socketPath = join8(socketDir, `${process.pid}.sock`);
-rmSync4(socketPath, { force: true });
+rmSync5(socketPath, { force: true });
 var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
   key: env.SQUAD_SUPABASE_KEY,
@@ -24945,7 +25045,7 @@ var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join8(socketDir, "sess
 var version3 = env.SQUAD_VERSION || null;
 if (!version3) {
   try {
-    version3 = JSON.parse(readFileSync7(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version;
+    version3 = JSON.parse(readFileSync8(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version;
   } catch {
   }
 }
@@ -25045,7 +25145,7 @@ async function shutdown(code) {
   stopping = true;
   clearInterval(watch2);
   server.close();
-  rmSync4(socketPath, { force: true });
+  rmSync5(socketPath, { force: true });
   board.close();
   fnRooms.close();
   await chat?.shutdown().catch(() => {
