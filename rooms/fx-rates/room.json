@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "id": "fx-rates",
+  "version": "1.0.0",
+  "minSquadChat": "0.16.0",
+  "name": "FX Rates",
+  "icon": "¤",
+  "color": "leaf",
+  "description": "Exchange rates against the currency you pick, from the European Central Bank's daily reference rates via Frankfurter. No key.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["api.frankfurter.dev"] },
+  "settings": {
+    "base": { "type": "enum", "label": "Base currency", "values": ["USD", "EUR", "GBP", "JPY", "CNY", "HKD", "SGD", "AUD", "CAD", "CHF"], "default": "USD" },
+    "symbols": { "type": "list", "label": "Currencies", "default": ["EUR", "JPY", "GBP", "CNY", "KRW"], "max": 12 }
+  },
+  "providers": [
+    {
+      "id": "fx",
+      "type": "http-json",
+      "params": {
+        "url": "https://api.frankfurter.dev/v1/latest?base={base}&symbols={symbols}",
+        "vars": { "base": "$settings.base", "symbols": "$settings.symbols" },
+        "rows": { "from": "rates", "key": "code", "order": "symbols" },
+        "fields": { "rate": { "path": "value", "format": "number" } },
+        "values": { "base": { "path": "base" }, "date": { "path": "date" } }
+      },
+      "interval": { "visible": "1h", "background": "6h" }
+    }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "RATES",
+        "meta": "1 {fx.base} · {fx.date}",
+        "body": { "type": "table", "items": "fx.rows", "columns": [
+          { "field": "code", "width": 6 },
+          { "field": "rate", "right": true }
+        ], "empty": "No currencies: /set symbols EUR, JPY" }
+      }
+    ],
+    "band": "1 {fx.base} = {fx.rows.0.rate} {fx.rows.0.code}",
+    "hint": "/set base EUR · /set symbols +CHF · r refreshes"
+  }
+}

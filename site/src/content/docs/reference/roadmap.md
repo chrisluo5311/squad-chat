@@ -24,8 +24,10 @@ description: What's done and what's next.
 - [x] The Stocks room
 - [x] The Lo-fi room
 - [x] The room store: browse, install, update and remove rooms, written by anyone, from Claude Code
-- [ ] A generic JSON provider, so store rooms can read any API their manifest names
-- [ ] Alerts in every room, and more than one copy of a room
+- [x] A generic JSON provider, so store rooms can read any API their manifest names
+- [x] Alerts any room can declare in its manifest
+- [ ] More than one copy of a room
+- [ ] Rooms that need no network drawn by the mod itself, for the desktop app
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 
 See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for proposed features and known issues, or [request a feature](https://github.com/chrisluo5311/squad-chat/issues/new?labels=enhancement).
