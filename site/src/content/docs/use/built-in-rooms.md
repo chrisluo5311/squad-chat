@@ -64,7 +64,7 @@ Code you reach for again and again, kept on this computer and one click from you
 - **⧉** copies a snippet, and **⇪** shares it to a chat room, with the same preview as `/chat-share`.
 - **Tidy up** with `/snippet rename <old> -> <new>` and `/snippet delete <name>`. `/snippet copy <name>` and `/snippet share <name> [#room]` work from the prompt too.
 
-The list lives in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. Snippets is the first *function room*: a room drawn from a small manifest that names where its data comes from, so more rooms can follow without new drawing code. [Architecture](/squad-chat/reference/architecture/#function-rooms) explains how they work.
+The list lives in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. While the room is on show it reads the list again every 5 seconds, so a snippet saved in another Claude Code window shows up on its own. Snippets is the first *function room*: a room drawn from a small manifest that names where its data comes from, so more rooms can follow without new drawing code. [Architecture](/squad-chat/reference/architecture/#function-rooms) explains how they work.
 
 ## ▦ Monitor
 

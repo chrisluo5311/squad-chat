@@ -22845,7 +22845,7 @@ var HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 var INTERVAL = /^\d+(ms|s|m|h)$/;
 var ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 var WIDGETS = {
-  list: { items: "path!", title: "field!", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
+  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
   buttons: { buttons: "buttons!" },
   table: { items: "path!", columns: "columns!", max: "int", empty: "text" },
   tiles: { tiles: "tiles!" },

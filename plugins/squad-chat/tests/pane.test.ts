@@ -1543,7 +1543,7 @@ test('Stock room: stays off until asked for; then a watchlist colored by each ro
 })
 
 // rooms/lofi/room.json, as the bridge reports it.
-const LOFI_ROOM = {"schema": 1, "id": "lofi", "version": "1.0.0", "name": "Lo-fi", "icon": "♫", "color": "coral", "description": "Lo-fi streams, YouTube and your own music, played in the background through mpv, as Pixel Play does.", "author": "squad-chat", "permissions": {"hosts": ["ice2.somafm.com", "www.youtube.com"]}, "settings": {"volume": {"type": "int", "label": "Starting volume", "default": 60, "min": 0, "max": 100}}, "providers": [{"id": "p", "type": "player", "params": {"volume": "$settings.volume", "stations": [{"name": "Lofi Girl", "url": "https://www.youtube.com/@LofiGirl/streams"}, {"name": "Groove Salad", "url": "https://ice2.somafm.com/groovesalad-128-mp3"}, {"name": "Fluid", "url": "https://ice2.somafm.com/fluid-128-mp3"}, {"name": "Lush", "url": "https://ice2.somafm.com/lush-128-mp3"}, {"name": "Drone Zone", "url": "https://ice2.somafm.com/dronezone-128-mp3"}]}, "interval": {"visible": "1s", "background": "10s"}}], "layout": {"cards": [{"title": "NOW PLAYING", "meta": "{p.now.state}", "body": [{"type": "text", "text": "{p.now.mark} {p.now.title}\n{p.now.source}\n{p.now.timeText}"}, {"type": "meter", "label": "Volume", "value": "p.now.volume", "color": "coral"}, {"type": "buttons", "buttons": [{"label": "⏮", "action": "prev"}, {"label": "⏯", "action": "pause"}, {"label": "⏹", "action": "stop"}, {"label": "⏭", "action": "next"}, {"label": "−", "action": "down"}, {"label": "+", "action": "up"}]}, {"type": "text", "text": "{p.hint}\n{p.conflict}", "color": "amber"}]}, {"title": "STATIONS & TRACKS", "meta": "{p.count}", "body": {"type": "list", "items": "p.entries", "title": "name", "tag": "tag", "act": {"label": "▶", "action": "play", "field": "id"}, "empty": "Nothing yet: /lofi add <url or path>"}}], "inline": [{"type": "text", "text": "{p.band}"}, {"type": "buttons", "buttons": [{"label": "⏮", "action": "prev"}, {"label": "⏯", "action": "pause"}, {"label": "⏭", "action": "next"}, {"label": "−", "action": "down"}, {"label": "+", "action": "up"}]}], "band": "{p.band}", "snapshot": "{p.share}", "keys": {"p": "pause", "n": "next", "b": "prev", "s": "stop", "u": "up", "d": "down"}, "hint": "p plays/pauses · n next · b back · u/d volume · /lofi add <url or path>", "placeholder": "p · n · b · u · d · /lofi add … · /lofi import · /help"}}
+const LOFI_ROOM = {"schema": 1, "id": "lofi", "version": "1.0.0", "name": "Lo-fi", "icon": "♫", "color": "coral", "description": "Lo-fi streams, YouTube and your own music, played in the background through mpv, as Pixel Play does.", "author": "squad-chat", "permissions": {"hosts": ["ice2.somafm.com", "www.youtube.com"]}, "settings": {"volume": {"type": "int", "label": "Starting volume", "default": 60, "min": 0, "max": 100}}, "providers": [{"id": "p", "type": "player", "params": {"volume": "$settings.volume", "stations": [{"name": "Lofi Girl", "url": "https://www.youtube.com/@LofiGirl/streams"}, {"name": "Groove Salad", "url": "https://ice2.somafm.com/groovesalad-128-mp3"}, {"name": "Fluid", "url": "https://ice2.somafm.com/fluid-128-mp3"}, {"name": "Lush", "url": "https://ice2.somafm.com/lush-128-mp3"}, {"name": "Drone Zone", "url": "https://ice2.somafm.com/dronezone-128-mp3"}]}, "interval": {"visible": "1s", "background": "10s"}}], "layout": {"cards": [{"title": "NOW PLAYING", "meta": "{p.now.state}", "body": [{"type": "text", "text": "{p.now.mark} {p.now.title}\n{p.now.source}\n{p.now.timeText}"}, {"type": "meter", "label": "Volume", "value": "p.now.volume", "color": "coral"}, {"type": "buttons", "buttons": [{"label": "⏮", "action": "prev"}, {"label": "⏯", "action": "pause"}, {"label": "⏹", "action": "stop"}, {"label": "⏭", "action": "next"}, {"label": "−", "action": "down"}, {"label": "+", "action": "up"}]}, {"type": "text", "text": "{p.hint}\n{p.conflict}", "color": "amber"}]}, {"title": "STATIONS & TRACKS", "meta": "{p.count}", "body": {"type": "list", "items": "p.entries", "title": "name", "mark": "on", "tag": "tag", "act": {"label": "▶", "action": "play", "field": "id"}, "empty": "Nothing yet: /lofi add <url or path>"}}], "inline": [{"type": "text", "text": "{p.band}"}, {"type": "buttons", "buttons": [{"label": "⏮", "action": "prev"}, {"label": "⏯", "action": "pause"}, {"label": "⏭", "action": "next"}, {"label": "−", "action": "down"}, {"label": "+", "action": "up"}]}], "band": "{p.band}", "snapshot": "{p.share}", "keys": {"p": "pause", "n": "next", "b": "prev", "s": "stop", "u": "up", "d": "down"}, "hint": "p plays/pauses · n next · b back · u/d volume · /lofi add <url or path>", "placeholder": "p · n · b · u · d · /lofi add … · /lofi import · /help"}}
 const PLAYER = (over: Record<string, any> = {}) => ({
   available: true, ytdlp: true,
   now: { state: 'playing', title: 'Puff Dragon - Cascade', source: 'Groove Salad · stream', timeText: '3:21 · live', pct: null, volume: 60, mark: '▶' },
@@ -1575,6 +1575,7 @@ test('Lo-fi room: what\'s playing, buttons and keys that drive the player, and a
     expect(await ui.find({ type: 'Text', text })).toBeDefined()
   }
   expect(await ui.find({ type: 'Text', text: '▶ Puff Dragon - Cascade\nGroove Salad · stream\n3:21 · live' })).toBeDefined()
+  expect((await ui.findAll({ type: 'Text', text: /^♫\s*$/ })).length).toBe(1)   // on the station playing, only
   await ui.press({ key: 'act-c0-2-1' })   // ⏯
   expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'pause', args: {} } })
   await ui.press({ key: 'act-c0-2-5' })   // +
@@ -1676,6 +1677,40 @@ test('/chat store lists the rooms; /chat install shows one first, then installs 
   bridge.replies['/store/preview'] = () => [409, { error: 'Future needs squad-chat 9.0.0 or newer. Update squad-chat first.' }]
   await $.command.run({ command: 'chat', args: 'install future-room' })
   expect(logs.at(-1)).toBe('Future needs squad-chat 9.0.0 or newer. Update squad-chat first.')
+})
+
+test('the pane takes /chat store, install, uninstall and rooms too', SLOW, async ($, on) => {
+  recordUi(on)
+  const store: Record<string, unknown> = {}
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  bridge.replies['/store/list'] = () => [200, { rooms: STORE_LIST, version: '0.15.0' }]
+  bridge.replies['/store/preview'] = () => [200, PREVIEW]
+  bridge.replies['/store/install'] = () => [200, { ok: true, id: 'dev-blogs', name: 'Dev Blogs', version: '1.0.0', hosts: PREVIEW.hosts }]
+  bridge.replies['/store/uninstall'] = () => [200, { ok: true, id: 'dev-blogs', name: 'Dev Blogs' }]
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 40 } } })
+
+  await ui.input({ key: 'compose', text: '/chat store' })
+  expect(await ui.find({ type: 'Text', text: /^Room store: 3 rooms/ })).toBeDefined()
+  await ui.input({ key: 'compose', text: '/chat install dev-blogs' })
+  expect(await ui.find({ type: 'Text', text: /Run \/chat install dev-blogs again within a minute/ })).toBeDefined()
+  await ui.input({ key: 'compose', text: '/chat install dev-blogs' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/store/install', body: { id: 'dev-blogs', sha256: 'a'.repeat(64) } })
+  expect(await ui.find({ type: 'Text', text: 'Installed Dev Blogs. Its tab is there now: /chat dev-blogs.' })).toBeDefined()
+  expect(store.sysRooms).toContain('dev-blogs')
+
+  await ui.input({ key: 'compose', text: '/chat uninstall dev-blogs' })
+  await ui.input({ key: 'compose', text: '/chat uninstall dev-blogs' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/store/uninstall', body: { id: 'dev-blogs' } })
+  expect(store.sysRooms).not.toContain('dev-blogs')
+
+  await ui.input({ key: 'compose', text: '/chat rooms -git' })
+  expect(store.sysRooms).not.toContain('git')
+  await ui.input({ key: 'compose', text: '/chat nonsense' })
+  expect(await ui.find({ type: 'Text', text: /store, install, update or uninstall\. Type it at the prompt for the rest\./ })).toBeDefined()
+  await ui.unmount()
 })
 
 test('/chat update lists what is due, asks first when hosts change; /chat uninstall asks, then removes it and its tab', SLOW, async ($, on) => {

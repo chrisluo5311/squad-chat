@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "lofi",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Lo-fi",
   "icon": "♫",
   "color": "coral",
@@ -50,7 +50,7 @@
       {
         "title": "STATIONS & TRACKS",
         "meta": "{p.count}",
-        "body": { "type": "list", "items": "p.entries", "title": "name", "tag": "tag", "act": { "label": "▶", "action": "play", "field": "id" }, "empty": "Nothing yet: /lofi add <url or path>" }
+        "body": { "type": "list", "items": "p.entries", "title": "name", "mark": "on", "tag": "tag", "act": { "label": "▶", "action": "play", "field": "id" }, "empty": "Nothing yet: /lofi add <url or path>" }
       }
     ],
     "inline": [

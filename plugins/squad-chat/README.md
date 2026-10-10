@@ -73,7 +73,7 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
 | `/lofi play [name]` / `pause` / `next` / `vol <0-100>` / `add <url or path>` / `import` | The Lo-fi room's player and list, from the prompt |
 
-The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat` and `/logout` too.
+The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat` (the store commands included) and `/logout` too.
 
 ## Privacy
 

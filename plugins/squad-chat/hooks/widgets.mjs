@@ -204,9 +204,10 @@ export function pill(els, key, text, color, extra = {}) {
 // { node }. The piece marked `grow` takes the space left and is cut to fit;
 // the others keep their size, so a status at the end of a row always shows.
 // One with `width` is a column of that many cells (`right` to right-align).
-export function line(els, key, pieces) {
+// `gap` puts that many cells between the pieces, as a table's columns need.
+export function line(els, key, pieces, { gap = 0 } = {}) {
   const { Box, Text } = els;
-  return Box({ key, flexDirection: "row", children: pieces.filter(Boolean).map((p, i) => (p.width != null
+  return Box({ key, flexDirection: "row", gap, children: pieces.filter(Boolean).map((p, i) => (p.width != null
     ? col(els, `p${i}`, p.text, p.width, { right: p.right, color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic })
     : p.grow
     ? Box({ key: `p${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, children: p.text })] })

@@ -71,7 +71,7 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     if (header) {
       nodes.push(line(els, `${key}-head`, b.columns.map((c, i) => (i === b.columns.length - 1 && !c.width
         ? { text: c.label ?? "", color: theme.muted, grow: true, right: c.right }
-        : { text: c.label ?? "", width: c.width ?? 12, right: c.right, color: theme.muted }))));
+        : { text: c.label ?? "", width: c.width ?? 12, right: c.right, color: theme.muted })), { gap: 1 }));
     }
     items.slice(0, n).forEach((item, i) => {
       const k = `${key}-${String(item?.id ?? i)}`;
@@ -81,10 +81,13 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
         const tint = (c) => color(c.colorFrom ? lookup(item, c.colorFrom) : null, color(c.color));
         nodes.push(line(els, k, b.columns.map((c, j) => (j === b.columns.length - 1 && !c.width
           ? { text: show(lookup(item, c.field)), grow: true, color: tint(c) }
-          : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) }))));
+          : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) })), { gap: 1 }));
         return;
       }
       const title = show(lookup(item, b.title));
+      // A mark before the title, in a column of its own so titles line up:
+      // the ♫ on the station playing.
+      const mark = b.mark ? show(lookup(item, b.mark)) : null;
       const tag = b.tag ? lookup(item, b.tag) : null;
       const copyText = b.copy ? lookup(item, b.copy) : null;
       const shareText = b.share ? lookup(item, b.share) : null;
@@ -92,6 +95,7 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
       nodes.push(line(els, k, [
         actOn != null ? { node: Button({ key: `act-${k}`, plain: true, label: b.act.label, onPress: () => handlers.onAction?.(room, { provider: b.act.provider, action: b.act.action, args: { [b.act.field.split(".").at(-1)]: actOn } }) }) } : null,
         actOn != null ? { text: " " } : null,
+        mark != null ? { text: mark, width: 2, color: accent } : null,
         { text: title, bold: true, grow: true },
         tag ? { text: ` ${tag}`, color: theme.muted } : null,
         copyText ? { text: " " } : null,

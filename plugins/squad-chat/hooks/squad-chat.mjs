@@ -12,7 +12,7 @@
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, roomSettings, roomStore, installRoom, updateRoom, uninstallRoom, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
@@ -369,6 +369,7 @@ async function submitFromPane($, value) {
       refreshGit: () => refreshGit($),
       refreshRoom: (id) => refreshRoom($, id),
       copy: (text) => copyText($, text, say),
+      saveRooms: (list) => saveSysRooms($, list),
     });
     state.dividerAt.clear();   // they've replied: everything above is read
     await markRead($);         // they're looking at the room they just wrote in
@@ -586,21 +587,8 @@ export function register(on, options) {
       await setView($, view);
       return openPane($);
     }
-    const st = /^set\b\s*(.*)$/i.exec(args);
-    if (st) return roomSettings(call, st[1], say);
-    // The room store. An installed room gets a tab, an uninstalled one loses it.
-    const sm = /^(store|install|update|uninstall)\b\s*(.*)$/i.exec(args);
-    if (sm) {
-      const addTab = (id) => (state.sysRooms.includes(id) ? null : saveSysRooms($, [...state.sysRooms, id]));
-      const dropTab = (id) => saveSysRooms($, state.sysRooms.filter((x) => x !== id));
-      const verb = sm[1].toLowerCase();
-      if (verb === "store") return roomStore(call, sm[2], say);
-      if (verb === "install") return installRoom(call, sm[2], say, addTab);
-      if (verb === "update") return updateRoom(call, sm[2], say);
-      return uninstallRoom(call, sm[2], say, dropTab);
-    }
-    const rm = /^rooms\b\s*(.*)$/i.exec(args);
-    if (rm) return sysRooms(rm[1], say, (list) => saveSysRooms($, list));
+    const admin = chatAdmin(call, args, say, { saveRooms: (list) => saveSysRooms($, list) });
+    if (admin) return admin;
     const d = /^dnd\b\s*(.*)$/i.exec(args);
     if (d) return dnd(d[1], say, (mode) => setDnd($, mode));
     const m = /^notify\s+(on|off)$/i.exec(args);
