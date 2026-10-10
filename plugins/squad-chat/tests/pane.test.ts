@@ -1541,3 +1541,88 @@ test('Stock room: stays off until asked for; then a watchlist colored by each ro
   await $.command.run({ command: 'chat', args: 'set stock' })
   expect(logs.slice(-5)).toEqual(['Stocks settings:', '  watchlist: TAIEX, 2330, 0050, ^GSPC, AAPL, NVDA', '  colors: market', '  move: 5', 'Change one with /chat set stock <setting> <value>.'])
 })
+
+// rooms/lofi/room.json, as the bridge reports it.
+const LOFI_ROOM = {"schema": 1, "id": "lofi", "version": "1.0.0", "name": "Lo-fi", "icon": "♫", "color": "coral", "description": "Lo-fi streams, YouTube and your own music, played in the background through mpv, as Pixel Play does.", "author": "squad-chat", "permissions": {"hosts": ["ice2.somafm.com", "www.youtube.com"]}, "settings": {"volume": {"type": "int", "label": "Starting volume", "default": 60, "min": 0, "max": 100}}, "providers": [{"id": "p", "type": "player", "params": {"volume": "$settings.volume", "stations": [{"name": "Lofi Girl", "url": "https://www.youtube.com/@LofiGirl/streams"}, {"name": "Groove Salad", "url": "https://ice2.somafm.com/groovesalad-128-mp3"}, {"name": "Fluid", "url": "https://ice2.somafm.com/fluid-128-mp3"}, {"name": "Lush", "url": "https://ice2.somafm.com/lush-128-mp3"}, {"name": "Drone Zone", "url": "https://ice2.somafm.com/dronezone-128-mp3"}]}, "interval": {"visible": "1s", "background": "10s"}}], "layout": {"cards": [{"title": "NOW PLAYING", "meta": "{p.now.state}", "body": [{"type": "text", "text": "{p.now.mark} {p.now.title}\n{p.now.source}\n{p.now.timeText}"}, {"type": "meter", "label": "Volume", "value": "p.now.volume", "color": "coral"}, {"type": "buttons", "buttons": [{"label": "⏮", "action": "prev"}, {"label": "⏯", "action": "pause"}, {"label": "⏹", "action": "stop"}, {"label": "⏭", "action": "next"}, {"label": "−", "action": "down"}, {"label": "+", "action": "up"}]}, {"type": "text", "text": "{p.hint}\n{p.conflict}", "color": "amber"}]}, {"title": "STATIONS & TRACKS", "meta": "{p.count}", "body": {"type": "list", "items": "p.entries", "title": "name", "tag": "tag", "act": {"label": "▶", "action": "play", "field": "id"}, "empty": "Nothing yet: /lofi add <url or path>"}}], "inline": [{"type": "text", "text": "{p.band}"}, {"type": "buttons", "buttons": [{"label": "⏮", "action": "prev"}, {"label": "⏯", "action": "pause"}, {"label": "⏭", "action": "next"}, {"label": "−", "action": "down"}, {"label": "+", "action": "up"}]}], "band": "{p.band}", "snapshot": "{p.share}", "keys": {"p": "pause", "n": "next", "b": "prev", "s": "stop", "u": "up", "d": "down"}, "hint": "p plays/pauses · n next · b back · u/d volume · /lofi add <url or path>", "placeholder": "p · n · b · u · d · /lofi add … · /lofi import · /help"}}
+const PLAYER = (over: Record<string, any> = {}) => ({
+  available: true, ytdlp: true,
+  now: { state: 'playing', title: 'Puff Dragon - Cascade', source: 'Groove Salad · stream', timeText: '3:21 · live', pct: null, volume: 60, mark: '▶' },
+  entries: [
+    { id: 's1', name: 'Lofi Girl', tag: 'YouTube live', on: '' },
+    { id: 's2', name: 'Groove Salad', tag: 'stream', on: '♫' },
+  ],
+  count: 2, hint: '', conflict: '',
+  band: '▶ Puff Dragon - Cascade · 3:21 · live', share: '♫ now listening: Puff Dragon - Cascade (Groove Salad · stream)',
+  ...over,
+})
+
+test('Lo-fi room: what\'s playing, buttons and keys that drive the player, and a ▶ on each row', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'fnrooms', rooms: [SNIPPET_ROOM, LOFI_ROOM], invalid: [] })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms +lofi' })
+  expect(logs.at(-1)).toBe('Lo-fi reaches ice2.somafm.com, www.youtube.com.')
+  await $.command.run({ command: 'chat', args: 'lofi' })
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER(), at: Date.now() })
+  await settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 40 } } })
+  for (const text of ['NOW PLAYING', 'playing', 'STATIONS & TRACKS', 'Lofi Girl', ' YouTube live', 'Groove Salad']) {
+    expect(await ui.find({ type: 'Text', text })).toBeDefined()
+  }
+  expect(await ui.find({ type: 'Text', text: '▶ Puff Dragon - Cascade\nGroove Salad · stream\n3:21 · live' })).toBeDefined()
+  await ui.press({ key: 'act-c0-2-1' })   // ⏯
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'pause', args: {} } })
+  await ui.press({ key: 'act-c0-2-5' })   // +
+  expect(bridge.calls.at(-1)!.body.action).toBe('up')
+  await ui.press({ key: 'act-c1-s1' })    // ▶ on Lofi Girl
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'play', args: { id: 's1' } } })
+
+  // Single keys in the box: n for next, and r still refreshes.
+  await ui.input({ key: 'compose', text: 'n' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'next', args: {} } })
+  await ui.input({ key: 'compose', text: 'r' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/refresh', body: { room: 'lofi' } })
+
+  bridge.replies['/fnroom/action'] = () => [400, { error: 'Lo-fi needs mpv: brew install mpv yt-dlp' }]
+  await ui.input({ key: 'compose', text: 'p' })
+  expect(await ui.find({ type: 'Text', text: 'Lo-fi needs mpv: brew install mpv yt-dlp' })).toBeDefined()
+  await ui.unmount()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '▶ Puff Dragon - Cascade · 3:21 · live' })).toBeDefined()
+  await band.unmount()
+  bridge.replies['/fnroom/action'] = () => [200, { ok: true }]
+  await $.command.run({ command: 'chat-share', args: 'lofi' })
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  expect(bridge.calls.at(-1)!.body.text).toBe('♫ now listening: Puff Dragon - Cascade (Groove Salad · stream)')
+})
+
+test('/lofi plays, adds, removes and imports', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [LOFI_ROOM], invalid: [] })
+  await settle()
+  bridge.replies['/fnroom/action'] = (b) => [200, b.action === 'play' ? { ok: true, playing: 'Fluid' } : b.action === 'add' ? { ok: true, added: 1, first: 'Deep Space One' } : b.action === 'remove' ? { ok: true, removed: 'Deep Space One' } : b.action === 'import' ? { ok: true, added: 12 } : { ok: true }]
+  await $.command.run({ command: 'lofi', args: 'play fluid' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', provider: 'p', action: 'play', args: { name: 'fluid' } } })
+  expect(logs.at(-1)).toBe('Playing Fluid.')
+  await $.command.run({ command: 'lofi', args: 'add https://ice2.somafm.com/deepspaceone-128-mp3 # Deep Space One' })
+  expect(bridge.calls.at(-1)!.body.args).toEqual({ target: 'https://ice2.somafm.com/deepspaceone-128-mp3', name: 'Deep Space One' })
+  expect(logs.at(-1)).toBe('Added "Deep Space One".')
+  await $.command.run({ command: 'lofi', args: 'vol 40' })
+  expect(bridge.calls.at(-1)!.body).toEqual({ room: 'lofi', provider: 'p', action: 'volume', args: { level: 40 } })
+  await $.command.run({ command: 'lofi', args: 'vol loud' })
+  expect(logs.at(-1)).toBe('Use /lofi vol <0-100>.')
+  await $.command.run({ command: 'lofi', args: 'remove Deep Space One' })
+  expect(logs.at(-1)).toBe('Removed "Deep Space One".')
+  await $.command.run({ command: 'lofi', args: 'import' })
+  expect(logs.at(-1)).toBe("Added 12 from Pixel Play's playlist.")
+  await $.command.run({ command: 'lofi', args: 'dance' })
+  expect(logs.at(-1)).toMatch(/^Use \/lofi play \[name\]/)
+})

@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "id": "lofi",
+  "version": "1.0.0",
+  "name": "Lo-fi",
+  "icon": "♫",
+  "color": "coral",
+  "description": "Lo-fi streams, YouTube and your own music, played in the background through mpv, as Pixel Play does.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["ice2.somafm.com", "www.youtube.com"] },
+  "settings": {
+    "volume": { "type": "int", "label": "Starting volume", "default": 60, "min": 0, "max": 100 }
+  },
+  "providers": [
+    {
+      "id": "p",
+      "type": "player",
+      "params": {
+        "volume": "$settings.volume",
+        "stations": [
+          { "name": "Lofi Girl", "url": "https://www.youtube.com/@LofiGirl/streams" },
+          { "name": "Groove Salad", "url": "https://ice2.somafm.com/groovesalad-128-mp3" },
+          { "name": "Fluid", "url": "https://ice2.somafm.com/fluid-128-mp3" },
+          { "name": "Lush", "url": "https://ice2.somafm.com/lush-128-mp3" },
+          { "name": "Drone Zone", "url": "https://ice2.somafm.com/dronezone-128-mp3" }
+        ]
+      },
+      "interval": { "visible": "1s", "background": "10s" }
+    }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "NOW PLAYING",
+        "meta": "{p.now.state}",
+        "body": [
+          { "type": "text", "text": "{p.now.mark} {p.now.title}\n{p.now.source}\n{p.now.timeText}" },
+          { "type": "meter", "label": "Volume", "value": "p.now.volume", "color": "coral" },
+          { "type": "buttons", "buttons": [
+            { "label": "⏮", "action": "prev" },
+            { "label": "⏯", "action": "pause" },
+            { "label": "⏹", "action": "stop" },
+            { "label": "⏭", "action": "next" },
+            { "label": "−", "action": "down" },
+            { "label": "+", "action": "up" }
+          ] },
+          { "type": "text", "text": "{p.hint}\n{p.conflict}", "color": "amber" }
+        ]
+      },
+      {
+        "title": "STATIONS & TRACKS",
+        "meta": "{p.count}",
+        "body": { "type": "list", "items": "p.entries", "title": "name", "tag": "tag", "act": { "label": "▶", "action": "play", "field": "id" }, "empty": "Nothing yet: /lofi add <url or path>" }
+      }
+    ],
+    "inline": [
+      { "type": "text", "text": "{p.band}" },
+      { "type": "buttons", "buttons": [
+        { "label": "⏮", "action": "prev" },
+        { "label": "⏯", "action": "pause" },
+        { "label": "⏭", "action": "next" },
+        { "label": "−", "action": "down" },
+        { "label": "+", "action": "up" }
+      ] }
+    ],
+    "band": "{p.band}",
+    "snapshot": "{p.share}",
+    "keys": { "p": "pause", "n": "next", "b": "prev", "s": "stop", "u": "up", "d": "down" },
+    "hint": "p plays/pauses · n next · b back · u/d volume · /lofi add <url or path>",
+    "placeholder": "p · n · b · u · d · /lofi add … · /lofi import · /help"
+  }
+}

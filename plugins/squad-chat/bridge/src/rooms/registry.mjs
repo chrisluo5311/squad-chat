@@ -21,9 +21,10 @@
 
 import { readdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { cpus, loadavg } from "node:os";
+import { execFile, spawn } from "node:child_process";
+import { readFile, stat, readdir } from "node:fs/promises";
+import { connect } from "node:net";
+import { cpus, loadavg, homedir } from "node:os";
 import { checkManifest, parseInterval, settingError } from "./manifest.mjs";
 import { allowedHosts, limitedFetch, clean, RoomError } from "./net.mjs";
 import { locked } from "./lock.mjs";
@@ -33,8 +34,9 @@ import hn from "./providers/hn.mjs";
 import rss from "./providers/rss.mjs";
 import sysinfo from "./providers/sysinfo.mjs";
 import quotes from "./providers/quotes.mjs";
+import player from "./providers/player.mjs";
 
-export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysinfo, quotes].map((p) => [p.type, p]));
+export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysinfo, quotes, player].map((p) => [p.type, p]));
 
 // What a provider runs on this computer: a command its own code names (a
 // manifest can't name one), with no shell, a time limit and an output limit.
@@ -99,7 +101,9 @@ function readRooms(dir, providers) {
   return { rooms, invalid };
 }
 
-export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = PROVIDERS }) {
+// `runtimeDir` is the bridge's own short folder (socket paths are limited
+// to about 100 bytes), for a provider that keeps a process going (Lo-fi's mpv).
+export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, providers = PROVIDERS }) {
   const rooms = new Map();   // id → manifest
   const invalid = [];
   for (const dir of dirs.filter(Boolean)) {
@@ -166,6 +170,12 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
       cpus,
       loadavg,
       now: Date.now,
+      home: homedir(),
+      runtimeDir,
+      spawn: (argv, opts) => spawn(argv[0], argv.slice(1), { stdio: "ignore", ...opts }),
+      connect,
+      fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []) },
+      log,
       // Only headers come from the provider: the time and size limits stay ours.
       fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts }),
     };
@@ -290,6 +300,8 @@ export function roomRegistry({ dirs, dataDir, emit, log = () => {}, providers = 
     close() {
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
+      // A provider that keeps something running (Lo-fi's player) stops it.
+      for (const def of new Set(Object.values(providers))) { try { def.close?.(); } catch { /* exiting anyway */ } }
     },
   };
 }

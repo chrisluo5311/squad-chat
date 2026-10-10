@@ -12,7 +12,7 @@ import { snapshotText } from "./sysviews.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
 // sign-in codes, room passcodes, snippets.
-export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share", "snippet"]);
+export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share", "snippet", "lofi"]);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE = /^\d[\d\s]{4,12}\d$/;
@@ -350,6 +350,55 @@ export async function snippet(call, args, say, { sources, copy, setView, inPane 
   }
 }
 
+// ---------------------------------------------------------------- the Lo-fi room
+
+const LOFI_HELP = "Use /lofi play [name], pause, next, prev, stop, vol <0-100>, add <url, file or folder> [# name], remove <name> or import (Pixel Play's playlist).";
+
+// "/lofi add <url or path>", "/lofi play Groove Salad", "/lofi vol 40": the
+// Lo-fi room's player, from the prompt or the pane.
+export async function lofi(call, args, say, { setView } = {}) {
+  const text = String(args ?? "").trim();
+  const [verb = "", ...rest] = text.split(/\s+/).filter(Boolean);
+  const arg = rest.join(" ");
+  if (!isFnRoom("lofi")) return say("The Lo-fi room hasn't loaded yet. Try again in a moment.");
+  const act = (action, a = {}) => call("/fnroom/action", { room: "lofi", provider: "p", action, args: a });
+  switch (verb.toLowerCase()) {
+    case "": {
+      if (!state.sysRooms.includes("lofi")) return say("The Lo-fi room is hidden. Bring it back with /chat rooms +lofi.");
+      return setView?.("lofi");
+    }
+    case "play": {
+      const r = await act("play", arg ? { name: arg } : {});
+      return say(r.playing ? `Playing ${r.playing}.` : "Playing.");
+    }
+    case "pause": case "stop": case "next": case "prev":
+      await act(verb.toLowerCase());
+      return undefined;
+    case "vol": case "volume": {
+      if (!/^\d{1,3}$/.test(arg)) return say("Use /lofi vol <0-100>.");
+      await act("volume", { level: Number(arg) });
+      return say(`Volume ${arg}.`);
+    }
+    case "add": {
+      const [target, ...name] = arg.split(" # ");
+      if (!target.trim()) return say("Add what? /lofi add <url, file or folder> [# name]");
+      const r = await act("add", { target: target.trim(), name: name.join(" # ").trim() || undefined });
+      return say(r.added > 1 ? `Added ${r.added} tracks.` : `Added "${r.first}".`);
+    }
+    case "remove": case "rm": {
+      if (!arg) return say("Which one? /lofi remove <name>");
+      const r = await act("remove", { name: arg });
+      return say(`Removed "${r.removed}".`);
+    }
+    case "import": {
+      const r = await act("import");
+      return say(r.added ? `Added ${r.added} from Pixel Play's playlist.` : "Everything in Pixel Play's playlist is already here.");
+    }
+    default:
+      return say(LOFI_HELP);
+  }
+}
+
 // Points the waiting snippet at another of your rooms, by slug or id.
 // Returns the room, or what went wrong.
 export function retargetShare(nameOrId) {
@@ -406,7 +455,7 @@ function showView(view, say, setView) {
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /chat · /logout · anything else is a message";
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
@@ -418,6 +467,9 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
   const view = activeView();
   if (view === "git" && /^r(efresh)?$/i.test(text)) return refreshGit?.();
   if (isFnRoom(view) && /^r(efresh)?$/i.test(text)) return refreshRoom?.(view);
+  // A room's own keys: "p" in Lo-fi plays or pauses.
+  const key = isFnRoom(view) && text.length === 1 ? state.fn.get(view).manifest.layout.keys?.[text.toLowerCase()] : null;
+  if (key) return call("/fnroom/action", { room: view, action: key, args: {} });
   const m = /^\/([\w-]+)\s*([\s\S]*)$/.exec(text);
   if (m) {
     const [, cmd, args] = m;
@@ -440,6 +492,7 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
       case "dnd": return dnd(args, say, setDnd);
       case "share": return share(call, args, say, sources);
       case "snippet": return snippet(call, args, say, { sources, copy, setView, inPane: true });
+      case "lofi": return lofi(call, args, say, { setView });
       case "set": return roomSettings(call, args, say, { room: isFnRoom(view) ? view : null });
       case "help": return say(HELP);
       default:

@@ -12,7 +12,7 @@
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, roomSettings, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
+import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, roomSettings, retargetShare, sendMessage, paneInput, sysRooms } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
@@ -206,6 +206,17 @@ function syncRooms($) {
 async function refreshRoom($, id) {
   try {
     await callBridge($, "/fnroom/refresh", { room: id });
+  } catch (err) {
+    state.notice = err?.message ?? String(err);
+    $.ui.invalidate("ui.render");
+  }
+}
+
+// A function room's button (Lo-fi's ⏯, a row's ▶): one of its provider's
+// actions. The bridge runs the room again after it, which redraws.
+async function roomAction($, room, { provider, action, args }) {
+  try {
+    await callBridge($, "/fnroom/action", { room, ...(provider ? { provider } : {}), action, args });
   } catch (err) {
     state.notice = err?.message ?? String(err);
     $.ui.invalidate("ui.render");
@@ -514,7 +525,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|monitor|weather|news|stock | rooms <list> | set <room> <setting> <value> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|monitor|weather|news|stock|lofi | rooms <list> | set <room> <setting> <value> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -522,6 +533,7 @@ const COMMANDS = [
   { name: "chat-share", description: "squad-chat: share the selected text, Claude's last code block, your diff, or a Usage/Git/Agents snapshot to the room", argumentHint: "[diff [path] | usage | git | agents] [#room] | to #room | send [#room] | cancel" },
   { name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>" },
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
+  { name: "lofi", description: "squad-chat: music in the background (lo-fi streams, YouTube, your files) through mpv, in the Lo-fi room", argumentHint: "play [name] | pause | next | prev | stop | vol <0-100> | add <url or path> | remove <name> | import" },
   { name: "snippet", description: "squad-chat: save code you reuse (the selection, or Claude's last code block), then copy or share it from the Snippet room", argumentHint: "add <name> | rename <old> -> <new> | delete <name> | copy <name> | share <name> [#room]" },
 ];
 
@@ -596,6 +608,9 @@ export function register(on, options) {
   on("command.run", { command: "chat-share" }, ($, e) => answer($, (call, say) => share(call, e.args, say, shareSources($))));
   on("command.run", { command: "chat-name" }, ($, e) => answer($, (call, say) => rename(call, e.args, say)));
   on("command.run", { command: "chat-logout" }, ($) => answer($, (call, say) => logout(call, say)));
+  on("command.run", { command: "lofi" }, ($, e) => answer($, (call, say) => lofi(call, e.args, say, {
+    setView: async (view) => { await setView($, view); await openPane($); },
+  })));
   on("command.run", { command: "snippet" }, ($, e) => answer($, (call, say) => snippet(call, e.args, say, {
     sources: shareSources($),
     copy: (text) => copyText($, text, say),
@@ -627,6 +642,7 @@ export function register(on, options) {
       },
       onCopy: (text, surface) => { void copySnippet($, text, surface); },
       onShareItem: (item) => shareItemFromPane($, item),
+      onAction: (room, act) => { void roomAction($, room, act); },
       onRefresh: () => { void refreshGit($); },
       onToggleBreakdown: () => toggleBreakdown($),
       onToggleSession: (id) => { if (!state.collapsed.delete(id)) state.collapsed.add(id); $.ui.invalidate("ui.render"); },
