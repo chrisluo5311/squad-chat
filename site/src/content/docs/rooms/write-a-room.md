@@ -109,7 +109,7 @@ A card has a `title`, an optional `meta` and `when` (show the card only while th
 
 | Widget | Fields |
 | --- | --- |
-| `list` | `items` (a path to a list), `title`, and optionally `tag`, `preview`, `copy` (⧉), `share` (⇪), `act` (a button on each row: `label`, `action`, `field`), `max`, `empty` |
+| `list` | `items` (a path to a list), `title`, and optionally `mark` (a short field shown before the title, as Lo-fi's ♫), `tag`, `preview`, `copy` (⧉), `share` (⇪), `act` (a button on each row: `label`, `action`, `field`), `max`, `empty` |
 | `table` | `items`, `columns` (each a `field`, and optionally `label`, `width`, `right`, `color` or `colorFrom`), `max`, `empty` |
 | `tiles` | `tiles`: up to 6, each a `value` and `sub` template |
 | `meter` | `label`, `value` (a path to a percent), `right`, `color` |

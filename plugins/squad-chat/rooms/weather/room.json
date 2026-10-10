@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "weather",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Weather",
   "icon": "☀",
   "color": "sky",
@@ -27,8 +27,8 @@
             { "field": "icon", "width": 2, "color": "amber" },
             { "field": "name", "width": 13 },
             { "field": "tempText", "width": 5, "right": true },
-            { "field": "range", "width": 12, "right": true },
-            { "field": "rainText", "width": 7, "right": true, "color": "sky" },
+            { "field": "range", "width": 11, "right": true },
+            { "field": "rainText", "width": 6, "right": true, "color": "sky" },
             { "field": "aqiText" }
           ],
           "empty": "No cities yet: /set cities Taipei, Tokyo"
@@ -61,7 +61,7 @@
         { "field": "icon", "width": 2, "color": "amber" },
         { "field": "name", "width": 13 },
         { "field": "tempText", "width": 5, "right": true },
-        { "field": "rainText", "width": 7, "right": true, "color": "sky" },
+        { "field": "rainText", "width": 6, "right": true, "color": "sky" },
         { "field": "desc" }
       ],
       "max": 4,

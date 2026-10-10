@@ -367,7 +367,7 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/lofi play [name]` / `pause` / `next` / `prev` / `stop` / `vol <0-100>` | Drive the Lo-fi room's player from the prompt |
 | `/lofi add <url, file or folder> [# name]` / `remove <name>` / `import` | Add to the Lo-fi room's list, take one off, or bring in Pixel Play's playlist |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player. Type passcodes there: it never touches the conversation.
 
 #### Examples
 

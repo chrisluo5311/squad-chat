@@ -252,6 +252,25 @@ export async function uninstallRoom(call, args, say, dropTab) {
   return say(`Uninstalled ${r.name}.`);
 }
 
+// "/chat set|store|install|update|uninstall|rooms …", the same at the
+// prompt and in the pane. `saveRooms(list)` saves which rooms have tabs:
+// an installed room gets one, an uninstalled one loses it. Returns false
+// for anything else.
+export function chatAdmin(call, args, say, { saveRooms } = {}) {
+  const m = /^(set|store|install|update|uninstall|rooms)\b\s*(.*)$/i.exec(String(args ?? "").trim());
+  if (!m) return false;
+  const verb = m[1].toLowerCase();
+  const rest = m[2];
+  const addTab = (id) => (state.sysRooms.includes(id) ? null : saveRooms?.([...state.sysRooms, id]));
+  const dropTab = (id) => saveRooms?.(state.sysRooms.filter((x) => x !== id));
+  if (verb === "set") return roomSettings(call, rest, say);
+  if (verb === "store") return roomStore(call, rest, say);
+  if (verb === "install") return installRoom(call, rest, say, addTab);
+  if (verb === "update") return updateRoom(call, rest, say);
+  if (verb === "uninstall") return uninstallRoom(call, rest, say, dropTab);
+  return sysRooms(rest, say, saveRooms);
+}
+
 // A setting's value as typed back: "Taipei, Tokyo", "on".
 function showSetting(v) {
   if (Array.isArray(v)) return v.length ? v.join(", ") : "(none)";
@@ -550,8 +569,9 @@ const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /n
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
 // `refreshGit()` fetches the Git room again, `refreshRoom(id)` a function
-// room, `copy(text)` puts text on the clipboard.
-export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit, refreshRoom, copy } = {}) {
+// room, `copy(text)` puts text on the clipboard, `saveRooms(list)` saves
+// which rooms have tabs.
+export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit, refreshRoom, copy, saveRooms } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
   const view = activeView();
@@ -571,8 +591,9 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
         if (!sub || sub === "chat") return setView?.("chat");
         if (roomIds().includes(sub)) return showView(sub, say, setView);
         if (sub === "dnd") return dnd(more.join(" "), say, setDnd);
-        if (sub === "store") return roomStore(call, more.join(" "), say);
-        return say(`Here, /chat takes ${roomIds().join(", ")} or dnd. Type it at the prompt for the rest.`);
+        const admin = chatAdmin(call, args, say, { saveRooms });
+        if (admin) return admin;
+        return say(`Here, /chat takes ${roomIds().join(", ")}, dnd, rooms, set, store, install, update or uninstall. Type it at the prompt for the rest.`);
       }
       case "room": return room(call, args, say);
       case "who": return who(say);
