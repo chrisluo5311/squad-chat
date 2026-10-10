@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "snippet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Snippets",
   "icon": "⌘",
   "color": "amber",
@@ -9,7 +9,7 @@
   "author": "squad-chat",
   "permissions": { "hosts": [] },
   "providers": [
-    { "id": "list", "type": "local-list", "params": { "max": 200 } }
+    { "id": "list", "type": "local-list", "params": { "max": 200 }, "interval": { "visible": "5s" } }
   ],
   "layout": {
     "cards": [
