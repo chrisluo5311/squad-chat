@@ -50,8 +50,8 @@ description: Every squad-chat slash command, what it does, and examples.
 | --- | --- |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. |
 
 ## In the pane

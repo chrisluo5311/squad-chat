@@ -114,6 +114,7 @@ function checkWidget(body, where, errors) {
         if (c.label != null && !str(c.label, 20)) errors.push(`${where}.columns[${i}].label: 1-20 characters`);
         if (c.width != null && !(Number.isInteger(c.width) && c.width > 0 && c.width <= 40)) errors.push(`${where}.columns[${i}].width: 1-40`);
         if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
+        if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
       });
     }
     if (k === "tiles") {

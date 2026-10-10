@@ -63,8 +63,8 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` | Open the pane on a built-in room |
-| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `all` or `none`, or `+name` / `-name`). Weather and Tech News are off until you add them. |
+| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` | Open the pane on a built-in room |
+| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `all` or `none`, or `+name` / `-name`). Weather, Tech News and Stocks are off until you add them. |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo` |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to a chat room |
 | `/snippet add <name>` | Save the selection, or else Claude's last code block, to the Snippets room |

@@ -21,7 +21,8 @@ description: What's done and what's next.
 - [x] The Snippets room
 - [x] Room settings, and the Weather and Tech News rooms
 - [x] The Monitor room
-- [ ] Stock and Lo-fi rooms
+- [x] The Stocks room
+- [ ] The Lo-fi room
 - [ ] A room marketplace: browse, install and update rooms from the pane
 - [ ] A polling mode for the Claude Code desktop app, which can't start the bridge
 

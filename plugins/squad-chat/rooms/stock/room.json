@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "id": "stock",
+  "version": "1.0.0",
+  "name": "Stocks",
+  "icon": "$",
+  "color": "rose",
+  "description": "Your watchlist of Taiwan and US stocks and indices, with today's line. TWSE and Yahoo Finance, no key. Prices may be delayed.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["mis.twse.com.tw", "query1.finance.yahoo.com"] },
+  "settings": {
+    "watchlist": { "type": "list", "label": "Watchlist", "default": ["TAIEX", "2330", "0050", "^GSPC", "AAPL", "NVDA"], "max": 12 },
+    "colors": { "type": "enum", "label": "Up colors", "values": ["market", "red-up", "green-up"], "default": "market" },
+    "move": { "type": "int", "label": "Alert at % move", "default": 5, "min": 0, "max": 20 }
+  },
+  "providers": [
+    { "id": "q", "type": "quotes", "params": { "watchlist": "$settings.watchlist", "colors": "$settings.colors", "move": "$settings.move" }, "interval": { "visible": "1m", "background": "5m" } }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "WATCHLIST",
+        "meta": "{q.markets} · {q.updated}",
+        "body": [
+          {
+            "type": "table",
+            "items": "q.quotes",
+            "columns": [
+              { "field": "arrow", "width": 2, "colorFrom": "color" },
+              { "field": "symbol", "width": 7 },
+              { "field": "name", "width": 14 },
+              { "field": "priceText", "width": 10, "right": true },
+              { "field": "pctText", "width": 8, "right": true, "colorFrom": "color" },
+              { "field": "spark", "colorFrom": "color" }
+            ],
+            "empty": "Nothing to watch: /set watchlist 2330, AAPL"
+          },
+          { "type": "text", "text": "{q.note}" }
+        ]
+      }
+    ],
+    "inline": {
+      "type": "table",
+      "items": "q.quotes",
+      "columns": [
+        { "field": "arrow", "width": 2, "colorFrom": "color" },
+        { "field": "symbol", "width": 7 },
+        { "field": "priceText", "width": 10, "right": true },
+        { "field": "pctText", "width": 8, "right": true, "colorFrom": "color" },
+        { "field": "name" }
+      ],
+      "max": 4,
+      "empty": "Nothing to watch: /set watchlist 2330, AAPL"
+    },
+    "band": "{q.band}",
+    "hint": "/set watchlist +2454 · /set colors green-up · /set move 3 · r",
+    "placeholder": "/set watchlist +TSLA · /set move 0 · r · /help"
+  }
+}

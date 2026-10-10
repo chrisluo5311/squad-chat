@@ -29,7 +29,7 @@ describe("function rooms in the bridge", () => {
   it("reports the shipped rooms, and refuses the ones that don't check out", async () => {
     await b.start();
     const ev = await b.waitFor((e) => e.type === "fnrooms");
-    assert.deepEqual(ev.rooms.map((r) => r.id), ["monitor", "news", "snippet", "weather"]);
+    assert.deepEqual(ev.rooms.map((r) => r.id), ["monitor", "news", "snippet", "stock", "weather"]);
     const why = Object.fromEntries(ev.invalid.map((x) => [x.dir.split("/").at(-1), x.errors.join("; ")]));
     assert.match(why.broken, /no provider called "shell"/);
     assert.match(why.snippet, /already a room/);
@@ -203,7 +203,7 @@ describe("what a provider may fetch", () => {
 
 describe("manifests", () => {
   it("every room squad-chat ships checks out", () => {
-    for (const id of ["snippet", "weather", "news", "monitor"]) {
+    for (const id of ["snippet", "weather", "news", "monitor", "stock"]) {
       const m = JSON.parse(readFileSync(new URL(`../plugins/squad-chat/rooms/${id}/room.json`, import.meta.url), "utf8"));
       assert.deepEqual(checkManifest(m, PROVIDERS), [], id);
     }

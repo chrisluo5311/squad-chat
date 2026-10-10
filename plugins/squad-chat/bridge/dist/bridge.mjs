@@ -22943,6 +22943,7 @@ function checkWidget(body, where, errors) {
         if (c.label != null && !str(c.label, 20)) errors.push(`${where}.columns[${i}].label: 1-20 characters`);
         if (c.width != null && !(Number.isInteger(c.width) && c.width > 0 && c.width <= 40)) errors.push(`${where}.columns[${i}].width: 1-40`);
         if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
+        if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
       });
     }
     if (k === "tiles") {
@@ -23704,8 +23705,164 @@ var sysinfo_default = {
   }
 };
 
+// src/rooms/providers/quotes.mjs
+var MAX = 12;
+var CLOSED_REFRESH_MS = 15 * 6e4;
+var SPARKS3 = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588";
+var SYMBOL = /^\^?[A-Za-z0-9][A-Za-z0-9.=-]{0,14}$/;
+var cache = /* @__PURE__ */ new Map();
+var num = (s) => s == null || s === "-" || s === "" ? NaN : Number(String(s).replace(/,/g, ""));
+function classify(entry) {
+  const s = String(entry ?? "").trim();
+  if (/^taiex$/i.test(s)) return { symbol: "TAIEX", tw: "t00", yahoo: "^TWII" };
+  let m = /^(\d{4,6}[A-Z]?)(?:\.(TW|TWO))?$/i.exec(s);
+  if (m) return { symbol: m[1].toUpperCase(), tw: m[1].toUpperCase(), market: m[2]?.toUpperCase() === "TWO" ? "otc" : m[2] ? "tse" : null, yahoo: `${m[1].toUpperCase()}.${m[2]?.toUpperCase() === "TWO" ? "TWO" : "TW"}` };
+  if (!SYMBOL.test(s)) return null;
+  return { symbol: s.toUpperCase(), yahoo: s.toUpperCase() };
+}
+function spark3(values) {
+  const v = values.filter(Number.isFinite);
+  if (v.length < 2) return "";
+  const lo = Math.min(...v);
+  const hi = Math.max(...v);
+  const step = Math.max(1, Math.ceil(v.length / 24));
+  return v.filter((_, i) => i % step === 0).map((x) => SPARKS3[hi > lo ? Math.round((x - lo) / (hi - lo) * 7) : 3]).join("");
+}
+function price(n, tw) {
+  if (!Number.isFinite(n)) return "\u2013";
+  return n.toLocaleString("en-US", tw ? { maximumFractionDigits: 2 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function volume(n, tw) {
+  if (!Number.isFinite(n)) return "";
+  if (tw) return `${n.toLocaleString("en-US")} lots`;
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
+  return String(n);
+}
+function clock(ms, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", weekday: "short", hourCycle: "h23" }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return { day: `${p.year}${p.month}${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute), weekend: p.weekday === "Sat" || p.weekday === "Sun" };
+}
+function twOpen(dataDay, now) {
+  const c = clock(now, "Asia/Taipei");
+  return dataDay === c.day && !c.weekend && c.minutes >= 9 * 60 && c.minutes <= 13 * 60 + 30;
+}
+async function twse(entries, ctx) {
+  if (!entries.length) return /* @__PURE__ */ new Map();
+  const ex = entries.flatMap((e) => e.symbol === "TAIEX" ? ["tse_t00.tw"] : e.market ? [`${e.market}_${e.tw.toLowerCase()}.tw`] : [`tse_${e.tw.toLowerCase()}.tw`, `otc_${e.tw.toLowerCase()}.tw`]);
+  const r = await ctx.fetch(`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex.join("|")}&json=1&delay=0`);
+  if (!r.ok) throw new RoomError(502, `TWSE answered ${r.status}`);
+  const out = /* @__PURE__ */ new Map();
+  for (const m of r.json().msgArray ?? []) {
+    if (!m?.c) continue;
+    const last = num(m.z);
+    const bid = num(String(m.b ?? "").split("_")[0]);
+    const prev = num(m.y);
+    out.set(m.c === "t00" ? "TAIEX" : m.c.toUpperCase(), {
+      ex: m.ex,
+      name: m.c === "t00" ? "\u52A0\u6B0A\u6307\u6578" : m.n,
+      price: Number.isFinite(last) ? last : Number.isFinite(bid) && bid > 0 ? bid : prev,
+      prev,
+      volume: num(m.v),
+      day: m.d,
+      time: String(m.t ?? "").slice(0, 5)
+    });
+  }
+  return out;
+}
+async function yahoo(symbol, ctx) {
+  const r = await ctx.fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`);
+  if (r.status === 404) throw new RoomError(404, `no symbol ${symbol}`);
+  if (!r.ok) throw new RoomError(502, `Yahoo answered ${r.status} for ${symbol}`);
+  const x = r.json().chart?.result?.[0];
+  if (!x?.meta) throw new RoomError(404, `no symbol ${symbol}`);
+  const m = x.meta;
+  return {
+    name: m.shortName || m.longName || symbol,
+    price: m.regularMarketPrice,
+    prev: m.chartPreviousClose ?? m.previousClose,
+    volume: m.regularMarketVolume,
+    at: (m.regularMarketTime ?? 0) * 1e3,
+    session: m.currentTradingPeriod?.regular,
+    tz: m.exchangeTimezoneName,
+    line: x.indicators?.quote?.[0]?.close ?? []
+  };
+}
+var UP = { tw: "rose", us: "leaf" };
+var quotes_default = {
+  type: "quotes",
+  hosts: ["mis.twse.com.tw", "query1.finance.yahoo.com"],
+  async fetch(params, ctx) {
+    const list = (Array.isArray(params.watchlist) ? params.watchlist : []).slice(0, MAX);
+    const now = ctx.now?.() ?? Date.now();
+    const key = JSON.stringify([list, params.colors, params.move]);
+    const was = cache.get(ctx.dataDir);
+    if (was && was.key === key && !was.data.anyOpen && now - was.at < CLOSED_REFRESH_MS) return was.data;
+    const entries = list.map((e) => ({ entry: e, ...classify(e) }));
+    let twError = null;
+    const tw = await twse(entries.filter((e) => e.tw), ctx).catch((err) => {
+      twError = err;
+      return /* @__PURE__ */ new Map();
+    });
+    for (const e of entries) if (e.tw && !e.market && tw.get(e.symbol)?.ex === "otc") e.yahoo = `${e.tw}.TWO`;
+    const yh = await Promise.all(entries.map((e) => e.yahoo ? yahoo(e.yahoo, ctx).catch((err) => ({ error: err })) : null));
+    const quotes = entries.map((e, i) => {
+      if (!e.symbol) return { symbol: String(e.entry).slice(0, 15), name: "not a symbol", priceText: "", pctText: "", arrow: "?", color: "sand", spark: "", open: false };
+      const t = e.tw ? tw.get(e.symbol) : null;
+      const y = yh[i]?.error ? null : yh[i];
+      if (!t && !y) return { symbol: e.symbol, name: yh[i]?.error?.message ?? "no quote", priceText: "", pctText: "", arrow: "?", color: "sand", spark: "", open: false };
+      const isTw = !!t;
+      const p = t ? t.price : y.price;
+      const prev = t ? t.prev : y.prev;
+      const change = p - prev;
+      const pct = prev ? change / prev * 100 : 0;
+      const dir = !Number.isFinite(change) || Math.abs(change) < 1e-9 ? 0 : change > 0 ? 1 : -1;
+      const upColor = params.colors === "red-up" ? "rose" : params.colors === "green-up" ? "leaf" : isTw ? UP.tw : UP.us;
+      const downColor = upColor === "rose" ? "leaf" : "rose";
+      const open = t ? twOpen(t.day, now) : !!(y.session && now / 1e3 >= y.session.start && now / 1e3 <= y.session.end && now - y.at < 15 * 6e4);
+      return {
+        symbol: e.symbol,
+        name: String(t?.name ?? y?.name ?? "").trim().slice(0, 24).trim(),
+        price: p,
+        priceText: price(p, isTw),
+        changeText: Number.isFinite(change) ? `${change >= 0 ? "+" : ""}${price(change, isTw)}` : "",
+        pct: Math.round(pct * 100) / 100,
+        pctText: Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "",
+        arrow: dir > 0 ? "\u25B2" : dir < 0 ? "\u25BC" : "\u2013",
+        color: dir > 0 ? upColor : dir < 0 ? downColor : "sand",
+        spark: spark3(y?.line ?? []),
+        volText: volume(t ? t.volume : y.volume, isTw),
+        market: isTw ? "TW" : "",
+        open,
+        when: open ? "open" : "closed"
+      };
+    });
+    if (list.length && quotes.every((q) => q.price == null)) throw twError ?? yh.find((x) => x?.error)?.error ?? new RoomError(502, "no quotes");
+    const anyOpen = quotes.some((q) => q.open);
+    const tws = quotes.filter((q) => q.market === "TW");
+    const others = quotes.filter((q) => q.price != null && q.market !== "TW");
+    const markets = [tws.length ? `TW ${tws.some((q) => q.open) ? "open" : "closed"}` : null, others.length ? `others ${others.some((q) => q.open) ? "open" : "closed"}` : null].filter(Boolean).join(" \xB7 ");
+    const move = Number(params.move) || 0;
+    const day = clock(now, "Asia/Taipei").day;
+    const alerts = move > 0 ? quotes.filter((q) => Number.isFinite(q.pct) && Math.abs(q.pct) >= move).map((q) => ({ id: `${q.symbol}:${q.pct > 0 ? "up" : "down"}:${day}`, text: `$ ${q.symbol} ${q.arrow} ${q.pctText} at ${q.priceText}` })) : [];
+    const data = {
+      quotes,
+      count: quotes.length,
+      markets,
+      anyOpen,
+      updated: new Date(now).toTimeString().slice(0, 5),
+      band: quotes.filter((q) => q.price != null).slice(0, 4).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(" \xB7 ") || "no quotes",
+      note: "Prices may be delayed. Not investment advice.",
+      alerts
+    };
+    cache.set(ctx.dataDir, { at: now, key, data });
+    return data;
+  }
+};
+
 // src/rooms/registry.mjs
-var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default].map((p) => [p.type, p]));
+var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default].map((p) => [p.type, p]));
 function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
   return new Promise((resolve) => {
     execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve(err ? null : String(stdout)));

@@ -514,7 +514,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|monitor|weather|news | rooms <list> | set <room> <setting> <value> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|monitor|weather|news|stock | rooms <list> | set <room> <setting> <value> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
