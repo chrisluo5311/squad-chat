@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "us-tech",
+  "version": "1.0.0",
+  "minSquadChat": "0.15.0",
+  "name": "US Tech Stocks",
+  "icon": "◆",
+  "color": "sky",
+  "description": "The big US tech names and the Nasdaq, each with today's line. Yahoo Finance, no key. Prices may be delayed.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["query1.finance.yahoo.com"] },
+  "settings": {
+    "watchlist": { "type": "list", "label": "Watchlist", "default": ["^IXIC", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA"], "max": 12 },
+    "move": { "type": "int", "label": "Alert at % move", "default": 5, "min": 0, "max": 20 }
+  },
+  "providers": [
+    { "id": "q", "type": "quotes", "params": { "watchlist": "$settings.watchlist", "colors": "green-up", "move": "$settings.move" }, "interval": { "visible": "1m", "background": "5m" } }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "US TECH",
+        "meta": "{q.markets} · {q.updated}",
+        "body": [
+          { "type": "table", "items": "q.quotes", "columns": [
+            { "field": "arrow", "width": 2, "colorFrom": "color" },
+            { "field": "symbol", "width": 7 },
+            { "field": "priceText", "width": 10, "right": true },
+            { "field": "pctText", "width": 8, "right": true, "colorFrom": "color" },
+            { "field": "spark", "colorFrom": "color" }
+          ] },
+          { "type": "text", "text": "{q.note}" }
+        ]
+      }
+    ],
+    "band": "{q.band}",
+    "hint": "/set watchlist +AMD · /set move 3 · r refreshes"
+  }
+}

@@ -79,6 +79,10 @@ export default defineConfig({
           ],
         },
         {
+          label: "Rooms",
+          items: [{ slug: "rooms/store" }, { slug: "rooms/write-a-room" }],
+        },
+        {
           label: "Host",
           items: [{ slug: "host/server" }, { slug: "host/email-sign-in" }],
         },

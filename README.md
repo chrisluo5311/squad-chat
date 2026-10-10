@@ -328,6 +328,10 @@ Music in the background while you work, played the way [Pixel Play](https://gith
 
 Nothing plays or reaches the network until you press play. mpv stops when the session ends, however it ends. If Pixel Play is playing too, the room says so. `/chat-share lofi` tells a chat room what you're listening to.
 
+#### The room store
+
+More rooms, written by anyone, live in the [room store](https://chrisluo5311.github.io/squad-chat/rooms/store/): `/chat store` lists them, and `/chat install dev-blogs` shows one, with the hosts it reaches, then installs it on a second run. `/chat update` brings installed rooms up to date (asking again if a new version reaches new hosts), and `/chat uninstall <id>` removes one with its settings. A room is one JSON file that can only use squad-chat's own providers and reach the hosts it names, so installing one never runs anyone's code. [Write a room](https://chrisluo5311.github.io/squad-chat/rooms/write-a-room/) shows how to add yours.
+
 To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`. `/chat rooms usage,git` picks which tabs you want, `/chat rooms -snippet` or `+snippet` drops or brings back one, and `/chat rooms none` hides them all.
 
 ### Commands
@@ -354,6 +358,8 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
 | `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+| `/chat store [words]` | The rooms in the [room store](https://chrisluo5311.github.io/squad-chat/rooms/store/), and which you have |
+| `/chat install <id>` / `update [id]` / `uninstall <id>` | Install a room from the store (a look first, then again to install), bring installed ones up to date, or remove one |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. |
 | `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |

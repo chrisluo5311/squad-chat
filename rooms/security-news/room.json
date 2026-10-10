@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "security-news",
+  "version": "1.0.0",
+  "minSquadChat": "0.15.0",
+  "name": "Security News",
+  "icon": "⚠",
+  "color": "amber",
+  "description": "Breaches, vulnerabilities and patches from Krebs on Security and The Hacker News.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["krebsonsecurity.com", "feeds.feedburner.com"] },
+  "settings": {
+    "feeds": { "type": "list", "label": "Feeds", "item": "url", "max": 4, "default": ["https://krebsonsecurity.com/feed/", "https://feeds.feedburner.com/TheHackersNews"] }
+  },
+  "providers": [
+    { "id": "feeds", "type": "rss", "params": { "feeds": "$settings.feeds" }, "interval": { "visible": "15m", "background": "1h" } }
+  ],
+  "layout": {
+    "cards": [
+      { "title": "SECURITY", "meta": "{feeds.count} stories", "body": { "type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "empty": "No stories yet." } }
+    ],
+    "inline": { "type": "list", "items": "feeds.items", "title": "title", "copy": "url", "max": 4 },
+    "band": "⚠ {feeds.items.0.title}",
+    "hint": "⧉ copies the link · ⇪ shares it · r refreshes"
+  }
+}
