@@ -48,8 +48,13 @@ function roomState(id) {
 // ---------------------------------------------------------------- widgets
 
 // One widget's rows, at most `limit` of them: { nodes, height }.
-function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w" } = {}) {
+function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w", room } = {}) {
   const { Box, Text, Button } = els;
+  if (b.type === "buttons") {
+    return { nodes: [Box({ key, flexDirection: "row", gap: 1, flexWrap: "wrap", children: b.buttons.map((btn, i) => Box({ key: `b${i}`, flexShrink: 0, children: [
+      Button({ key: `act-${key}-${i}`, label: btn.label, onPress: () => handlers.onAction?.(room, { provider: btn.provider, action: btn.action, args: btn.args ?? {} }) }),
+    ] })) })], height: 1 };
+  }
   if (b.type === "list" || b.type === "table") {
     const all = lookup(data, b.items);
     const items = Array.isArray(all) ? all : [];
@@ -83,7 +88,10 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
       const tag = b.tag ? lookup(item, b.tag) : null;
       const copyText = b.copy ? lookup(item, b.copy) : null;
       const shareText = b.share ? lookup(item, b.share) : null;
+      const actOn = b.act ? lookup(item, b.act.field) : null;
       nodes.push(line(els, k, [
+        actOn != null ? { node: Button({ key: `act-${k}`, plain: true, label: b.act.label, onPress: () => handlers.onAction?.(room, { provider: b.act.provider, action: b.act.action, args: { [b.act.field.split(".").at(-1)]: actOn } }) }) } : null,
+        actOn != null ? { text: " " } : null,
         { text: title, bold: true, grow: true },
         tag ? { text: ` ${tag}`, color: theme.muted } : null,
         copyText ? { text: " " } : null,
@@ -110,12 +118,12 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
 }
 
 // A card's body: one widget, or a column of them, within `limit` rows.
-function body(els, b, data, w, handlers, { limit = Infinity, accent, key }) {
-  if (!Array.isArray(b)) return widget(els, b, data, w, handlers, { limit, accent, key });
+function body(els, b, data, w, handlers, { limit = Infinity, accent, key, room }) {
+  if (!Array.isArray(b)) return widget(els, b, data, w, handlers, { limit, accent, key, room });
   const nodes = [];
   let height = 0;
   b.forEach((one, i) => {
-    const part = widget(els, one, data, w, handlers, { limit: Math.max(1, limit - height), accent, key: `${key}-${i}` });
+    const part = widget(els, one, data, w, handlers, { limit: Math.max(1, limit - height), accent, key: `${key}-${i}`, room });
     nodes.push(...part.nodes);
     height += part.height;
   });
@@ -142,7 +150,7 @@ export function fnDock(els, id, w, capacity, handlers) {
   shownCards(room.manifest.layout, data).forEach((c, i) => {
     const gap = cards.length ? CARD_GAP : 0;
     const limit = Math.max(1, capacity - used - gap - 3);
-    const filled = body(els, c.body, data, w, handlers, { limit, accent: meta.color, key: `c${i}` });
+    const filled = body(els, c.body, data, w, handlers, { limit, accent: meta.color, key: `c${i}`, room: id });
     const rows = [...filled.nodes];
     let height = filled.height;
     if (i === 0 && error) { rows.unshift(els.Text({ key: "err", color: theme.warn, wrap: "truncate-end", children: `⚠ ${error}` })); height++; }
@@ -168,7 +176,7 @@ export function fnInline(els, id, w, handlers) {
     { text: loaded && first.meta ? `  ${fill(first.meta, data)}` : "", color: theme.muted, grow: true },
   ]);
   if (!loaded) return [head, muted(els, "wait", error ? `⚠ ${error}` : "Loading…")];
-  const filled = body(els, room.manifest.layout.inline ?? first.body, data, w, handlers, { limit: 4, accent: meta.color, key: "in" });
+  const filled = body(els, room.manifest.layout.inline ?? first.body, data, w, handlers, { limit: 4, accent: meta.color, key: "in", room: id });
   return [head, ...(error ? [els.Text({ key: "err", color: theme.warn, wrap: "truncate-end", children: `⚠ ${error}` })] : []), ...filled.nodes];
 }
 
@@ -200,6 +208,7 @@ function widgetText(b, data) {
       ? b.columns.map((c) => show(lookup(item, c.field))).join("  ")
       : `• ${show(lookup(item, b.title))}${b.tag && lookup(item, b.tag) ? ` (${lookup(item, b.tag)})` : ""}`));
   }
+  if (b.type === "buttons") return [];
   if (b.type === "tiles") return [b.tiles.map((t) => `${fill(t.value, data)}${t.sub ? ` ${fill(t.sub, data)}` : ""}`).join("  ·  ")];
   if (b.type === "meter") {
     const pct = Number(lookup(data, b.value));

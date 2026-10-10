@@ -212,9 +212,9 @@ Until a server is set, the pane says so and shows these steps.
 
 ### Built-in rooms
 
-Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Three more, **☀ Weather**, **✦ Tech News** and **$ Stocks**, wait until you turn them on with `/chat rooms +weather`, `+news` or `+stock`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
+Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Four more, **☀ Weather**, **✦ Tech News**, **$ Stocks** and **♫ Lo-fi**, wait until you turn them on with `/chat rooms +weather`, `+news`, `+stock` or `+lofi`, since they reach the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
-Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather`, `/chat news` or `/chat stock`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather`, `/chat news`, `/chat stock` or `/chat lofi`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
 #### ◔ Usage
 
@@ -318,6 +318,16 @@ Your watchlist of Taiwan and US stocks and indices, each with today's line, its 
 
 A market counts as open only when its quotes are from today and the clock is inside its session, so a holiday reads as closed. It refreshes every minute while you look at it and every 5 otherwise, and asks for nothing more than every 15 minutes while every market is closed.
 
+#### ♫ Lo-fi
+
+Music in the background while you work, played the way [Pixel Play](https://github.com/chrisluo5311/Pixel-Play) plays it: through [mpv](https://mpv.io), with YouTube through [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`).
+
+* **Stations** to start: Lofi Girl's YouTube live streams (looked up each time, as their links change) and SomaFM's Groove Salad, Fluid, Lush and Drone Zone.
+* **Your own**: `/lofi add <url>` for a stream or a YouTube link, `/lofi add ~/Music/focus` for a file or a whole folder, and `/lofi import` for Pixel Play's playlist. `/lofi remove <name>` takes one off.
+* **Play** with ▶ on a row, the ⏮ ⏯ ⏹ ⏭ − + buttons, or single keys typed in the room: `p` plays or pauses, `n` next, `b` back, `s` stop, `u` and `d` volume. `/lofi play <name>`, `pause`, `next` and `vol 40` work from the prompt.
+
+Nothing plays or reaches the network until you press play. mpv stops when the session ends, however it ends. If Pixel Play is playing too, the room says so. `/chat-share lofi` tells a chat room what you're listening to.
+
 To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`. `/chat rooms usage,git` picks which tabs you want, `/chat rooms -snippet` or `+snippet` drops or brings back one, and `/chat rooms none` hides them all.
 
 ### Commands
@@ -341,15 +351,17 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. |
 | `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
+| `/lofi play [name]` / `pause` / `next` / `prev` / `stop` / `vol <0-100>` | Drive the Lo-fi room's player from the prompt |
+| `/lofi add <url, file or folder> [# name]` / `remove <name>` / `import` | Add to the Lo-fi room's list, take one off, or bring in Pixel Play's playlist |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/set`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat`, `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player. Type passcodes there: it never touches the conversation.
 
 #### Examples
 

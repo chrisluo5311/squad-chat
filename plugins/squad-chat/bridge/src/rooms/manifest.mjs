@@ -12,12 +12,18 @@ const PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
 const VERSION = /^\d+\.\d+\.\d+$/;
 const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 const INTERVAL = /^\d+(ms|s|m|h)$/;
+const ACTION = /^[a-z][a-z0-9_]{0,19}$/;
+
+// The actions a layout's buttons, rows and keys name, checked against the
+// providers once the whole manifest is read.
+let actionsUsed = [];
 
 // The widgets a layout may use, and each one's fields: "path" (into the
 // data), "field" (of an item), "text" (a template with {path} holes),
 // "int", "bool", "color".
 const WIDGETS = {
-  list: { items: "path!", title: "field!", tag: "field", preview: "field", copy: "field", share: "field", max: "int", empty: "text" },
+  list: { items: "path!", title: "field!", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
+  buttons: { buttons: "buttons!" },
   table: { items: "path!", columns: "columns!", max: "int", empty: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
@@ -117,6 +123,21 @@ function checkWidget(body, where, errors) {
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
       });
     }
+    if (k === "act") {
+      if (!str(v?.label, 6)) errors.push(`${where}.act.label: 1-6 characters`);
+      if (!(typeof v?.action === "string" && ACTION.test(v.action))) errors.push(`${where}.act.action: an action's name`);
+      else actionsUsed.push({ where: `${where}.act`, provider: v.provider, action: v.action });
+      if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.act.field: not a path`);
+    }
+    if (k === "buttons") {
+      if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
+      else v.forEach((btn, i) => {
+        if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
+        if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
+        else actionsUsed.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
+        if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);
+      });
+    }
     if (k === "tiles") {
       if (!Array.isArray(v) || !v.length || v.length > 6) errors.push(`${where}.tiles: 1-6 tiles`);
       else v.forEach((t, i) => {
@@ -133,6 +154,7 @@ function checkWidget(body, where, errors) {
 // `providers` is the bridge's table of provider types.
 export function checkManifest(m, providers) {
   const errors = [];
+  actionsUsed = [];
   if (!m || typeof m !== "object") return ["not a JSON object"];
   if (m.schema !== SCHEMA) errors.push(`schema: must be ${SCHEMA}`);
   if (!(typeof m.id === "string" && ID.test(m.id))) errors.push("id: 2-24 lowercase letters, digits or -, starting with a letter");
@@ -181,6 +203,22 @@ export function checkManifest(m, providers) {
     });
     if (l.inline != null) checkBody(l.inline, "layout.inline", errors);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
+    if (l.keys != null) {
+      const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;
+      if (!keys || keys.length > 10) errors.push("layout.keys: up to 10 keys");
+      else for (const [key, action] of keys) {
+        if (!/^[a-z0-9]$/.test(key) || key === "r") errors.push(`layout.keys.${key}: one letter or digit, not r (refresh)`);
+        if (!(typeof action === "string" && ACTION.test(action))) errors.push(`layout.keys.${key}: an action's name`);
+        else actionsUsed.push({ where: `layout.keys.${key}`, action });
+      }
+    }
+  }
+  // Every action a button, row or key names must be one its provider has.
+  for (const use of actionsUsed) {
+    const p = Array.isArray(m.providers) ? (use.provider ? m.providers.find((x) => x?.id === use.provider) : m.providers[0]) : null;
+    const def = p ? providers[p.type] : null;
+    if (!def) { errors.push(`${use.where}: no provider ${use.provider ?? ""}`.trim()); continue; }
+    if (!(def.actions && Object.hasOwn(def.actions, use.action))) errors.push(`${use.where}: ${p.type} has no action ${use.action}`);
   }
   return errors;
 }

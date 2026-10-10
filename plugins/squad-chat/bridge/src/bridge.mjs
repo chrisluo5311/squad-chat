@@ -74,6 +74,7 @@ const board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join(socketDir, "ses
 const fnRooms = roomRegistry({
   dirs: [env.SQUAD_ROOMS_DIR, join(configDir, "rooms")],
   dataDir: join(configDir, "room-data"),
+  runtimeDir: socketDir,
   emit,
   log,
 });

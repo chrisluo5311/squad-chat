@@ -161,29 +161,29 @@ function __metadata(metadataKey, metadataValue) {
 }
 function __awaiter(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve) {
-      resolve(value);
+    return value instanceof P ? value : new P(function(resolve2) {
+      resolve2(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve, reject) {
+  return new (P || (P = Promise))(function(resolve2, reject) {
     function fulfilled(value) {
       try {
-        step(generator.next(value));
+        step2(generator.next(value));
       } catch (e) {
         reject(e);
       }
     }
     function rejected(value) {
       try {
-        step(generator["throw"](value));
+        step2(generator["throw"](value));
       } catch (e) {
         reject(e);
       }
     }
-    function step(result) {
-      result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+    function step2(result) {
+      result.done ? resolve2(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
-    step((generator = generator.apply(thisArg, _arguments || [])).next());
+    step2((generator = generator.apply(thisArg, _arguments || [])).next());
   });
 }
 function __generator(thisArg, body) {
@@ -196,10 +196,10 @@ function __generator(thisArg, body) {
   }), g;
   function verb(n) {
     return function(v) {
-      return step([n, v]);
+      return step2([n, v]);
     };
   }
-  function step(op) {
+  function step2(op) {
     if (f) throw new TypeError("Generator is already executing.");
     while (g && (g = 0, op[0] && (_ = 0)), _) try {
       if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
@@ -333,12 +333,12 @@ function __asyncGenerator(thisArg, _arguments, generator) {
   }
   function resume(n, v) {
     try {
-      step(g[n](v));
+      step2(g[n](v));
     } catch (e) {
       settle(q[0][3], e);
     }
   }
-  function step(r) {
+  function step2(r) {
     r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r);
   }
   function fulfill(value) {
@@ -372,14 +372,14 @@ function __asyncValues(o) {
   }, i);
   function verb(n) {
     i[n] = o[n] && function(v) {
-      return new Promise(function(resolve, reject) {
-        v = o[n](v), settle(resolve, reject, v.done, v.value);
+      return new Promise(function(resolve2, reject) {
+        v = o[n](v), settle(resolve2, reject, v.done, v.value);
       });
     };
   }
-  function settle(resolve, reject, d, v) {
+  function settle(resolve2, reject, d, v) {
     Promise.resolve(v).then(function(v2) {
-      resolve({ value: v2, done: d });
+      resolve2({ value: v2, done: d });
     }, reject);
   }
 }
@@ -4269,15 +4269,15 @@ var require_RealtimeChannel = __commonJS({
             }
           }
         } else {
-          return new Promise((resolve) => {
+          return new Promise((resolve2) => {
             var _a2, _b2, _c;
             const push2 = this.channelAdapter.push(args.type, args, opts.timeout || this.timeout);
             if (args.type === "broadcast" && !((_c = (_b2 = (_a2 = this.params) === null || _a2 === void 0 ? void 0 : _a2.config) === null || _b2 === void 0 ? void 0 : _b2.broadcast) === null || _c === void 0 ? void 0 : _c.ack)) {
-              resolve("ok");
+              resolve2("ok");
             }
-            push2.receive("ok", () => resolve("ok"));
-            push2.receive("error", () => resolve("error"));
-            push2.receive("timeout", () => resolve("timed out"));
+            push2.receive("ok", () => resolve2("ok"));
+            push2.receive("error", () => resolve2("error"));
+            push2.receive("timeout", () => resolve2("timed out"));
           });
         }
       }
@@ -4302,8 +4302,8 @@ var require_RealtimeChannel = __commonJS({
        * @category Realtime
        */
       async unsubscribe(timeout = this.timeout) {
-        return new Promise((resolve) => {
-          this.channelAdapter.unsubscribe(timeout).receive("ok", () => resolve("ok")).receive("timeout", () => resolve("timed out")).receive("error", () => resolve("error"));
+        return new Promise((resolve2) => {
+          this.channelAdapter.unsubscribe(timeout).receive("ok", () => resolve2("ok")).receive("timeout", () => resolve2("timed out")).receive("error", () => resolve2("error"));
         });
       }
       /**
@@ -4396,8 +4396,8 @@ var require_RealtimeChannel = __commonJS({
       }
       /** @internal */
       _notThisChannelEvent(event, ref) {
-        const { close, error, leave, join: join7 } = constants_1.CHANNEL_EVENTS;
-        const events = [close, error, leave, join7];
+        const { close, error, leave, join: join8 } = constants_1.CHANNEL_EVENTS;
+        const events = [close, error, leave, join8];
         return ref && events.includes(event) && ref !== this.joinPush.ref;
       }
       /** @internal */
@@ -4530,11 +4530,11 @@ var require_socketAdapter = __commonJS({
         this.socket.connect();
       }
       disconnect(callback, code, reason, timeout = 1e4) {
-        return new Promise((resolve) => {
-          setTimeout(() => resolve("timeout"), timeout);
+        return new Promise((resolve2) => {
+          setTimeout(() => resolve2("timeout"), timeout);
           this.socket.disconnect(() => {
             callback();
-            resolve("ok");
+            resolve2("ok");
           }, code, reason);
         });
       }
@@ -13906,9 +13906,9 @@ var require_main3 = __commonJS({
 
 // src/bridge.mjs
 import { createServer } from "node:http";
-import { mkdirSync as mkdirSync5, rmSync as rmSync3, chmodSync as chmodSync5 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join as join6 } from "node:path";
+import { mkdirSync as mkdirSync6, rmSync as rmSync3, chmodSync as chmodSync6 } from "node:fs";
+import { homedir as homedir2, tmpdir } from "node:os";
+import { join as join7 } from "node:path";
 
 // node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -14025,18 +14025,18 @@ function _objectSpread2(e) {
   return e;
 }
 function sleep(ms, signal) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     if (signal === null || signal === void 0 ? void 0 : signal.aborted) {
-      resolve();
+      resolve2();
       return;
     }
     const id = setTimeout(() => {
       signal === null || signal === void 0 || signal.removeEventListener("abort", onAbort);
-      resolve();
+      resolve2();
     }, ms);
     function onAbort() {
       clearTimeout(id);
-      resolve();
+      resolve2();
     }
     signal === null || signal === void 0 || signal.addEventListener("abort", onAbort);
   });
@@ -17796,7 +17796,7 @@ var PostgrestClient = class PostgrestClient2 {
   * }
   * ```
   */
-  rpc(fn, args = {}, { head: head2 = false, get: get2 = false, count } = {}) {
+  rpc(fn, args = {}, { head: head2 = false, get: get3 = false, count } = {}) {
     var _this$fetch2;
     let method;
     const url = new URL(`${this.url}/rpc/${fn}`);
@@ -17806,7 +17806,7 @@ var PostgrestClient = class PostgrestClient2 {
     if (_hasObjectArg) {
       method = "POST";
       body = args;
-    } else if (head2 || get2) {
+    } else if (head2 || get3) {
       method = head2 ? "HEAD" : "GET";
       Object.entries(args).filter(([_, value]) => value !== void 0).map(([name, value]) => [name, Array.isArray(value) ? `{${value.join(",")}}` : `${value}`]).forEach(([name, value]) => {
         url.searchParams.append(name, value);
@@ -18544,7 +18544,7 @@ var _getRequestParams = (method, options, parameters, body) => {
   return _objectSpread22(_objectSpread22({}, params), parameters);
 };
 async function _handleRequest(fetcher, method, url, options, parameters, body, namespace) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     fetcher(url, _getRequestParams(method, options, parameters, body)).then((result) => {
       if (!result.ok) throw result;
       if (options === null || options === void 0 ? void 0 : options.noResolveJson) return result;
@@ -18554,7 +18554,7 @@ async function _handleRequest(fetcher, method, url, options, parameters, body, n
         if (!contentType || !contentType.includes("application/json")) return {};
       }
       return result.json();
-    }).then((data) => resolve(data)).catch((error) => handleError(error, reject, options, namespace));
+    }).then((data) => resolve2(data)).catch((error) => handleError(error, reject, options, namespace));
   });
 }
 function createFetchApi(namespace = "storage") {
@@ -22827,11 +22827,12 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
 }
 
 // src/rooms/registry.mjs
-import { readdirSync as readdirSync2, readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4 } from "node:fs";
-import { join as join5 } from "node:path";
-import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { cpus, loadavg } from "node:os";
+import { readdirSync as readdirSync2, readFileSync as readFileSync5, writeFileSync as writeFileSync5, renameSync as renameSync5 } from "node:fs";
+import { join as join6 } from "node:path";
+import { execFile, spawn } from "node:child_process";
+import { readFile, stat, readdir } from "node:fs/promises";
+import { connect } from "node:net";
+import { cpus, loadavg, homedir } from "node:os";
 
 // src/rooms/manifest.mjs
 var SCHEMA = 1;
@@ -22842,8 +22843,11 @@ var PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
 var VERSION = /^\d+\.\d+\.\d+$/;
 var HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 var INTERVAL = /^\d+(ms|s|m|h)$/;
+var ACTION = /^[a-z][a-z0-9_]{0,19}$/;
+var actionsUsed = [];
 var WIDGETS = {
-  list: { items: "path!", title: "field!", tag: "field", preview: "field", copy: "field", share: "field", max: "int", empty: "text" },
+  list: { items: "path!", title: "field!", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
+  buttons: { buttons: "buttons!" },
   table: { items: "path!", columns: "columns!", max: "int", empty: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
@@ -22946,6 +22950,21 @@ function checkWidget(body, where, errors) {
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
       });
     }
+    if (k === "act") {
+      if (!str(v?.label, 6)) errors.push(`${where}.act.label: 1-6 characters`);
+      if (!(typeof v?.action === "string" && ACTION.test(v.action))) errors.push(`${where}.act.action: an action's name`);
+      else actionsUsed.push({ where: `${where}.act`, provider: v.provider, action: v.action });
+      if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.act.field: not a path`);
+    }
+    if (k === "buttons") {
+      if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
+      else v.forEach((btn, i) => {
+        if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
+        if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
+        else actionsUsed.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
+        if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);
+      });
+    }
     if (k === "tiles") {
       if (!Array.isArray(v) || !v.length || v.length > 6) errors.push(`${where}.tiles: 1-6 tiles`);
       else v.forEach((t, i) => {
@@ -22959,6 +22978,7 @@ function checkWidget(body, where, errors) {
 }
 function checkManifest(m, providers) {
   const errors = [];
+  actionsUsed = [];
   if (!m || typeof m !== "object") return ["not a JSON object"];
   if (m.schema !== SCHEMA) errors.push(`schema: must be ${SCHEMA}`);
   if (!(typeof m.id === "string" && ID2.test(m.id))) errors.push("id: 2-24 lowercase letters, digits or -, starting with a letter");
@@ -23003,6 +23023,24 @@ function checkManifest(m, providers) {
     });
     if (l.inline != null) checkBody(l.inline, "layout.inline", errors);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
+    if (l.keys != null) {
+      const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;
+      if (!keys || keys.length > 10) errors.push("layout.keys: up to 10 keys");
+      else for (const [key, action] of keys) {
+        if (!/^[a-z0-9]$/.test(key) || key === "r") errors.push(`layout.keys.${key}: one letter or digit, not r (refresh)`);
+        if (!(typeof action === "string" && ACTION.test(action))) errors.push(`layout.keys.${key}: an action's name`);
+        else actionsUsed.push({ where: `layout.keys.${key}`, action });
+      }
+    }
+  }
+  for (const use of actionsUsed) {
+    const p = Array.isArray(m.providers) ? use.provider ? m.providers.find((x) => x?.id === use.provider) : m.providers[0] : null;
+    const def = p ? providers[p.type] : null;
+    if (!def) {
+      errors.push(`${use.where}: no provider ${use.provider ?? ""}`.trim());
+      continue;
+    }
+    if (!(def.actions && Object.hasOwn(def.actions, use.action))) errors.push(`${use.where}: ${p.type} has no action ${use.action}`);
   }
   return errors;
 }
@@ -23394,8 +23432,8 @@ var tag = (xml, name) => new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}
 function parseFeed(xml) {
   const head2 = xml.split(/<item[\s>]|<entry[\s>]/i)[0];
   const feedTitle = decode(tag(head2, "title"));
-  const entries = xml.match(/<item[\s>][\s\S]*?<\/item>|<entry[\s>][\s\S]*?<\/entry>/gi) ?? [];
-  const items = entries.map((e) => {
+  const entries2 = xml.match(/<item[\s>][\s\S]*?<\/item>|<entry[\s>][\s\S]*?<\/entry>/gi) ?? [];
+  const items = entries2.map((e) => {
     const atomLink = /<link\b[^>]*\brel=["']alternate["'][^>]*>/i.exec(e)?.[0] ?? /<link\b[^>]*\bhref=[^>]*>/i.exec(e)?.[0];
     const link = decode(tag(e, "link")) || (atomLink ? /\bhref=["']([^"']+)["']/i.exec(atomLink)?.[1] : "") || decode(tag(e, "guid"));
     const when = decode(tag(e, "pubDate") ?? tag(e, "published") ?? tag(e, "updated") ?? tag(e, "dc:date"));
@@ -23473,8 +23511,8 @@ function cpuTimes(list) {
 function parseVmStat(text) {
   if (!text) return null;
   const page = Number(/page size of (\d+) bytes/.exec(text)?.[1]) || 4096;
-  const get2 = (name) => Number(new RegExp(`${name}:\\s+(\\d+)`).exec(text)?.[1]) || 0;
-  return { used: (get2("Pages active") + get2("Pages wired down") + get2("Pages occupied by compressor")) * page };
+  const get3 = (name) => Number(new RegExp(`${name}:\\s+(\\d+)`).exec(text)?.[1]) || 0;
+  return { used: (get3("Pages active") + get3("Pages wired down") + get3("Pages occupied by compressor")) * page };
 }
 function parseSysctl(text) {
   if (!text) return null;
@@ -23521,13 +23559,13 @@ var signed64 = (s) => {
 };
 function parseBatteryPower(text) {
   if (!text) return null;
-  const get2 = (name) => new RegExp(`"${name}" ?= ?(\\d+|Yes|No)`).exec(text)?.[1];
-  if (get2("ExternalConnected") === "Yes") {
-    const mw = Number(get2("SystemPowerIn"));
+  const get3 = (name) => new RegExp(`"${name}" ?= ?(\\d+|Yes|No)`).exec(text)?.[1];
+  if (get3("ExternalConnected") === "Yes") {
+    const mw = Number(get3("SystemPowerIn"));
     return Number.isFinite(mw) && mw > 0 ? `${watts(mw / 1e3)} in` : "";
   }
-  const amps = signed64(get2("InstantAmperage"));
-  const volts = Number(get2("Voltage"));
+  const amps = signed64(get3("InstantAmperage"));
+  const volts = Number(get3("Voltage"));
   return Number.isFinite(amps) && Number.isFinite(volts) && amps < 0 ? `${watts(-amps * volts / 1e6)} out` : "";
 }
 function parseGpuUse(text) {
@@ -23725,8 +23763,8 @@ function spark3(values) {
   if (v.length < 2) return "";
   const lo = Math.min(...v);
   const hi = Math.max(...v);
-  const step = Math.max(1, Math.ceil(v.length / 24));
-  return v.filter((_, i) => i % step === 0).map((x) => SPARKS3[hi > lo ? Math.round((x - lo) / (hi - lo) * 7) : 3]).join("");
+  const step2 = Math.max(1, Math.ceil(v.length / 24));
+  return v.filter((_, i) => i % step2 === 0).map((x) => SPARKS3[hi > lo ? Math.round((x - lo) / (hi - lo) * 7) : 3]).join("");
 }
 function price(n, tw) {
   if (!Number.isFinite(n)) return "\u2013";
@@ -23748,9 +23786,9 @@ function twOpen(dataDay, now) {
   const c = clock(now, "Asia/Taipei");
   return dataDay === c.day && !c.weekend && c.minutes >= 9 * 60 && c.minutes <= 13 * 60 + 30;
 }
-async function twse(entries, ctx) {
-  if (!entries.length) return /* @__PURE__ */ new Map();
-  const ex = entries.flatMap((e) => e.symbol === "TAIEX" ? ["tse_t00.tw"] : e.market ? [`${e.market}_${e.tw.toLowerCase()}.tw`] : [`tse_${e.tw.toLowerCase()}.tw`, `otc_${e.tw.toLowerCase()}.tw`]);
+async function twse(entries2, ctx) {
+  if (!entries2.length) return /* @__PURE__ */ new Map();
+  const ex = entries2.flatMap((e) => e.symbol === "TAIEX" ? ["tse_t00.tw"] : e.market ? [`${e.market}_${e.tw.toLowerCase()}.tw`] : [`tse_${e.tw.toLowerCase()}.tw`, `otc_${e.tw.toLowerCase()}.tw`]);
   const r = await ctx.fetch(`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex.join("|")}&json=1&delay=0`);
   if (!r.ok) throw new RoomError(502, `TWSE answered ${r.status}`);
   const out = /* @__PURE__ */ new Map();
@@ -23799,15 +23837,15 @@ var quotes_default = {
     const key = JSON.stringify([list, params.colors, params.move]);
     const was = cache.get(ctx.dataDir);
     if (was && was.key === key && !was.data.anyOpen && now - was.at < CLOSED_REFRESH_MS) return was.data;
-    const entries = list.map((e) => ({ entry: e, ...classify(e) }));
+    const entries2 = list.map((e) => ({ entry: e, ...classify(e) }));
     let twError = null;
-    const tw = await twse(entries.filter((e) => e.tw), ctx).catch((err) => {
+    const tw = await twse(entries2.filter((e) => e.tw), ctx).catch((err) => {
       twError = err;
       return /* @__PURE__ */ new Map();
     });
-    for (const e of entries) if (e.tw && !e.market && tw.get(e.symbol)?.ex === "otc") e.yahoo = `${e.tw}.TWO`;
-    const yh = await Promise.all(entries.map((e) => e.yahoo ? yahoo(e.yahoo, ctx).catch((err) => ({ error: err })) : null));
-    const quotes = entries.map((e, i) => {
+    for (const e of entries2) if (e.tw && !e.market && tw.get(e.symbol)?.ex === "otc") e.yahoo = `${e.tw}.TWO`;
+    const yh = await Promise.all(entries2.map((e) => e.yahoo ? yahoo(e.yahoo, ctx).catch((err) => ({ error: err })) : null));
+    const quotes = entries2.map((e, i) => {
       if (!e.symbol) return { symbol: String(e.entry).slice(0, 15), name: "not a symbol", priceText: "", pctText: "", arrow: "?", color: "sand", spark: "", open: false };
       const t = e.tw ? tw.get(e.symbol) : null;
       const y = yh[i]?.error ? null : yh[i];
@@ -23861,11 +23899,407 @@ var quotes_default = {
   }
 };
 
+// src/rooms/providers/player.mjs
+import { join as join5, resolve, extname, basename } from "node:path";
+import { readFileSync as readFileSync4, writeFileSync as writeFileSync4, renameSync as renameSync4, mkdirSync as mkdirSync5, chmodSync as chmodSync5 } from "node:fs";
+import { randomBytes as randomBytes2 } from "node:crypto";
+var AUDIO = /* @__PURE__ */ new Set([".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac", ".aiff"]);
+var MAX_ITEMS2 = 200;
+var CHANNEL_TTL_MS = 60 * 6e4;
+function kindOf(target) {
+  const t = String(target ?? "").trim();
+  if (/^https?:\/\/(www\.)?youtube\.com\/@[^/]+\/streams\/?$/i.test(t)) return "channel";
+  if (/^https?:\/\/((www|m|music)\.)?(youtube\.com|youtu\.be)\//i.test(t)) return "youtube";
+  if (/^https?:\/\//i.test(t)) return "stream";
+  return "file";
+}
+var TAG = { channel: "YouTube live", youtube: "YouTube", stream: "stream", file: "file" };
+function parsePlaylist(text) {
+  return String(text ?? "").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#")).map((l) => {
+    const [target, ...title] = l.split(" # ");
+    return { target: target.trim(), name: title.join(" # ").trim() };
+  });
+}
+function nameFor(target) {
+  const t = String(target);
+  if (kindOf(t) === "file") return basename(t).replace(/\.[^.]+$/, "");
+  try {
+    const u = new URL(t);
+    return u.searchParams.get("v") ? `YouTube ${u.searchParams.get("v")}` : `${u.hostname}${u.pathname}`.replace(/\/$/, "").slice(0, 40);
+  } catch {
+    return t.slice(0, 40);
+  }
+}
+function loadList(dir) {
+  try {
+    const data = JSON.parse(readFileSync4(join5(dir, "list.json"), "utf8"));
+    return Array.isArray(data.items) ? data.items.filter((x) => x?.id && x.target) : [];
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw new RoomError(500, `Couldn't read the Lo-fi list (${err.code ?? "not JSON"}). Nothing was changed.`);
+  }
+}
+function saveList(dir, items) {
+  mkdirSync5(dir, { recursive: true, mode: 448 });
+  chmodSync5(dir, 448);
+  const file = join5(dir, "list.json");
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync4(tmp, JSON.stringify({ v: 1, items }, null, 1), { mode: 384 });
+  renameSync4(tmp, file);
+}
+function entries(params, ctx) {
+  const stations = (Array.isArray(params.stations) ? params.stations : []).filter((s) => s?.url && s.name).map((s, i) => ({ id: `s${i + 1}`, name: String(s.name), target: String(s.url), kind: kindOf(s.url) }));
+  let own = [];
+  try {
+    own = loadList(ctx.dataDir);
+  } catch {
+  }
+  return [...stations, ...own.map((x) => ({ ...x, kind: kindOf(x.target) }))];
+}
+var tools = null;
+async function findTools(ctx) {
+  if (tools) return tools;
+  const find2 = async (names) => {
+    for (const n of names) if (await ctx.run([n, "--version"], { timeoutMs: 5e3 })) return n;
+    return null;
+  };
+  tools = {
+    mpv: await find2(["mpv", "/opt/homebrew/bin/mpv", "/usr/local/bin/mpv", "/usr/bin/mpv"]),
+    ytdlp: await find2(["yt-dlp", "/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"])
+  };
+  return tools;
+}
+var channels = /* @__PURE__ */ new Map();
+async function liveStreams(url, ctx) {
+  const was = channels.get(url);
+  if (was && ctx.now() - was.at < CHANNEL_TTL_MS && was.streams.length) return was.streams;
+  const t = await findTools(ctx);
+  if (!t.ytdlp) throw new RoomError(400, "YouTube needs yt-dlp: brew install yt-dlp");
+  const out = await ctx.run([t.ytdlp, "--flat-playlist", "--playlist-end", "10", "--print", "%(live_status)s	%(id)s	%(title)s", url], { timeoutMs: 3e4 });
+  if (out == null) throw new RoomError(502, "yt-dlp couldn't read that channel");
+  const streams = out.split("\n").map((l) => l.split("	")).filter(([st, id]) => st === "is_live" && /^[\w-]{6,20}$/.test(id ?? "")).map(([, id, title]) => ({ id, title: title ?? id }));
+  channels.set(url, { at: ctx.now(), streams });
+  return streams;
+}
+var mpv = null;
+function ipc(command, timeoutMs = 2e3) {
+  return new Promise((resolve2, reject) => {
+    if (!mpv?.conn) return reject(new RoomError(409, "Nothing's playing."));
+    const id = ++mpv.seq;
+    const timer = setTimeout(() => {
+      mpv?.pending.delete(id);
+      reject(new RoomError(504, "mpv didn't answer"));
+    }, timeoutMs);
+    mpv.pending.set(id, (reply) => {
+      clearTimeout(timer);
+      resolve2(reply);
+    });
+    mpv.conn.write(`${JSON.stringify({ command, request_id: id })}
+`);
+  });
+}
+async function get2(prop) {
+  try {
+    const r = await ipc(["get_property", prop], 1e3);
+    return r?.error === "success" ? r.data : null;
+  } catch {
+    return null;
+  }
+}
+function stop() {
+  if (!mpv) return;
+  const { child, conn } = mpv;
+  mpv = null;
+  try {
+    conn?.write(`${JSON.stringify({ command: ["quit"] })}
+`);
+  } catch {
+  }
+  try {
+    conn?.destroy();
+  } catch {
+  }
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+    }
+  }
+}
+async function start(ctx, volume2) {
+  if (mpv?.conn) return mpv;
+  const t = await findTools(ctx);
+  if (!t.mpv) throw new RoomError(400, "Lo-fi needs mpv: brew install mpv yt-dlp");
+  const sock = join5(ctx.runtimeDir, `mpv-${process.pid}.sock`);
+  const watch3 = '"$0" "$@" & m=$!; while kill -0 $PPID 2>/dev/null && kill -0 $m 2>/dev/null; do sleep 1; done; kill $m 2>/dev/null';
+  const args = ["--idle=yes", "--no-video", "--no-terminal", "--force-window=no", `--volume=${volume2}`, `--input-ipc-server=${sock}`, "--ytdl-format=bestaudio/best"];
+  if (t.ytdlp?.startsWith("/")) args.push(`--script-opts=ytdl_hook-ytdl_path=${t.ytdlp}`);
+  const child = ctx.spawn(["/bin/sh", "-c", watch3, t.mpv, ...args], { detached: true });
+  const state = { child, conn: null, pending: /* @__PURE__ */ new Map(), seq: 0, buf: "", entryId: null };
+  mpv = state;
+  child.on?.("exit", () => {
+    if (mpv === state) {
+      try {
+        state.conn?.destroy();
+      } catch {
+      }
+      mpv = null;
+    }
+  });
+  for (let waited = 0; waited < 5e3 && mpv === state; waited += 100) {
+    const conn = await new Promise((res) => {
+      const c = ctx.connect(sock);
+      c.once("connect", () => res(c));
+      c.once("error", () => res(null));
+    });
+    if (conn) {
+      state.conn = conn;
+      conn.setEncoding?.("utf8");
+      conn.on("data", (chunk) => {
+        state.buf += chunk;
+        let nl;
+        while ((nl = state.buf.indexOf("\n")) >= 0) {
+          const line = state.buf.slice(0, nl);
+          state.buf = state.buf.slice(nl + 1);
+          let msg;
+          try {
+            msg = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const done = msg.request_id != null && state.pending.get(msg.request_id);
+          if (done) {
+            state.pending.delete(msg.request_id);
+            done(msg);
+          }
+        }
+      });
+      conn.on("close", () => {
+        if (mpv === state) state.conn = null;
+      });
+      return state;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  stop();
+  throw new RoomError(502, "mpv didn't start");
+}
+async function playEntry(entry, ctx, params) {
+  if (entry.kind === "youtube" && !(await findTools(ctx)).ytdlp) throw new RoomError(400, "YouTube needs yt-dlp: brew install yt-dlp");
+  const queue = entry.kind === "channel" ? (await liveStreams(entry.target, ctx)).map((s) => `https://www.youtube.com/watch?v=${s.id}`) : [entry.target];
+  if (!queue.length) throw new RoomError(404, `${entry.name} has no live streams right now`);
+  await start(ctx, params.volume ?? 60);
+  await ipc(["loadfile", queue[0], "replace"]);
+  for (const url of queue.slice(1)) await ipc(["loadfile", url, "append"]);
+  await ipc(["set_property", "pause", false]);
+  mpv.entryId = entry.id;
+  return { ok: true, playing: entry.name };
+}
+var pixelCheck = { at: 0, playing: false };
+async function pixelPlaying(ctx) {
+  if (ctx.now() - pixelCheck.at < 1e4) return pixelCheck.playing;
+  pixelCheck = { at: ctx.now(), playing: false };
+  const sock = join5(ctx.home ?? "", ".claude", "pixel-play", "t.sock");
+  if (!await ctx.fs.stat(sock)) return false;
+  pixelCheck.playing = await new Promise((res) => {
+    const c = ctx.connect(sock);
+    const done = (v) => {
+      clearTimeout(timer);
+      try {
+        c.destroy();
+      } catch {
+      }
+      res(v);
+    };
+    const timer = setTimeout(() => done(false), 400);
+    let buf = "";
+    c.once("error", () => done(false));
+    c.once("connect", () => c.write(`${JSON.stringify({ command: ["get_property", "pause"], request_id: 1 })}
+${JSON.stringify({ command: ["get_property", "idle-active"], request_id: 2 })}
+`));
+    c.on("data", (d) => {
+      buf += d;
+      const replies = buf.split("\n").filter(Boolean).map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      }).filter((m) => m?.request_id);
+      if (replies.length >= 2) done(replies.every((m) => m.error === "success" && m.data === false));
+    });
+  });
+  return pixelCheck.playing;
+}
+var clock2 = (s) => {
+  if (!Number.isFinite(s) || s < 0) return "";
+  const t = Math.floor(s);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor(t % 3600 / 60);
+  const ss = String(t % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+};
+function pick(list, args) {
+  const want = String(args.id ?? args.name ?? "").trim().toLowerCase();
+  return list.find((e) => e.id === args.id) ?? list.find((e) => e.name.toLowerCase() === want) ?? null;
+}
+async function step(params, ctx, dir) {
+  if (mpv?.conn) {
+    const [pos, count] = await Promise.all([get2("playlist-pos"), get2("playlist-count")]);
+    if (Number.isInteger(pos) && Number.isInteger(count) && count > 1 && pos + dir >= 0 && pos + dir < count) {
+      await ipc([dir > 0 ? "playlist-next" : "playlist-prev", "force"]);
+      return { ok: true };
+    }
+  }
+  const list = entries(params, ctx);
+  if (!list.length) throw new RoomError(404, "Nothing to play: /lofi add <url or path>");
+  const i = list.findIndex((e) => e.id === mpv?.entryId);
+  return playEntry(list[(i + dir + list.length) % list.length], ctx, params);
+}
+async function play(params, args, ctx) {
+  const list = entries(params, ctx);
+  if (args.id || args.name) {
+    const e = pick(list, args);
+    if (!e) throw new RoomError(404, `Nothing called "${args.name ?? args.id}" to play.`);
+    return playEntry(e, ctx, params);
+  }
+  if (mpv?.conn && !await get2("idle-active")) {
+    await ipc(["set_property", "pause", false]);
+    return { ok: true };
+  }
+  if (!list.length) throw new RoomError(404, "Nothing to play: /lofi add <url or path>");
+  return playEntry(list.find((e) => e.id === mpv?.entryId) ?? list[0], ctx, params);
+}
+var player_default = {
+  type: "player",
+  // mpv reaches the streams itself, not through ctx.fetch: the manifest
+  // lists the stations' hosts so the room says where it goes.
+  hosts: [],
+  async fetch(params, ctx) {
+    const t = await findTools(ctx);
+    const list = entries(params, ctx);
+    let listError = "";
+    try {
+      loadList(ctx.dataDir);
+    } catch (err) {
+      listError = err.message;
+    }
+    const now = { state: "stopped", title: "", source: "", timeText: "", pct: null, volume: params.volume ?? 60, mark: "\u25A0" };
+    if (mpv?.conn) {
+      const [title, meta, pos, dur, paused, vol, idle] = await Promise.all(["media-title", "metadata", "time-pos", "duration", "pause", "volume", "idle-active"].map(get2));
+      const entry = list.find((e) => e.id === mpv?.entryId);
+      if (!idle) {
+        now.state = paused ? "paused" : "playing";
+        now.mark = paused ? "\u23F8" : "\u25B6";
+        now.title = String(meta?.["icy-title"] || title || entry?.name || "");
+        now.source = entry ? `${entry.name} \xB7 ${TAG[entry.kind]}` : "";
+        const live = !Number.isFinite(dur) || dur <= 0 || entry?.kind === "channel" || entry?.kind === "stream";
+        now.timeText = entry?.kind === "channel" ? "live" : live ? `${clock2(pos)} \xB7 live` : `${clock2(pos)} / ${clock2(dur)}`;
+        now.pct = live ? null : Math.round(pos / dur * 100);
+      }
+      if (Number.isFinite(vol)) now.volume = Math.round(vol);
+    }
+    const hint = !t.mpv ? "Lo-fi needs mpv: brew install mpv yt-dlp" : !t.ytdlp ? "YouTube needs yt-dlp: brew install yt-dlp" : "";
+    const conflict = now.state === "playing" && await pixelPlaying(ctx) ? "Pixel Play is playing too." : "";
+    return {
+      available: !!t.mpv,
+      ytdlp: !!t.ytdlp,
+      now,
+      entries: list.map((e) => ({ id: e.id, name: e.name, tag: TAG[e.kind] + (e.kind !== "file" && e.kind !== "stream" && !t.ytdlp ? " (needs yt-dlp)" : ""), on: e.id === mpv?.entryId && now.state !== "stopped" ? "\u266B" : "" })),
+      count: list.length,
+      hint: [hint, listError].filter(Boolean).join(" "),
+      conflict,
+      band: now.state === "stopped" ? "not playing" : `${now.mark} ${now.title || "\u2026"}${now.timeText ? ` \xB7 ${now.timeText}` : ""}`,
+      share: now.state === "stopped" ? "\u266B not playing anything" : `\u266B now listening: ${now.title}${now.source ? ` (${now.source})` : ""}`
+    };
+  },
+  actions: {
+    play,
+    async pause(params, args, ctx) {
+      if (!mpv?.conn || await get2("idle-active")) return play(params, {}, ctx);
+      await ipc(["cycle", "pause"]);
+      return { ok: true };
+    },
+    async stop() {
+      if (mpv?.conn) await ipc(["stop"]);
+      return { ok: true };
+    },
+    next: (params, args, ctx) => step(params, ctx, 1),
+    prev: (params, args, ctx) => step(params, ctx, -1),
+    async up() {
+      if (mpv?.conn) await ipc(["add", "volume", 5]);
+      return { ok: true };
+    },
+    async down() {
+      if (mpv?.conn) await ipc(["add", "volume", -5]);
+      return { ok: true };
+    },
+    async volume(params, args) {
+      const v = Math.max(0, Math.min(130, Number(args.level)));
+      if (!Number.isFinite(v)) throw new RoomError(400, "Volume is 0-130.");
+      if (mpv?.conn) await ipc(["set_property", "volume", v]);
+      return { ok: true, volume: v };
+    },
+    // A URL, a file, or a folder of audio files (each one added).
+    add: (params, args, ctx) => locked(ctx.dataDir, "list", async () => {
+      const raw = String(args.target ?? "").trim();
+      if (!raw) throw new RoomError(400, "Add what? A URL, a file or a folder.");
+      const items = loadList(ctx.dataDir);
+      const fresh = [];
+      if (kindOf(raw) === "file") {
+        const path = resolve(raw.replace(/^~(?=\/|$)/, ctx.home ?? "~"));
+        const st = await ctx.fs.stat(path);
+        if (!st) throw new RoomError(404, `No file or folder at ${path}.`);
+        const files = st.isDirectory?.() ? (await ctx.fs.readdir(path)).filter((n) => AUDIO.has(extname(n).toLowerCase())).sort().map((n) => join5(path, n)) : AUDIO.has(extname(path).toLowerCase()) ? [path] : [];
+        if (!files.length) throw new RoomError(400, `No audio files there (${[...AUDIO].join(" ")}).`);
+        for (const f of files) fresh.push({ target: f, name: nameFor(f) });
+      } else {
+        try {
+          new URL(raw);
+        } catch {
+          throw new RoomError(400, `Not a URL: ${raw}`);
+        }
+        fresh.push({ target: raw, name: String(args.name ?? "").trim().slice(0, 60) || nameFor(raw) });
+      }
+      const known = new Set(items.map((x) => x.target));
+      const added = fresh.filter((x) => !known.has(x.target)).slice(0, MAX_ITEMS2 - items.length);
+      if (!added.length) throw new RoomError(409, known.size >= MAX_ITEMS2 ? `That's ${MAX_ITEMS2} already.` : "Already on the list.");
+      items.push(...added.map((x) => ({ id: `u${randomBytes2(4).toString("hex")}`, ...x })));
+      saveList(ctx.dataDir, items);
+      return { ok: true, added: added.length, first: added[0].name };
+    }),
+    remove: (params, args, ctx) => locked(ctx.dataDir, "list", () => {
+      const items = loadList(ctx.dataDir);
+      const want = String(args.name ?? "").trim().toLowerCase();
+      const i = items.findIndex((x) => x.name.toLowerCase() === want || x.id === args.id);
+      if (i < 0) throw new RoomError(404, `Nothing called "${args.name}" on your list. Stations can't be removed.`);
+      const [gone] = items.splice(i, 1);
+      saveList(ctx.dataDir, items);
+      return { ok: true, removed: gone.name };
+    }),
+    // Pixel Play's playlist, ~/.claude/pixel-play/playlist.txt, added in.
+    import: (params, args, ctx) => locked(ctx.dataDir, "list", async () => {
+      const file = join5(ctx.home ?? "", ".claude", "pixel-play", "playlist.txt");
+      const text = await ctx.read(file);
+      if (text == null) throw new RoomError(404, `No Pixel Play playlist at ${file}.`);
+      const items = loadList(ctx.dataDir);
+      const known = new Set(items.map((x) => x.target));
+      const added = parsePlaylist(text).filter((x) => !known.has(x.target)).slice(0, MAX_ITEMS2 - items.length).map((x) => ({ id: `u${randomBytes2(4).toString("hex")}`, target: x.target, name: x.name || nameFor(x.target) }));
+      items.push(...added);
+      saveList(ctx.dataDir, items);
+      return { ok: true, added: added.length };
+    })
+  },
+  close: stop
+};
+
 // src/rooms/registry.mjs
-var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default].map((p) => [p.type, p]));
+var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default].map((p) => [p.type, p]));
 function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
-  return new Promise((resolve) => {
-    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve(err ? null : String(stdout)));
+  return new Promise((resolve2) => {
+    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve2(err ? null : String(stdout)));
   });
 }
 function parseSetting(st, raw, current) {
@@ -23911,22 +24345,22 @@ function readRooms(dir, providers) {
     return { rooms, invalid };
   }
   for (const name of names.sort()) {
-    const file = join5(dir, name, "room.json");
+    const file = join6(dir, name, "room.json");
     let m;
     try {
-      m = JSON.parse(readFileSync4(file, "utf8"));
+      m = JSON.parse(readFileSync5(file, "utf8"));
     } catch (err) {
-      invalid.push({ dir: join5(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
+      invalid.push({ dir: join6(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
       continue;
     }
     const errors = checkManifest(m, providers);
     if (!errors.length && m.id !== name) errors.push(`id: "${m.id}" but its folder is "${name}"`);
-    if (errors.length) invalid.push({ dir: join5(dir, name), errors });
+    if (errors.length) invalid.push({ dir: join6(dir, name), errors });
     else rooms.push(m);
   }
   return { rooms, invalid };
 }
-function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
+function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () => {
 }, providers = PROVIDERS }) {
   const rooms = /* @__PURE__ */ new Map();
   const invalid = [];
@@ -23934,7 +24368,7 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
     const found = readRooms(dir, providers);
     invalid.push(...found.invalid);
     for (const m of found.rooms) {
-      if (rooms.has(m.id)) invalid.push({ dir: join5(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
+      if (rooms.has(m.id)) invalid.push({ dir: join6(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
       else rooms.set(m.id, m);
     }
   }
@@ -23946,10 +24380,10 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
   const queued = /* @__PURE__ */ new Map();
   const key = (id, pid) => `${id}/${pid}`;
   const hostsOf = (m) => (m.permissions?.hosts ?? []).map((h) => h.toLowerCase());
-  const settingsFile = (id) => join5(dataDir, id, "settings.json");
+  const settingsFile = (id) => join6(dataDir, id, "settings.json");
   function savedSettings(id) {
     try {
-      const data = JSON.parse(readFileSync4(settingsFile(id), "utf8"));
+      const data = JSON.parse(readFileSync5(settingsFile(id), "utf8"));
       return data && typeof data === "object" && !Array.isArray(data) ? data : {};
     } catch {
       return {};
@@ -23980,13 +24414,19 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
     const def = providers[p.type];
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
     return {
-      dataDir: join5(dataDir, m.id),
+      dataDir: join6(dataDir, m.id),
       platform: process.platform,
       run: runCommand,
       read: (file) => readFile(file, "utf8").catch(() => null),
       cpus,
       loadavg,
       now: Date.now,
+      home: homedir(),
+      runtimeDir,
+      spawn: (argv, opts) => spawn(argv[0], argv.slice(1), { stdio: "ignore", ...opts }),
+      connect,
+      fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []) },
+      log: log2,
       // Only headers come from the provider: the time and size limits stay ours.
       fetch: (url, { headers } = {}) => limitedFetch(url, { headers, hosts })
     };
@@ -24045,7 +24485,7 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
       const settings = new Map(Object.entries(m.settings ?? {}));
       if (!settings.has(String(k))) throw new RoomError(404, `${m.name} has no setting ${k}${settings.size ? `. It has ${[...settings.keys()].join(", ")}` : ""}.`);
       const st = settings.get(String(k));
-      await locked(join5(dataDir, id), "settings", () => {
+      await locked(join6(dataDir, id), "settings", () => {
         const saved = savedSettings(id);
         if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
         else {
@@ -24056,8 +24496,8 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
           else saved[k] = v;
         }
         const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
-        writeFileSync4(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
-        renameSync4(tmp, settingsFile(id));
+        writeFileSync5(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
+        renameSync5(tmp, settingsFile(id));
       });
       emitSettings(id);
       if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
@@ -24108,6 +24548,12 @@ function roomRegistry({ dirs, dataDir, emit: emit2, log: log2 = () => {
     close() {
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
+      for (const def of new Set(Object.values(providers))) {
+        try {
+          def.close?.();
+        } catch {
+        }
+      }
     }
   };
 }
@@ -24129,11 +24575,11 @@ if (!token) {
 }
 var configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
 if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
-var configDir = env.SQUAD_CONFIG_DIR || join6(env.XDG_CONFIG_HOME || join6(homedir(), ".config"), "squad-chat");
-var socketDir = env.SQUAD_SOCKET_DIR || join6(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
-mkdirSync5(socketDir, { recursive: true, mode: 448 });
-chmodSync5(socketDir, 448);
-var socketPath = join6(socketDir, `${process.pid}.sock`);
+var configDir = env.SQUAD_CONFIG_DIR || join7(env.XDG_CONFIG_HOME || join7(homedir2(), ".config"), "squad-chat");
+var socketDir = env.SQUAD_SOCKET_DIR || join7(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
+mkdirSync6(socketDir, { recursive: true, mode: 448 });
+chmodSync6(socketDir, 448);
+var socketPath = join7(socketDir, `${process.pid}.sock`);
 rmSync3(socketPath, { force: true });
 var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
@@ -24143,10 +24589,11 @@ var chat = configured ? new Chat({
   log,
   debug: env.SQUAD_DEBUG === "1"
 }) : null;
-var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join6(socketDir, "sessions"), emit });
+var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join7(socketDir, "sessions"), emit });
 var fnRooms = roomRegistry({
-  dirs: [env.SQUAD_ROOMS_DIR, join6(configDir, "rooms")],
-  dataDir: join6(configDir, "room-data"),
+  dirs: [env.SQUAD_ROOMS_DIR, join7(configDir, "rooms")],
+  dataDir: join7(configDir, "room-data"),
+  runtimeDir: socketDir,
   emit,
   log
 });
@@ -24182,7 +24629,7 @@ var chatRoutes = {
   "POST /status": (b) => chat.setStatus(b.status)
 };
 function readBody(req) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     let data = "";
     req.setEncoding("utf8");
     req.on("data", (c) => {
@@ -24192,7 +24639,7 @@ function readBody(req) {
         req.destroy();
       }
     });
-    req.on("end", () => resolve(data));
+    req.on("end", () => resolve2(data));
     req.on("error", reject);
   });
 }
@@ -24241,7 +24688,7 @@ var watch2 = setInterval(() => {
   if (process.ppid !== parent) shutdown(0);
 }, 5e3);
 server.listen(socketPath, () => {
-  chmodSync5(socketPath, 384);
+  chmodSync6(socketPath, 384);
   emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
   board.report();
   fnRooms.report();

@@ -29,7 +29,7 @@ describe("function rooms in the bridge", () => {
   it("reports the shipped rooms, and refuses the ones that don't check out", async () => {
     await b.start();
     const ev = await b.waitFor((e) => e.type === "fnrooms");
-    assert.deepEqual(ev.rooms.map((r) => r.id), ["monitor", "news", "snippet", "stock", "weather"]);
+    assert.deepEqual(ev.rooms.map((r) => r.id), ["lofi", "monitor", "news", "snippet", "stock", "weather"]);
     const why = Object.fromEntries(ev.invalid.map((x) => [x.dir.split("/").at(-1), x.errors.join("; ")]));
     assert.match(why.broken, /no provider called "shell"/);
     assert.match(why.snippet, /already a room/);
@@ -203,7 +203,7 @@ describe("what a provider may fetch", () => {
 
 describe("manifests", () => {
   it("every room squad-chat ships checks out", () => {
-    for (const id of ["snippet", "weather", "news", "monitor", "stock"]) {
+    for (const id of ["snippet", "weather", "news", "monitor", "stock", "lofi"]) {
       const m = JSON.parse(readFileSync(new URL(`../plugins/squad-chat/rooms/${id}/room.json`, import.meta.url), "utf8"));
       assert.deepEqual(checkManifest(m, PROVIDERS), [], id);
     }
@@ -233,6 +233,14 @@ describe("manifests", () => {
     const bad = { ...SNIPPET, layout: { cards: [{ title: "X", when: "a b", body: [] }], inline: [{ type: "nope" }] } };
     const errors = checkManifest(bad, PROVIDERS).join("\n");
     for (const want of [/cards\[0\].when: not a path/, /cards\[0\].body: 1-6 widgets/, /inline\[0\]: unknown widget "nope"/]) assert.match(errors, want);
+  });
+
+  it("holds buttons, a row's action and keys to actions the provider has", () => {
+    const ok = { ...SNIPPET, layout: { cards: [{ title: "X", body: [{ type: "buttons", buttons: [{ label: "✕", action: "delete", args: { name: "x" } }] }, { type: "list", items: "list.items", title: "name", act: { label: "▶", action: "rename", field: "id" } }] }], keys: { d: "delete" } } };
+    assert.deepEqual(checkManifest(ok, PROVIDERS), []);
+    const bad = { ...SNIPPET, layout: { cards: [{ title: "X", body: [{ type: "buttons", buttons: [{ label: "go", action: "launch" }, { label: "way too long a label", action: "Bad Name" }] }, { type: "list", items: "list.items", title: "name", act: { label: "▶", action: "run", field: "id" } }] }], keys: { r: "delete", xx: "add", q: "fly" } } };
+    const errors = checkManifest(bad, PROVIDERS).join("\n");
+    for (const want of [/buttons\[0\]: local-list has no action launch/, /buttons\[1\].label: 1-8/, /buttons\[1\].action: an action's name/, /act: local-list has no action run/, /keys.r: one letter or digit, not r/, /keys.xx/, /keys.q: local-list has no action fly/]) assert.match(errors, want);
   });
 
   it("names what's wrong", () => {

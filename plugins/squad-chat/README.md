@@ -63,15 +63,16 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` | Open the pane on a built-in room |
-| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `all` or `none`, or `+name` / `-name`). Weather, Tech News and Stocks are off until you add them. |
+| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a built-in room |
+| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `all` or `none`, or `+name` / `-name`). Weather, Tech News, Stocks and Lo-fi are off until you add them. |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo` |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to a chat room |
 | `/snippet add <name>` | Save the selection, or else Claude's last code block, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
+| `/lofi play [name]` / `pause` / `next` / `vol <0-100>` / `add <url or path>` / `import` | The Lo-fi room's player and list, from the prompt |
 
-The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/set`, `/usage`, `/git`, `/agents`, `/chat` and `/logout` too.
+The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat` and `/logout` too.
 
 ## Privacy
 

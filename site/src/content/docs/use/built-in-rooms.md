@@ -1,11 +1,11 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Snippets, Monitor, Weather, Tech News and Stocks tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
 ---
 
-Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Three more, **☀ Weather**, **✦ Tech News** and **$ Stocks**, wait until you turn them on with `/chat rooms +weather`, `+news` or `+stock`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
+Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Four more, **☀ Weather**, **✦ Tech News**, **$ Stocks** and **♫ Lo-fi**, wait until you turn them on with `/chat rooms +weather`, `+news`, `+stock` or `+lofi`, since they reach the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
-Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather`, `/chat news` or `/chat stock`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather`, `/chat news`, `/chat stock` or `/chat lofi`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
 ## ◔ Usage
 
@@ -102,6 +102,16 @@ Your watchlist of Taiwan and US stocks and indices, each with today's line, its 
 - **Alerts** toast when a stock moves 5% or more in a day, once each way. `/chat set stock move 3` changes it, and `0` stops them.
 
 A market counts as open only when its quotes are from today and the clock is inside its session, so a holiday reads as closed. It refreshes every minute while you look at it and every 5 otherwise, and asks for nothing more than every 15 minutes while every market is closed.
+
+## ♫ Lo-fi
+
+Music in the background while you work, played the way [Pixel Play](https://github.com/chrisluo5311/Pixel-Play) plays it: through [mpv](https://mpv.io), with YouTube through [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`).
+
+- **Stations** to start: Lofi Girl's YouTube live streams (looked up each time, as their links change) and SomaFM's Groove Salad, Fluid, Lush and Drone Zone.
+- **Your own**: `/lofi add <url>` for a stream or a YouTube link, `/lofi add ~/Music/focus` for a file or a whole folder, and `/lofi import` for Pixel Play's playlist. `/lofi remove <name>` takes one off.
+- **Play** with ▶ on a row, the ⏮ ⏯ ⏹ ⏭ − + buttons, or single keys typed in the room: `p` plays or pauses, `n` next, `b` back, `s` stop, `u` and `d` volume. `/lofi play <name>`, `pause`, `next` and `vol 40` work from the prompt.
+
+Nothing plays or reaches the network until you press play. mpv stops when the session ends, however it ends. If Pixel Play is playing too, the room says so. `/chat-share lofi` tells a chat room what you're listening to.
 
 ## Share a snapshot or hide tabs
 

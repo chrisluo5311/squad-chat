@@ -52,19 +52,22 @@ Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, re
 
 Monitor never touches the network. It reads this computer through a fixed set of commands in squad-chat's own code (on a Mac `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg` and, if you installed it, `macmon`, on Linux files in `/proc` and `/sys` and `nvidia-smi`), with no shell and no sudo. A room's manifest can't name a command. The numbers stay in the bridge's memory, the last two minutes at most, and are drawn, never sent anywhere or shown to Claude.
 
-## What Weather, Tech News and Stocks reach
+## What Weather, Tech News, Stocks and Lo-fi reach
 
-These three are off until you turn them on, and each says where it goes when you do. They ask only for what they show, with no account, key or cookie, and send nothing about you or your session:
+These four are off until you turn them on, and each says where it goes when you do. They ask only for what they show, with no account, key or cookie, and send nothing about you or your session:
 
 | Room | Reaches | Sends |
 | --- | --- | --- |
 | ☀ Weather | `geocoding-api.open-meteo.com`, `api.open-meteo.com`, `air-quality-api.open-meteo.com` | the names of the cities you picked, then their coordinates |
 | ✦ Tech News | `hacker-news.firebaseio.com`, `www.ithome.com.tw`, `www.theverge.com`, `feeds.arstechnica.com`, `techcrunch.com` | requests for the story lists and feeds |
 | $ Stocks | `mis.twse.com.tw`, `query1.finance.yahoo.com` | the symbols on your watchlist |
+| ♫ Lo-fi | `ice2.somafm.com`, `www.youtube.com`, and the streams you add | nothing until you press play, then mpv asks for that stream. YouTube's audio comes from Google's video servers through yt-dlp. |
 
 The bridge holds each room to its own sites, so a room can't reach anywhere else, and a feed you add has to be on one of them. What comes back is cleaned of terminal escapes before it's drawn, and none of it reaches Claude. The settings you pick stay in `~/.config/squad-chat/room-data/<room>/settings.json`, readable only by you.
 
-Only `/chat-share usage|git|agents|snippet|monitor|weather|news|stock`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
+Lo-fi is the one room whose streams don't go through the bridge's host check: mpv fetches them itself, and it plays what you add, from wherever it is. Files and folders you add stay where they are, and the list of them is kept in `room-data/lofi/list.json`. mpv runs only after you press play, and stops when the session ends.
+
+Only `/chat-share usage|git|agents|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 
 ## Abuse limits
 
