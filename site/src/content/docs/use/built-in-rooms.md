@@ -1,11 +1,11 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Snippets, Monitor, Weather and Tech News tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Snippets, Monitor, Weather, Tech News and Stocks tabs that sit before your chat rooms.
 ---
 
-Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Two more, **☀ Weather** and **✦ Tech News**, wait until you turn them on with `/chat rooms +weather` or `+news`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
+Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Three more, **☀ Weather**, **✦ Tech News** and **$ Stocks**, wait until you turn them on with `/chat rooms +weather`, `+news` or `+stock`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
-Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather` or `/chat news`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather`, `/chat news` or `/chat stock`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
 ## ◔ Usage
 
@@ -92,6 +92,16 @@ Pick cities with `/chat set weather cities Taipei, Tokyo` (or `+Osaka`, `-Tokyo`
 ## ✦ Tech News
 
 [Hacker News](https://news.ycombinator.com) and tech feeds (iThome, The Verge, Ars Technica and TechCrunch to start), newest first. **⧉** copies a story's link and **⇪** shares it to a chat room. `/chat set news hn best` picks the Hacker News list (`top`, `best`, `new` or `off`), and `/chat set news feeds -https://techcrunch.com/feed/` drops a feed. A feed has to come from one of the room's sites. It refreshes every 15 minutes while you look at it and every 30 otherwise.
+
+## $ Stocks
+
+Your watchlist of Taiwan and US stocks and indices, each with today's line, its change and whether its market is open. Taiwan prices come from TWSE's own service and everything else from Yahoo Finance, with no key. Prices may be delayed, and none of it is investment advice.
+
+- **Watch** with `/chat set stock watchlist TAIEX, 2330, 0050, AAPL, ^GSPC` (up to 12, or `+2454` and `-NVDA`). A Taiwan code works for listed and OTC stocks alike, `TAIEX` is the index, and anything else is a Yahoo symbol, such as `BRK-B`, `7203.T` or `0700.HK`.
+- **Colors** follow each market by default, red for up in Taiwan and green for up in the US. `/chat set stock colors red-up` or `green-up` makes them all one way.
+- **Alerts** toast when a stock moves 5% or more in a day, once each way. `/chat set stock move 3` changes it, and `0` stops them.
+
+A market counts as open only when its quotes are from today and the clock is inside its session, so a holiday reads as closed. It refreshes every minute while you look at it and every 5 otherwise, and asks for nothing more than every 15 minutes while every market is closed.
 
 ## Share a snapshot or hide tabs
 

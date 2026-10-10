@@ -1495,3 +1495,49 @@ test('a room\'s alerts toast once each, again only after they clear, and never w
   await settle()
   expect(seen.toasts.filter((t) => t === '▦ CPU at 97°C')).toHaveLength(2)   // held back while quiet
 })
+
+// rooms/stock/room.json, as the bridge reports it.
+const STOCK_ROOM = {"schema": 1, "id": "stock", "version": "1.0.0", "name": "Stocks", "icon": "$", "color": "rose", "description": "Your watchlist of Taiwan and US stocks and indices, with today's line. TWSE and Yahoo Finance, no key. Prices may be delayed.", "author": "squad-chat", "permissions": {"hosts": ["mis.twse.com.tw", "query1.finance.yahoo.com"]}, "settings": {"watchlist": {"type": "list", "label": "Watchlist", "default": ["TAIEX", "2330", "0050", "^GSPC", "AAPL", "NVDA"], "max": 12}, "colors": {"type": "enum", "label": "Up colors", "values": ["market", "red-up", "green-up"], "default": "market"}, "move": {"type": "int", "label": "Alert at % move", "default": 5, "min": 0, "max": 20}}, "providers": [{"id": "q", "type": "quotes", "params": {"watchlist": "$settings.watchlist", "colors": "$settings.colors", "move": "$settings.move"}, "interval": {"visible": "1m", "background": "5m"}}], "layout": {"cards": [{"title": "WATCHLIST", "meta": "{q.markets} · {q.updated}", "body": [{"type": "table", "items": "q.quotes", "columns": [{"field": "arrow", "width": 2, "colorFrom": "color"}, {"field": "symbol", "width": 7}, {"field": "name", "width": 14}, {"field": "priceText", "width": 10, "right": true}, {"field": "pctText", "width": 8, "right": true, "colorFrom": "color"}, {"field": "spark", "colorFrom": "color"}], "empty": "Nothing to watch: /set watchlist 2330, AAPL"}, {"type": "text", "text": "{q.note}"}]}], "inline": {"type": "table", "items": "q.quotes", "columns": [{"field": "arrow", "width": 2, "colorFrom": "color"}, {"field": "symbol", "width": 7}, {"field": "priceText", "width": 10, "right": true}, {"field": "pctText", "width": 8, "right": true, "colorFrom": "color"}, {"field": "name"}], "max": 4, "empty": "Nothing to watch: /set watchlist 2330, AAPL"}, "band": "{q.band}", "hint": "/set watchlist +2454 · /set colors green-up · /set move 3 · r", "placeholder": "/set watchlist +TSLA · /set move 0 · r · /help"}}
+const Q = {
+  quotes: [
+    { symbol: '2330', name: '台積電', priceText: '2,550', pctText: '-1.35%', arrow: '▼', color: 'leaf', spark: '▂▄▇▅', when: 'closed' },
+    { symbol: 'AAPL', name: 'Apple Inc.', priceText: '335.10', pctText: '-1.56%', arrow: '▼', color: 'rose', spark: '▃▅▆█', when: 'open' },
+    { symbol: '^GSPC', name: 'S&P 500', priceText: '7,807.46', pctText: '+0.54%', arrow: '▲', color: 'leaf', spark: '▁▄▆█', when: 'open' },
+  ],
+  count: 3, markets: 'TW closed · others open', updated: '22:05', anyOpen: true,
+  band: '2330 2,550 ▼1.35% · AAPL 335.10 ▼1.56% · ^GSPC 7,807.46 ▲0.54%',
+  note: 'Prices may be delayed. Not investment advice.', alerts: [],
+}
+
+test('Stock room: stays off until asked for; then a watchlist colored by each row', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [SNIPPET_ROOM, STOCK_ROOM], invalid: [] })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms +stock' })
+  expect(logs.at(-1)).toBe('Stocks reaches mis.twse.com.tw, query1.finance.yahoo.com.')
+  await $.command.run({ command: 'chat', args: 'stock' })
+  bridge.emit({ type: 'fnroom', id: 'stock', provider: 'q', data: Q, at: Date.now() })
+  await settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  for (const text of ['WATCHLIST', 'TW closed · others open · 22:05', '台積電', '2,550', 'Apple Inc.', '7,807.46', 'Prices may be delayed. Not investment advice.']) {
+    expect(await ui.find({ type: 'Text', text })).toBeDefined()
+  }
+  // Each row's change in its own color: down is green in Taiwan, red in the US.
+  expect((await ui.find({ type: 'Text', text: '-1.35%' }))?.props.color).toBe('#6CC070')
+  expect((await ui.find({ type: 'Text', text: '-1.56%' }))?.props.color).toBe('#E58FA8')
+  expect((await ui.find({ type: 'Text', text: '▁▄▆█' }))?.props.color).toBe('#6CC070')
+  await ui.unmount()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '$ Stocks' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: Q.band })).toBeDefined()
+  await band.unmount()
+
+  await $.command.run({ command: 'chat-share', args: 'stock' })
+  await $.command.run({ command: 'chat', args: 'set stock' })
+  expect(logs.slice(-5)).toEqual(['Stocks settings:', '  watchlist: TAIEX, 2330, 0050, ^GSPC, AAPL, NVDA', '  colors: market', '  move: 5', 'Change one with /chat set stock <setting> <value>.'])
+})

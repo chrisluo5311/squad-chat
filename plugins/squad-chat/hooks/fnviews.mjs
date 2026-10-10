@@ -71,9 +71,12 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     items.slice(0, n).forEach((item, i) => {
       const k = `${key}-${String(item?.id ?? i)}`;
       if (b.type === "table") {
+        // A column's color: fixed, or named by the row ("colorFrom": a
+        // field holding one of the palette's names, as a quote's up or down).
+        const tint = (c) => color(c.colorFrom ? lookup(item, c.colorFrom) : null, color(c.color));
         nodes.push(line(els, k, b.columns.map((c, j) => (j === b.columns.length - 1 && !c.width
-          ? { text: show(lookup(item, c.field)), grow: true, color: color(c.color) }
-          : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: color(c.color) }))));
+          ? { text: show(lookup(item, c.field)), grow: true, color: tint(c) }
+          : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) }))));
         return;
       }
       const title = show(lookup(item, b.title));

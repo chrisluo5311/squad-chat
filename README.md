@@ -212,9 +212,9 @@ Until a server is set, the pane says so and shows these steps.
 
 ### Built-in rooms
 
-Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Two more, **☀ Weather** and **✦ Tech News**, wait until you turn them on with `/chat rooms +weather` or `+news`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
+Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Three more, **☀ Weather**, **✦ Tech News** and **$ Stocks**, wait until you turn them on with `/chat rooms +weather`, `+news` or `+stock`, since they fetch from the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
-Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather` or `/chat news`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
+Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather`, `/chat news` or `/chat stock`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
 #### ◔ Usage
 
@@ -308,6 +308,16 @@ Pick cities with `/chat set weather cities Taipei, Tokyo` (or `+Osaka`, `-Tokyo`
 
 [Hacker News](https://news.ycombinator.com) and tech feeds (iThome, The Verge, Ars Technica and TechCrunch to start), newest first. **⧉** copies a story's link and **⇪** shares it to a chat room. `/chat set news hn best` picks the Hacker News list (`top`, `best`, `new` or `off`), and `/chat set news feeds -https://techcrunch.com/feed/` drops a feed. A feed has to come from one of the room's sites. It refreshes every 15 minutes while you look at it and every 30 otherwise.
 
+#### $ Stocks
+
+Your watchlist of Taiwan and US stocks and indices, each with today's line, its change and whether its market is open. Taiwan prices come from TWSE's own service and everything else from Yahoo Finance, with no key. Prices may be delayed, and none of it is investment advice.
+
+* **Watch** with `/chat set stock watchlist TAIEX, 2330, 0050, AAPL, ^GSPC` (up to 12, or `+2454` and `-NVDA`). A Taiwan code works for listed and OTC stocks alike, `TAIEX` is the index, and anything else is a Yahoo symbol, such as `BRK-B`, `7203.T` or `0700.HK`.
+* **Colors** follow each market by default, red for up in Taiwan and green for up in the US. `/chat set stock colors red-up` or `green-up` makes them all one way.
+* **Alerts** toast when a stock moves 5% or more in a day, once each way. `/chat set stock move 3` changes it, and `0` stops them.
+
+A market counts as open only when its quotes are from today and the clock is inside its session, so a holiday reads as closed. It refreshes every minute while you look at it and every 5 otherwise, and asks for nothing more than every 15 minutes while every market is closed.
+
 To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`. `/chat rooms usage,git` picks which tabs you want, `/chat rooms -snippet` or `+snippet` drops or brings back one, and `/chat rooms none` hides them all.
 
 ### Commands
@@ -331,8 +341,8 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. |
 | `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the Snippets room |

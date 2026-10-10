@@ -32,8 +32,9 @@ import openMeteo from "./providers/open-meteo.mjs";
 import hn from "./providers/hn.mjs";
 import rss from "./providers/rss.mjs";
 import sysinfo from "./providers/sysinfo.mjs";
+import quotes from "./providers/quotes.mjs";
 
-export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysinfo].map((p) => [p.type, p]));
+export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysinfo, quotes].map((p) => [p.type, p]));
 
 // What a provider runs on this computer: a command its own code names (a
 // manifest can't name one), with no shell, a time limit and an output limit.

@@ -11,7 +11,7 @@
       "name": "squad-chat",
       "source": "./plugins/squad-chat",
       "description": "Claude's cooking. Chat with your squad. Friends online, right beside your Claude Code session. Zero tokens, zero leaks to Claude.",
-      "version": "0.12.0"
+      "version": "0.13.0"
     }
   ]
 }
