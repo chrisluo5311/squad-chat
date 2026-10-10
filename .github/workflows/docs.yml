@@ -8,11 +8,13 @@ on:
       - docs/assets/**
       - docs/screenshots/**
       - docs/ARCHITECTURE.md
+      - rooms/**
       - .github/workflows/docs.yml
   pull_request:
     paths:
       - site/**
       - docs/ARCHITECTURE.md
+      - rooms/**
       - .github/workflows/docs.yml
   workflow_dispatch:
 

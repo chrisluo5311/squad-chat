@@ -4396,8 +4396,8 @@ var require_RealtimeChannel = __commonJS({
       }
       /** @internal */
       _notThisChannelEvent(event, ref) {
-        const { close, error, leave, join: join8 } = constants_1.CHANNEL_EVENTS;
-        const events = [close, error, leave, join8];
+        const { close, error, leave, join: join9 } = constants_1.CHANNEL_EVENTS;
+        const events = [close, error, leave, join9];
         return ref && events.includes(event) && ref !== this.joinPush.ref;
       }
       /** @internal */
@@ -4611,26 +4611,26 @@ var require_RealtimeClient = __commonJS({
     var RECONNECT_INTERVALS = [1e3, 2e3, 5e3, 1e4];
     var DEFAULT_RECONNECT_FALLBACK = 1e4;
     function createMemorySessionStorage() {
-      const store = /* @__PURE__ */ new Map();
+      const store2 = /* @__PURE__ */ new Map();
       return {
         get length() {
-          return store.size;
+          return store2.size;
         },
         clear() {
-          store.clear();
+          store2.clear();
         },
         getItem(key) {
-          return store.has(key) ? store.get(key) : null;
+          return store2.has(key) ? store2.get(key) : null;
         },
         key(index) {
           var _a;
-          return (_a = Array.from(store.keys())[index]) !== null && _a !== void 0 ? _a : null;
+          return (_a = Array.from(store2.keys())[index]) !== null && _a !== void 0 ? _a : null;
         },
         removeItem(key) {
-          store.delete(key);
+          store2.delete(key);
         },
         setItem(key, value) {
-          store.set(key, String(value));
+          store2.set(key, String(value));
         }
       };
     }
@@ -5902,7 +5902,7 @@ var require_helpers = __commonJS({
       crypto.getRandomValues(array);
       return Array.from(array, dec2hex).join("");
     }
-    async function sha256(randomString) {
+    async function sha2562(randomString) {
       const encoder = new TextEncoder();
       const encodedData = encoder.encode(randomString);
       const hash = await crypto.subtle.digest("SHA-256", encodedData);
@@ -5915,7 +5915,7 @@ var require_helpers = __commonJS({
         console.warn("WebCrypto API is not supported. Code challenge method will default to use plain instead of sha256.");
         return verifier;
       }
-      const hashed = await sha256(verifier);
+      const hashed = await sha2562(verifier);
       return btoa(hashed).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     }
     var PKCE_FLOW_ID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
@@ -7401,16 +7401,16 @@ var require_local_storage = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.memoryLocalStorageAdapter = memoryLocalStorageAdapter;
-    function memoryLocalStorageAdapter(store = {}) {
+    function memoryLocalStorageAdapter(store2 = {}) {
       return {
         getItem: (key) => {
-          return store[key] || null;
+          return store2[key] || null;
         },
         setItem: (key, value) => {
-          store[key] = value;
+          store2[key] = value;
         },
         removeItem: (key) => {
-          delete store[key];
+          delete store2[key];
         }
       };
     }
@@ -7645,7 +7645,7 @@ var require_ethereum = __commonJS({
     }
     function createSiweMessage(parameters) {
       var _a;
-      const { chainId, domain, expirationTime, issuedAt = /* @__PURE__ */ new Date(), nonce, notBefore, requestId, resources, scheme, uri, version: version3 } = parameters;
+      const { chainId, domain, expirationTime, issuedAt = /* @__PURE__ */ new Date(), nonce, notBefore, requestId, resources, scheme, uri, version: version4 } = parameters;
       {
         if (!Number.isInteger(chainId))
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "chainId". Chain ID must be a EIP-155 chain ID. Provided value: ${chainId}`);
@@ -7655,8 +7655,8 @@ var require_ethereum = __commonJS({
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "nonce". Nonce must be at least 8 characters. Provided value: ${nonce}`);
         if (!uri)
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "uri". URI must be provided.`);
-        if (version3 !== "1")
-          throw new Error(`@supabase/auth-js: Invalid SIWE message field "version". Version must be '1'. Provided value: ${version3}`);
+        if (version4 !== "1")
+          throw new Error(`@supabase/auth-js: Invalid SIWE message field "version". Version must be '1'. Provided value: ${version4}`);
         if ((_a = parameters.statement) === null || _a === void 0 ? void 0 : _a.includes("\n"))
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "statement". Statement must not include '\\n'. Provided value: ${parameters.statement}`);
       }
@@ -7669,7 +7669,7 @@ ${address}
 
 ${statement}`;
       let suffix = `URI: ${uri}
-Version: ${version3}
+Version: ${version4}
 Chain ID: ${chainId}${nonce ? `
 Nonce: ${nonce}` : ""}
 Issued At: ${issuedAt.toISOString()}`;
@@ -13906,9 +13906,9 @@ var require_main3 = __commonJS({
 
 // src/bridge.mjs
 import { createServer } from "node:http";
-import { mkdirSync as mkdirSync6, rmSync as rmSync3, chmodSync as chmodSync6 } from "node:fs";
+import { mkdirSync as mkdirSync7, rmSync as rmSync4, chmodSync as chmodSync7, readFileSync as readFileSync7 } from "node:fs";
 import { homedir as homedir2, tmpdir } from "node:os";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 
 // node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -22912,6 +22912,12 @@ function settingError(st, value, hosts = []) {
       return "unknown setting";
   }
 }
+function compareVersions(a, b) {
+  const x = String(a).split(".").map(Number);
+  const y = String(b).split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0) ? -1 : 1;
+  return 0;
+}
 function parseInterval(s) {
   if (s == null) return null;
   const m = /^(\d+)(ms|s|m|h)$/.exec(String(s));
@@ -22984,6 +22990,8 @@ function checkManifest(m, providers) {
   if (!(typeof m.id === "string" && ID2.test(m.id))) errors.push("id: 2-24 lowercase letters, digits or -, starting with a letter");
   else if (RESERVED.has(m.id)) errors.push(`id: "${m.id}" is taken`);
   if (!(typeof m.version === "string" && VERSION.test(m.version))) errors.push("version: like 1.0.0");
+  if (m.minSquadChat != null && !(typeof m.minSquadChat === "string" && VERSION.test(m.minSquadChat))) errors.push("minSquadChat: like 0.15.0");
+  if (m.author != null && !str(m.author, 60)) errors.push("author: 1-60 characters");
   if (!str(m.name, 20)) errors.push("name: 1-20 characters");
   if (!(typeof m.icon === "string" && [...m.icon].length === 1)) errors.push("icon: one character");
   if (!COLORS.includes(m.color)) errors.push(`color: one of ${COLORS.join(", ")}`);
@@ -24361,17 +24369,31 @@ function readRooms(dir, providers) {
   return { rooms, invalid };
 }
 function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () => {
-}, providers = PROVIDERS }) {
-  const rooms = /* @__PURE__ */ new Map();
-  const invalid = [];
-  for (const dir of dirs.filter(Boolean)) {
-    const found = readRooms(dir, providers);
-    invalid.push(...found.invalid);
-    for (const m of found.rooms) {
-      if (rooms.has(m.id)) invalid.push({ dir: join6(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
-      else rooms.set(m.id, m);
+}, providers = PROVIDERS, version: version4 = null }) {
+  let rooms = /* @__PURE__ */ new Map();
+  let invalid = [];
+  let origin = /* @__PURE__ */ new Map();
+  function load2() {
+    const next = /* @__PURE__ */ new Map();
+    const bad = [];
+    const from = /* @__PURE__ */ new Map();
+    for (const dir of dirs.filter(Boolean)) {
+      const found = readRooms(dir, providers);
+      bad.push(...found.invalid);
+      for (const m of found.rooms) {
+        if (next.has(m.id)) bad.push({ dir: join6(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
+        else if (version4 && m.minSquadChat && compareVersions(m.minSquadChat, version4) > 0) bad.push({ dir: join6(dir, m.id), errors: [`needs squad-chat ${m.minSquadChat} or newer (this is ${version4})`] });
+        else {
+          next.set(m.id, m);
+          from.set(m.id, dir);
+        }
+      }
     }
+    rooms = next;
+    invalid = bad;
+    origin = from;
   }
+  load2();
   let enabled = /* @__PURE__ */ new Set();
   let shown = null;
   const last = /* @__PURE__ */ new Map();
@@ -24503,6 +24525,24 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };
     },
+    // The rooms' folders read again (a room installed or removed): new rooms
+    // with a tab start, gone ones stop.
+    // Every room with a tab runs again, so an updated one shows its new self.
+    reload() {
+      const wasEnabled = [...enabled];
+      const wasShown = shown;
+      load2();
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      enabled = /* @__PURE__ */ new Set();
+      this.report();
+      this.setVisible({ enabled: wasEnabled, shown: wasShown });
+    },
+    // Where a room came from: the first folder (shipped) or the second
+    // (installed on this computer), and its manifest.
+    source(id) {
+      return rooms.has(id) ? { manifest: rooms.get(id), dir: origin.get(id), shipped: origin.get(id) === dirs.filter(Boolean)[0] } : null;
+    },
     // Which rooms have tabs, and which is on show. A room just enabled, or
     // just shown with data older than its visible interval, runs now.
     setVisible({ enabled: list = [], shown: now = null } = {}) {
@@ -24558,6 +24598,137 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
   };
 }
 
+// src/rooms/store.mjs
+import { createHash } from "node:crypto";
+import { mkdirSync as mkdirSync6, chmodSync as chmodSync6, writeFileSync as writeFileSync6, renameSync as renameSync6, rmSync as rmSync3, readFileSync as readFileSync6 } from "node:fs";
+import { join as join7 } from "node:path";
+var DEFAULT_STORE = "https://raw.githubusercontent.com/chrisluo5311/squad-chat/main/rooms";
+var INDEX_TTL_MS = 10 * 6e4;
+var PREVIEW_TTL_MS = 10 * 6e4;
+var ID3 = /^[a-z][a-z0-9-]{1,23}$/;
+var SHA = /^[0-9a-f]{64}$/;
+var sha256 = (text) => createHash("sha256").update(text).digest("hex");
+function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, registry, providers, version: version4, fetch: get3 = limitedFetch }) {
+  const base = String(url).replace(/\/+$/, "");
+  const hosts = [new URL(base).hostname.toLowerCase()];
+  let index = null;
+  const pending = /* @__PURE__ */ new Map();
+  async function fetchText(path) {
+    const r = await get3(`${base}/${path}`, { hosts });
+    if (r.status === 404) throw new RoomError(404, `the store has no ${path}`);
+    if (!r.ok) throw new RoomError(502, `the store answered ${r.status} for ${path}`);
+    return r.text;
+  }
+  async function loadIndex(force = false) {
+    if (!force && index && Date.now() - index.at < INDEX_TTL_MS) return index.rooms;
+    let data;
+    try {
+      data = JSON.parse(await fetchText("index.json"));
+    } catch (err) {
+      if (err instanceof RoomError) throw err;
+      throw new RoomError(502, "the store's index isn't JSON");
+    }
+    if (!Array.isArray(data?.rooms)) throw new RoomError(502, "the store's index has no rooms");
+    const rooms = clean(data.rooms).filter((r) => r && ID3.test(r.id ?? "") && SHA.test(r.sha256 ?? "") && typeof r.version === "string");
+    index = { at: Date.now(), rooms };
+    return rooms;
+  }
+  const installedManifest = (id) => {
+    const src = registry.source(id);
+    if (src && !src.shipped) return src.manifest;
+    try {
+      return JSON.parse(readFileSync6(join7(configDir2, "rooms", id, "room.json"), "utf8"));
+    } catch {
+      return null;
+    }
+  };
+  const hostsOf = (m) => [...m?.permissions?.hosts ?? []].map((h) => h.toLowerCase()).sort();
+  function describe(r) {
+    const shipped = registry.source(r.id)?.shipped ?? false;
+    const mine = shipped ? null : installedManifest(r.id);
+    return {
+      id: r.id,
+      name: String(r.name ?? r.id).slice(0, 20),
+      icon: String(r.icon ?? "\xB7").slice(0, 2),
+      version: r.version,
+      description: String(r.description ?? "").slice(0, 200),
+      author: String(r.author ?? "").slice(0, 60),
+      hosts: Array.isArray(r.hosts) ? r.hosts.map(String) : [],
+      shipped,
+      installed: mine?.version ?? null,
+      update: !!mine?.version && compareVersions(r.version, mine.version) > 0,
+      compatible: !r.minSquadChat || !version4 || compareVersions(r.minSquadChat, version4) <= 0,
+      minSquadChat: r.minSquadChat ?? null
+    };
+  }
+  return {
+    async list({ refresh = false } = {}) {
+      return { rooms: (await loadIndex(refresh)).map(describe), version: version4 };
+    },
+    // Fetches and checks a room, and holds that copy for install. Says what
+    // it would reach, and whether that changed from the installed version.
+    async preview(id) {
+      if (!ID3.test(String(id ?? ""))) throw new RoomError(400, `not a room id: ${id}`);
+      const entry = (await loadIndex()).find((r) => r.id === id) ?? (await loadIndex(true)).find((r) => r.id === id);
+      if (!entry) throw new RoomError(404, `The store has no room called ${id}.`);
+      const info = describe(entry);
+      if (info.shipped) throw new RoomError(409, `${info.name} comes with squad-chat: /chat rooms +${id} shows it.`);
+      if (!info.compatible) throw new RoomError(409, `${info.name} needs squad-chat ${entry.minSquadChat} or newer. Update squad-chat first.`);
+      const text = await fetchText(`${id}/room.json`);
+      const sha = sha256(text);
+      if (sha !== entry.sha256) throw new RoomError(502, `${id}/room.json doesn't match the store's index. Try again later.`);
+      let manifest;
+      try {
+        manifest = JSON.parse(text);
+      } catch {
+        throw new RoomError(502, `${id}/room.json isn't JSON`);
+      }
+      const errors = checkManifest(manifest, providers);
+      if (manifest.id !== id) errors.push(`id: "${manifest.id}" but the store lists "${id}"`);
+      if (manifest.version !== entry.version) errors.push(`version: ${manifest.version} but the store lists ${entry.version}`);
+      if (manifest.minSquadChat && version4 && compareVersions(manifest.minSquadChat, version4) > 0) errors.push(`needs squad-chat ${manifest.minSquadChat} or newer`);
+      if (errors.length) throw new RoomError(422, `${id} doesn't check out: ${errors.slice(0, 3).join("; ")}`);
+      pending.set(id, { text, manifest, sha, at: Date.now() });
+      const was = installedManifest(id);
+      return {
+        ...info,
+        sha256: sha,
+        hosts: hostsOf(manifest),
+        settings: Object.keys(manifest.settings ?? {}),
+        providers: manifest.providers.map((p) => p.type),
+        hostsChanged: !!was && JSON.stringify(hostsOf(was)) !== JSON.stringify(hostsOf(manifest)),
+        newHosts: was ? hostsOf(manifest).filter((h) => !hostsOf(was).includes(h)) : hostsOf(manifest)
+      };
+    },
+    // Writes the copy the preview checked (by its hash), then reloads.
+    install(id, sha) {
+      const p = pending.get(id);
+      if (!p || p.sha !== sha || Date.now() - p.at > PREVIEW_TTL_MS) throw new RoomError(409, "Look at it again first: /chat install " + id);
+      pending.delete(id);
+      const dir = join7(configDir2, "rooms", id);
+      mkdirSync6(dir, { recursive: true, mode: 448 });
+      chmodSync6(dir, 448);
+      const file = join7(dir, "room.json");
+      const tmp = `${file}.${process.pid}.tmp`;
+      writeFileSync6(tmp, p.text, { mode: 384 });
+      renameSync6(tmp, file);
+      registry.reload();
+      return { ok: true, id, name: p.manifest.name, version: p.manifest.version, hosts: hostsOf(p.manifest) };
+    },
+    // Removes an installed room, its settings and its data. Shipped rooms stay.
+    uninstall(id) {
+      const src = registry.source(id);
+      if (src?.shipped) throw new RoomError(409, `${src.manifest.name} comes with squad-chat. /chat rooms -${id} hides it.`);
+      if (!ID3.test(String(id ?? "")) || !installedManifest(id)) throw new RoomError(404, `No room called ${id} is installed.`);
+      const name = installedManifest(id)?.name ?? id;
+      rmSync3(join7(configDir2, "rooms", id), { recursive: true, force: true });
+      rmSync3(join7(dataDir, id), { recursive: true, force: true });
+      registry.reload();
+      return { ok: true, id, name };
+    }
+  };
+}
+
 // src/bridge.mjs
 var MAX_BODY2 = 64 * 1024;
 var env = process.env;
@@ -24575,12 +24746,12 @@ if (!token) {
 }
 var configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
 if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
-var configDir = env.SQUAD_CONFIG_DIR || join7(env.XDG_CONFIG_HOME || join7(homedir2(), ".config"), "squad-chat");
-var socketDir = env.SQUAD_SOCKET_DIR || join7(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
-mkdirSync6(socketDir, { recursive: true, mode: 448 });
-chmodSync6(socketDir, 448);
-var socketPath = join7(socketDir, `${process.pid}.sock`);
-rmSync3(socketPath, { force: true });
+var configDir = env.SQUAD_CONFIG_DIR || join8(env.XDG_CONFIG_HOME || join8(homedir2(), ".config"), "squad-chat");
+var socketDir = env.SQUAD_SOCKET_DIR || join8(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
+mkdirSync7(socketDir, { recursive: true, mode: 448 });
+chmodSync7(socketDir, 448);
+var socketPath = join8(socketDir, `${process.pid}.sock`);
+rmSync4(socketPath, { force: true });
 var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
   key: env.SQUAD_SUPABASE_KEY,
@@ -24589,13 +24760,29 @@ var chat = configured ? new Chat({
   log,
   debug: env.SQUAD_DEBUG === "1"
 }) : null;
-var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join7(socketDir, "sessions"), emit });
+var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join8(socketDir, "sessions"), emit });
+var version3 = env.SQUAD_VERSION || null;
+if (!version3) {
+  try {
+    version3 = JSON.parse(readFileSync7(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version;
+  } catch {
+  }
+}
 var fnRooms = roomRegistry({
-  dirs: [env.SQUAD_ROOMS_DIR, join7(configDir, "rooms")],
-  dataDir: join7(configDir, "room-data"),
+  version: version3,
+  dirs: [env.SQUAD_ROOMS_DIR, join8(configDir, "rooms")],
+  dataDir: join8(configDir, "room-data"),
   runtimeDir: socketDir,
   emit,
   log
+});
+var store = roomStore({
+  url: env.SQUAD_ROOM_STORE || DEFAULT_STORE,
+  configDir,
+  dataDir: join8(configDir, "room-data"),
+  registry: fnRooms,
+  providers: PROVIDERS,
+  version: version3
 });
 var localRoutes = {
   "GET /ping": () => ({ ok: true, pid: process.pid }),
@@ -24605,6 +24792,10 @@ var localRoutes = {
   "POST /fnroom/refresh": (b) => fnRooms.refresh(b.room),
   "POST /fnroom/action": (b) => fnRooms.action(b),
   "POST /fnroom/settings": (b) => fnRooms.setSetting(b),
+  "POST /store/list": (b) => store.list({ refresh: !!b.refresh }),
+  "POST /store/preview": (b) => store.preview(b.id),
+  "POST /store/install": (b) => store.install(b.id, b.sha256),
+  "POST /store/uninstall": (b) => store.uninstall(b.id),
   "POST /shutdown": () => {
     setTimeout(() => shutdown(0), 0);
     return { ok: true };
@@ -24673,7 +24864,7 @@ async function shutdown(code) {
   stopping = true;
   clearInterval(watch2);
   server.close();
-  rmSync3(socketPath, { force: true });
+  rmSync4(socketPath, { force: true });
   board.close();
   fnRooms.close();
   await chat?.shutdown().catch(() => {
@@ -24688,7 +24879,7 @@ var watch2 = setInterval(() => {
   if (process.ppid !== parent) shutdown(0);
 }, 5e3);
 server.listen(socketPath, () => {
-  chmodSync6(socketPath, 384);
+  chmodSync7(socketPath, 384);
   emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
   board.report();
   fnRooms.report();

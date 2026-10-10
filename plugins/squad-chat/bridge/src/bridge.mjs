@@ -16,18 +16,21 @@
 //   SQUAD_SOCKET_DIR     where the socket goes (default /tmp/squad-chat-<uid>)
 //   SQUAD_SESSIONS_DIR   the sessions' heartbeats (default <socket dir>/sessions)
 //   SQUAD_ROOMS_DIR      the function rooms squad-chat ships (the plugin's rooms/)
+//   SQUAD_ROOM_STORE     where the room store lives (default: this repository's rooms/)
+//   SQUAD_VERSION        squad-chat's version (default: the plugin's plugin.json)
 //   SQUAD_DEBUG=1        log Realtime traffic to stderr
 //   SQUAD_REFRESH_MS     how often to refresh friends and rooms (tests)
 //
 // Built into dist/bridge.mjs (one file, dependencies bundled): npm run build
 
 import { createServer } from "node:http";
-import { mkdirSync, rmSync, chmodSync } from "node:fs";
+import { mkdirSync, rmSync, chmodSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chat, HttpError } from "./chat.mjs";
 import { sessionBoard } from "./sessions.mjs";
-import { roomRegistry } from "./rooms/registry.mjs";
+import { roomRegistry, PROVIDERS } from "./rooms/registry.mjs";
+import { roomStore, DEFAULT_STORE } from "./rooms/store.mjs";
 
 const MAX_BODY = 64 * 1024;   // a snippet is up to 8000 characters
 
@@ -70,8 +73,16 @@ const chat = configured ? new Chat({
 
 const board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join(socketDir, "sessions"), emit });
 
+// squad-chat's version, for rooms that need a newer one. dist/ and src/ both
+// sit two folders below the plugin's root.
+let version = env.SQUAD_VERSION || null;
+if (!version) {
+  try { version = JSON.parse(readFileSync(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version; } catch { /* unknown: no room is refused for it */ }
+}
+
 // Function rooms: shipped ones first, then any installed on this computer.
 const fnRooms = roomRegistry({
+  version,
   dirs: [env.SQUAD_ROOMS_DIR, join(configDir, "rooms")],
   dataDir: join(configDir, "room-data"),
   runtimeDir: socketDir,
@@ -81,6 +92,15 @@ const fnRooms = roomRegistry({
 
 // ------------------------------------------------------------ control API
 
+const store = roomStore({
+  url: env.SQUAD_ROOM_STORE || DEFAULT_STORE,
+  configDir,
+  dataDir: join(configDir, "room-data"),
+  registry: fnRooms,
+  providers: PROVIDERS,
+  version,
+});
+
 const localRoutes = {
   "GET /ping": () => ({ ok: true, pid: process.pid }),
   "POST /sessions/beat": (b) => (board.beat(b), { ok: true }),
@@ -89,6 +109,10 @@ const localRoutes = {
   "POST /fnroom/refresh": (b) => fnRooms.refresh(b.room),
   "POST /fnroom/action": (b) => fnRooms.action(b),
   "POST /fnroom/settings": (b) => fnRooms.setSetting(b),
+  "POST /store/list": (b) => store.list({ refresh: !!b.refresh }),
+  "POST /store/preview": (b) => store.preview(b.id),
+  "POST /store/install": (b) => store.install(b.id, b.sha256),
+  "POST /store/uninstall": (b) => store.uninstall(b.id),
   "POST /shutdown": () => { setTimeout(() => shutdown(0), 0); return { ok: true }; },
 };
 

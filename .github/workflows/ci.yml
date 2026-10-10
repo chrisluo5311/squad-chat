@@ -27,6 +27,8 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code@2.1.292
       - name: Validate the plugin
         run: claude plugin validate ./plugins/squad-chat
+      - name: Room store rooms check out, and the index is up to date
+        run: node rooms/build-index.mjs --check
       - name: Pane tests
         run: claude plugin test ./plugins/squad-chat
 

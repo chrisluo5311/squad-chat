@@ -69,6 +69,12 @@ Lo-fi is the one room whose streams don't go through the bridge's host check: mp
 
 Only `/chat-share usage|git|agents|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 
+## The room store
+
+`/chat store`, `/chat install` and `/chat update` fetch the store's index and rooms from `raw.githubusercontent.com` (squad-chat's own repository), and nothing else happens until you ask. A room is one JSON file that can use only the providers squad-chat ships, reach only the hosts it names, and draw only with the pane's widgets. So installing one never runs its author's code, and the install shows the hosts before you confirm. Each file must match the sha256 in the store's index, check out as the rooms squad-chat ships do, and work with your version, or it isn't installed. What's written is the copy you looked at. Installed rooms live in `~/.config/squad-chat/rooms/`, and `/chat uninstall` removes one with its settings and data.
+
+The hash only catches a download that went wrong: the index and the rooms come from the same place. What keeps a room in its lane is what a manifest can't do.
+
 ## Abuse limits
 
 | Limit | Value |

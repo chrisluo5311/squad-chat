@@ -65,6 +65,7 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
 | `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a built-in room |
 | `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `all` or `none`, or `+name` / `-name`). Weather, Tech News, Stocks and Lo-fi are off until you add them. |
+| `/chat store` / `install <id>` / `update [id]` / `uninstall <id>` | Rooms from the room store: list, install (a look first), update, remove |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo` |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to a chat room |
 | `/snippet add <name>` | Save the selection, or else Claude's last code block, to the Snippets room |

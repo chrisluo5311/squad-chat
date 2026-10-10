@@ -3,3 +3,4 @@ dist/
 .astro/
 public/media/
 src/content/docs/reference/architecture.md
+src/content/docs/rooms/store.md

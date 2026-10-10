@@ -1626,3 +1626,89 @@ test('/lofi plays, adds, removes and imports', SLOW, async ($, on) => {
   await $.command.run({ command: 'lofi', args: 'dance' })
   expect(logs.at(-1)).toMatch(/^Use \/lofi play \[name\]/)
 })
+
+// ---------------------------------------------------------------- the room store
+
+const STORE_LIST = [
+  { id: 'dev-blogs', name: 'Dev Blogs', icon: '✎', version: '1.0.0', description: 'New posts from the Cloudflare, Deno and Node.js blogs, newest first.', author: 'squad-chat', hosts: ['blog.cloudflare.com', 'deno.com', 'nodejs.org'], shipped: false, installed: null, update: false, compatible: true, minSquadChat: '0.15.0' },
+  { id: 'us-tech', name: 'US Tech Stocks', icon: '◆', version: '1.1.0', description: 'The big US tech names.', author: 'squad-chat', hosts: ['query1.finance.yahoo.com'], shipped: false, installed: '1.0.0', update: true, compatible: true, minSquadChat: '0.15.0' },
+  { id: 'future-room', name: 'Future', icon: '✦', version: '1.0.0', description: 'Later.', author: 'x', hosts: [], shipped: false, installed: null, update: false, compatible: false, minSquadChat: '9.0.0' },
+]
+const PREVIEW = { ...STORE_LIST[0], sha256: 'a'.repeat(64), settings: ['feeds'], providers: ['rss'], hostsChanged: false, newHosts: ['blog.cloudflare.com', 'deno.com', 'nodejs.org'] }
+
+test('/chat store lists the rooms; /chat install shows one first, then installs it and gives it a tab', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  const store: Record<string, unknown> = {}
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false })
+  await settle()
+  bridge.replies['/store/list'] = () => [200, { rooms: STORE_LIST, version: '0.15.0' }]
+  bridge.replies['/store/preview'] = () => [200, PREVIEW]
+  bridge.replies['/store/install'] = () => [200, { ok: true, id: 'dev-blogs', name: 'Dev Blogs', version: '1.0.0', hosts: PREVIEW.hosts }]
+
+  await $.command.run({ command: 'chat', args: 'store' })
+  expect(logs.slice(-5)).toEqual([
+    'Room store: 3 rooms',
+    '  ✎ dev-blogs · Dev Blogs 1.0.0: New posts from the Cloudflare, Deno and Node.js blogs, newest first.',
+    '  ◆ us-tech · US Tech Stocks 1.1.0 (installed 1.0.0, update to 1.1.0): The big US tech names.',
+    '  ✦ future-room · Future 1.0.0 (needs squad-chat 9.0.0): Later.',
+    'Install one with /chat install <id>.',
+  ])
+  await $.command.run({ command: 'chat', args: 'store stocks' })
+  expect(logs.at(-2)).toBe('  ◆ us-tech · US Tech Stocks 1.1.0 (installed 1.0.0, update to 1.1.0): The big US tech names.')
+
+  await $.command.run({ command: 'chat', args: 'install dev-blogs' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/store/preview', body: { id: 'dev-blogs' } })
+  expect(logs.slice(-5)).toEqual([
+    '✎ Dev Blogs 1.0.0 by squad-chat',
+    '  New posts from the Cloudflare, Deno and Node.js blogs, newest first.',
+    '  Reaches: blog.cloudflare.com, deno.com, nodejs.org',
+    '  Settings: feeds',
+    'Run /chat install dev-blogs again within a minute to install it.',
+  ])
+  expect(bridge.calls.some((c) => c.path === '/store/install')).toBe(false)   // nothing yet
+  await $.command.run({ command: 'chat', args: 'install dev-blogs' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/store/install', body: { id: 'dev-blogs', sha256: 'a'.repeat(64) } })
+  expect(logs.at(-1)).toBe('Installed Dev Blogs. Its tab is there now: /chat dev-blogs.')
+  expect(store.sysRooms).toContain('dev-blogs')
+
+  bridge.replies['/store/preview'] = () => [409, { error: 'Future needs squad-chat 9.0.0 or newer. Update squad-chat first.' }]
+  await $.command.run({ command: 'chat', args: 'install future-room' })
+  expect(logs.at(-1)).toBe('Future needs squad-chat 9.0.0 or newer. Update squad-chat first.')
+})
+
+test('/chat update lists what is due, asks first when hosts change; /chat uninstall asks, then removes it and its tab', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  const store: Record<string, unknown> = { sysRooms: ['usage', 'us-tech'], roomsOffered: ['usage', 'git', 'agents', 'snippet', 'monitor'] }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false })
+  await settle()
+  bridge.replies['/store/list'] = () => [200, { rooms: STORE_LIST, version: '0.15.0' }]
+  await $.command.run({ command: 'chat', args: 'update' })
+  expect(logs.slice(-2)).toEqual(['  ◆ us-tech: 1.0.0 → 1.1.0', 'Update one with /chat update <id>.'])
+
+  const v11 = { ...STORE_LIST[1], sha256: 'b'.repeat(64), settings: [], providers: ['quotes'], hostsChanged: false, newHosts: [] }
+  bridge.replies['/store/preview'] = () => [200, v11]
+  bridge.replies['/store/install'] = () => [200, { ok: true, id: 'us-tech', name: 'US Tech Stocks', version: '1.1.0' }]
+  await $.command.run({ command: 'chat', args: 'update us-tech' })   // same hosts: straight in
+  expect(bridge.calls.at(-1)).toEqual({ path: '/store/install', body: { id: 'us-tech', sha256: 'b'.repeat(64) } })
+  expect(logs.at(-1)).toBe('Updated US Tech Stocks to 1.1.0.')
+
+  bridge.replies['/store/preview'] = () => [200, { ...v11, hosts: ['query1.finance.yahoo.com', 'mis.twse.com.tw'], hostsChanged: true, newHosts: ['mis.twse.com.tw'] }]
+  await $.command.run({ command: 'chat', args: 'update us-tech' })
+  expect(logs.slice(-2)).toEqual(['US Tech Stocks 1.1.0 reaches different hosts: query1.finance.yahoo.com, mis.twse.com.tw (new: mis.twse.com.tw).', 'Run /chat update us-tech again within a minute to update it.'])
+  expect(bridge.calls.at(-1)!.path).toBe('/store/preview')
+  await $.command.run({ command: 'chat', args: 'update us-tech' })
+  expect(bridge.calls.at(-1)!.path).toBe('/store/install')
+
+  bridge.replies['/store/uninstall'] = () => [200, { ok: true, id: 'us-tech', name: 'US Tech Stocks' }]
+  await $.command.run({ command: 'chat', args: 'uninstall us-tech' })
+  expect(logs.at(-1)).toBe('This removes us-tech, its settings and what it keeps. Run /chat uninstall us-tech again within a minute to do it.')
+  expect(bridge.calls.some((c) => c.path === '/store/uninstall')).toBe(false)
+  await $.command.run({ command: 'chat', args: 'uninstall us-tech' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/store/uninstall', body: { id: 'us-tech' } })
+  expect(logs.at(-1)).toBe('Uninstalled US Tech Stocks.')
+  expect(store.sysRooms).toEqual(['usage'])
+})

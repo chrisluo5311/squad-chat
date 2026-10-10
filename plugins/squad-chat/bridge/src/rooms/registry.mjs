@@ -25,7 +25,7 @@ import { execFile, spawn } from "node:child_process";
 import { readFile, stat, readdir } from "node:fs/promises";
 import { connect } from "node:net";
 import { cpus, loadavg, homedir } from "node:os";
-import { checkManifest, parseInterval, settingError } from "./manifest.mjs";
+import { checkManifest, parseInterval, settingError, compareVersions } from "./manifest.mjs";
 import { allowedHosts, limitedFetch, clean, RoomError } from "./net.mjs";
 import { locked } from "./lock.mjs";
 import localList from "./providers/local-list.mjs";
@@ -103,17 +103,30 @@ function readRooms(dir, providers) {
 
 // `runtimeDir` is the bridge's own short folder (socket paths are limited
 // to about 100 bytes), for a provider that keeps a process going (Lo-fi's mpv).
-export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, providers = PROVIDERS }) {
-  const rooms = new Map();   // id → manifest
-  const invalid = [];
-  for (const dir of dirs.filter(Boolean)) {
-    const found = readRooms(dir, providers);
-    invalid.push(...found.invalid);
-    for (const m of found.rooms) {
-      if (rooms.has(m.id)) invalid.push({ dir: join(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
-      else rooms.set(m.id, m);
+// `version` is squad-chat's own: a room that needs a newer one is skipped.
+export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, providers = PROVIDERS, version = null }) {
+  let rooms = new Map();   // id → manifest
+  let invalid = [];
+  let origin = new Map();  // id → the folder it came from (shipped or installed)
+
+  function load() {
+    const next = new Map();
+    const bad = [];
+    const from = new Map();
+    for (const dir of dirs.filter(Boolean)) {
+      const found = readRooms(dir, providers);
+      bad.push(...found.invalid);
+      for (const m of found.rooms) {
+        if (next.has(m.id)) bad.push({ dir: join(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
+        else if (version && m.minSquadChat && compareVersions(m.minSquadChat, version) > 0) bad.push({ dir: join(dir, m.id), errors: [`needs squad-chat ${m.minSquadChat} or newer (this is ${version})`] });
+        else { next.set(m.id, m); from.set(m.id, dir); }
+      }
     }
+    rooms = next;
+    invalid = bad;
+    origin = from;
   }
+  load();
 
   let enabled = new Set();
   let shown = null;
@@ -258,6 +271,24 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       emitSettings(id);
       if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };
+    },
+    // The rooms' folders read again (a room installed or removed): new rooms
+    // with a tab start, gone ones stop.
+    // Every room with a tab runs again, so an updated one shows its new self.
+    reload() {
+      const wasEnabled = [...enabled];
+      const wasShown = shown;
+      load();
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      enabled = new Set();
+      this.report();
+      this.setVisible({ enabled: wasEnabled, shown: wasShown });
+    },
+    // Where a room came from: the first folder (shipped) or the second
+    // (installed on this computer), and its manifest.
+    source(id) {
+      return rooms.has(id) ? { manifest: rooms.get(id), dir: origin.get(id), shipped: origin.get(id) === dirs.filter(Boolean)[0] } : null;
     },
     // Which rooms have tabs, and which is on show. A room just enabled, or
     // just shown with data older than its visible interval, runs now.

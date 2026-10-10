@@ -62,6 +62,10 @@ The bridge tests skip themselves when the local server isn't running. Locally th
 * **Database changes go in a new migration.** Create one with `supabase migration new <name>`, never edit an old one, and add pgTAP tests for any new access rule in `supabase/tests/`.
 * **Pin dependencies exactly.** Use `2.117.2`, not `^2.117.2`.
 
+## Adding a room to the store
+
+A room is one `room.json`. Put it in `rooms/<id>/`, run `node rooms/build-index.mjs` to check it and add it to the index, and open a pull request. [Write a room](https://chrisluo5311.github.io/squad-chat/rooms/write-a-room/) has the fields, the providers and the widgets. A new provider is a code change to `plugins/squad-chat/bridge/src/rooms/providers/`, with its own tests.
+
 ## Pull requests
 
 1. Fork the repository and create a branch from `main`.

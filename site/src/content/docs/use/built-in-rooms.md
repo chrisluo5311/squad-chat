@@ -113,6 +113,10 @@ Music in the background while you work, played the way [Pixel Play](https://gith
 
 Nothing plays or reaches the network until you press play. mpv stops when the session ends, however it ends. If Pixel Play is playing too, the room says so. `/chat-share lofi` tells a chat room what you're listening to.
 
+## The room store
+
+More rooms, written by anyone, live in the [room store](/squad-chat/rooms/store/): `/chat store` lists them, and `/chat install dev-blogs` shows one, with the hosts it reaches, then installs it on a second run. `/chat update` brings installed rooms up to date (asking again if a new version reaches new hosts), and `/chat uninstall <id>` removes one with its settings. A room is one JSON file that can only use squad-chat's own providers and reach the hosts it names, so installing one never runs anyone's code. [Write a room](/squad-chat/rooms/write-a-room/) shows how to add yours.
+
 ## Share a snapshot or hide tabs
 
 To show the team, press **⇪ Share** under a built-in room, or type `/chat-share usage` (or `git`, `agents`), and a snapshot of the room goes to a chat room as a card, for "here's where my PR stands" or "this refactor cost $4". The preview lists your rooms, so pick the one it should go to before you press **Send**, or name it with `/chat-share usage #room`.

@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "dev-blogs",
+  "version": "1.0.0",
+  "minSquadChat": "0.15.0",
+  "name": "Dev Blogs",
+  "icon": "✎",
+  "color": "teal",
+  "description": "New posts from the Cloudflare, Deno and Node.js blogs, newest first.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["blog.cloudflare.com", "deno.com", "nodejs.org"] },
+  "settings": {
+    "feeds": { "type": "list", "label": "Feeds", "item": "url", "max": 6, "default": ["https://blog.cloudflare.com/rss/", "https://deno.com/feed", "https://nodejs.org/en/feed/blog.xml"] }
+  },
+  "providers": [
+    { "id": "feeds", "type": "rss", "params": { "feeds": "$settings.feeds" }, "interval": { "visible": "30m", "background": "2h" } }
+  ],
+  "layout": {
+    "cards": [
+      { "title": "POSTS", "meta": "{feeds.count}", "body": { "type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "empty": "No posts yet." } }
+    ],
+    "inline": { "type": "list", "items": "feeds.items", "title": "title", "copy": "url", "max": 4 },
+    "band": "{feeds.items.0.title}",
+    "hint": "⧉ copies the link · ⇪ shares it · r refreshes"
+  }
+}

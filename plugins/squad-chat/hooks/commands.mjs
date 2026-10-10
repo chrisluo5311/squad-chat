@@ -162,6 +162,96 @@ export async function sysRooms(args, say, save) {
   return say([enabledRooms().length ? `Rooms with tabs: ${names()}.` : "Room tabs hidden.", ...online].join("\n"));
 }
 
+// ---------------------------------------------------------------- the room store
+
+const CONFIRM_STORE_MS = 60_000;
+let pendingStore = null;   // { what: "install" | "update" | "uninstall", id, sha256, until }
+
+const confirmed = (what, id) => pendingStore && pendingStore.what === what && pendingStore.id === id && Date.now() < pendingStore.until;
+
+// "/chat store [words]": the rooms other people wrote, and which you have.
+export async function roomStore(call, args, say) {
+  const q = String(args ?? "").trim().toLowerCase();
+  const { rooms } = await call("/store/list", { refresh: q === "refresh" });
+  const shown = rooms.filter((r) => !q || q === "refresh" || `${r.id} ${r.name} ${r.description}`.toLowerCase().includes(q));
+  if (!shown.length) return say(q ? `No room in the store matches "${q}".` : "The store is empty.");
+  const mark = (r) => (r.shipped ? "comes with squad-chat" : !r.compatible ? `needs squad-chat ${r.minSquadChat}` : r.update ? `installed ${r.installed}, update to ${r.version}` : r.installed ? "installed" : "");
+  return say([
+    `Room store: ${shown.length} room${shown.length === 1 ? "" : "s"}`,
+    ...shown.map((r) => `  ${r.icon} ${r.id} · ${r.name} ${r.version}${mark(r) ? ` (${mark(r)})` : ""}: ${r.description}`),
+    "Install one with /chat install <id>.",
+  ].join("\n"));
+}
+
+function describeRoom(r) {
+  return [
+    `${r.icon} ${r.name} ${r.version}${r.author ? ` by ${r.author}` : ""}`,
+    ...(r.description ? [`  ${r.description}`] : []),
+    r.hosts.length ? `  Reaches: ${r.hosts.join(", ")}` : "  Reaches nothing on the network.",
+    ...(r.settings?.length ? [`  Settings: ${r.settings.join(", ")}`] : []),
+  ];
+}
+
+// "/chat install <id>": a look first (what it is, where it reaches), then
+// the same command again to install. It gets a tab.
+export async function installRoom(call, args, say, addTab) {
+  const id = String(args ?? "").trim().toLowerCase();
+  if (!id) return say("Which room? /chat store lists them.");
+  if (confirmed("install", id)) {
+    const { sha256 } = pendingStore;
+    pendingStore = null;
+    const r = await call("/store/install", { id, sha256 });
+    await addTab?.(id);
+    return say(`Installed ${r.name}. Its tab is there now: /chat ${id}.`);
+  }
+  const r = await call("/store/preview", { id });
+  if (r.installed && !r.update) return say(`${r.name} ${r.installed} is installed and up to date.`);
+  pendingStore = { what: "install", id, sha256: r.sha256, until: Date.now() + CONFIRM_STORE_MS };
+  return say([...describeRoom(r), `Run /chat install ${id} again within a minute to install it.`].join("\n"));
+}
+
+// "/chat update [id]": which rooms have a newer version, or update one. A
+// version that reaches new hosts asks first.
+export async function updateRoom(call, args, say) {
+  const id = String(args ?? "").trim().toLowerCase();
+  if (!id) {
+    const { rooms } = await call("/store/list", { refresh: true });
+    const due = rooms.filter((r) => r.update && r.compatible);
+    if (!due.length) return say("Every room you installed is up to date.");
+    return say([...due.map((r) => `  ${r.icon} ${r.id}: ${r.installed} → ${r.version}`), "Update one with /chat update <id>."].join("\n"));
+  }
+  if (confirmed("update", id)) {
+    const { sha256 } = pendingStore;
+    pendingStore = null;
+    const r = await call("/store/install", { id, sha256 });
+    return say(`Updated ${r.name} to ${r.version}.`);
+  }
+  const r = await call("/store/preview", { id });
+  if (!r.installed) return say(`${r.name} isn't installed: /chat install ${id}.`);
+  if (!r.update) return say(`${r.name} ${r.installed} is up to date.`);
+  if (r.hostsChanged) {
+    pendingStore = { what: "update", id, sha256: r.sha256, until: Date.now() + CONFIRM_STORE_MS };
+    return say([`${r.name} ${r.version} reaches different hosts: ${r.hosts.join(", ") || "none"}${r.newHosts.length ? ` (new: ${r.newHosts.join(", ")})` : ""}.`, `Run /chat update ${id} again within a minute to update it.`].join("\n"));
+  }
+  const done = await call("/store/install", { id, sha256: r.sha256 });
+  return say(`Updated ${done.name} to ${done.version}.`);
+}
+
+// "/chat uninstall <id>": removes an installed room, its settings and data.
+export async function uninstallRoom(call, args, say, dropTab) {
+  const id = String(args ?? "").trim().toLowerCase();
+  if (!id) return say("Which room? /chat store marks the ones installed.");
+  if (!confirmed("uninstall", id)) {
+    const name = state.fn.get(id)?.manifest.name ?? id;
+    pendingStore = { what: "uninstall", id, until: Date.now() + CONFIRM_STORE_MS };
+    return say(`This removes ${name}, its settings and what it keeps. Run /chat uninstall ${id} again within a minute to do it.`);
+  }
+  pendingStore = null;
+  const r = await call("/store/uninstall", { id });
+  await dropTab?.(id);
+  return say(`Uninstalled ${r.name}.`);
+}
+
 // A setting's value as typed back: "Taipei, Tokyo", "on".
 function showSetting(v) {
   if (Array.isArray(v)) return v.length ? v.join(", ") : "(none)";
@@ -481,6 +571,7 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
         if (!sub || sub === "chat") return setView?.("chat");
         if (roomIds().includes(sub)) return showView(sub, say, setView);
         if (sub === "dnd") return dnd(more.join(" "), say, setDnd);
+        if (sub === "store") return roomStore(call, more.join(" "), say);
         return say(`Here, /chat takes ${roomIds().join(", ")} or dnd. Type it at the prompt for the rest.`);
       }
       case "room": return room(call, args, say);

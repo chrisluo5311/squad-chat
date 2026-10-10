@@ -133,6 +133,16 @@ A function room is a room drawn from data, not from code of its own: a manifest,
 * **Drawing.** `fnviews.mjs` fills the layout in from the providers' data: `list`, `table`, `tiles`, `meter` and `text` widgets, one to a card or a column of up to six, and a card with `when` shows only while that path has data (Monitor's GPU and battery cards), bound with paths such as `list.items` and templates such as `{list.count} saved`. One layout gives the docked cards (a long list gives up rows, "+ 3 more", before a card is left out), the inline pane, the band and the plain-text snapshot `/chat-share <room>` posts.
 * **Tabs.** Function rooms sit after the built-in ones. `/chat rooms` takes both, with `+name` and `-name`. A room that's new in a version gets its tab once, even for people who chose their tabs before (`roomsOffered` in `$.store`). Taken away, it stays away.
 
+### The room store
+
+Rooms anyone writes live in the repository's `rooms/`, one folder each, with an `index.json` that `rooms/build-index.mjs` builds: each room's id, name, version, `minSquadChat`, hosts, providers and sha256. CI runs it with `--check`, so a room that doesn't check out, or an index that's out of date, fails the pull request. The docs site makes its Room store page from the same index.
+
+The bridge's `store.mjs` reads the index from `raw.githubusercontent.com` (`SQUAD_ROOM_STORE` points elsewhere, for tests) through the same limited fetch as the providers, and caches it for 10 minutes. `/store/preview` downloads a room's `room.json`, checks its sha256 against the index, runs the manifest check, and compares its id, version and `minSquadChat` with the index and with this squad-chat. It holds that copy, and says which hosts it reaches and which are new since the installed version. `/store/install` writes the held copy, by its hash, to `~/.config/squad-chat/rooms/<id>/room.json` (0600), and the registry reads its folders again. `/store/uninstall` removes the room and its `room-data`, and refuses a shipped room. The registry also skips any room whose `minSquadChat` is newer than this squad-chat, read from `plugin.json`.
+
+The mod's `/chat install` and `/chat uninstall` take two runs a minute apart. `/chat update` goes straight through unless the new version reaches new hosts. An installed room gets a tab, an uninstalled one loses it.
+
+The sha256 catches a download that went wrong, not a store that lies, since both come from one place. What keeps a store room safe is that a manifest can't run code, can't reach a host it doesn't name, and is shown, hosts and all, before it's installed.
+
 ## Function rooms: Phase 0
 
 Function rooms are rooms you install: a JSON manifest drawn with the built-in rooms' widgets, fed by data providers that run in the bridge. A manifest never runs code. These findings come from the Phase 0 spike on Claude Code 2.1.293, macOS 27 on an M2 Max, Node 22:

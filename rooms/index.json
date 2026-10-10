@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "rooms": [
+    {
+      "id": "dev-blogs",
+      "name": "Dev Blogs",
+      "icon": "✎",
+      "version": "1.0.0",
+      "minSquadChat": "0.15.0",
+      "description": "New posts from the Cloudflare, Deno and Node.js blogs, newest first.",
+      "author": "squad-chat",
+      "hosts": [
+        "blog.cloudflare.com",
+        "deno.com",
+        "nodejs.org"
+      ],
+      "providers": [
+        "rss"
+      ],
+      "sha256": "ddd34742d15dc223785803e97f73c32026565f925137c8d596420e1a1d5fa723"
+    },
+    {
+      "id": "security-news",
+      "name": "Security News",
+      "icon": "⚠",
+      "version": "1.0.0",
+      "minSquadChat": "0.15.0",
+      "description": "Breaches, vulnerabilities and patches from Krebs on Security and The Hacker News.",
+      "author": "squad-chat",
+      "hosts": [
+        "krebsonsecurity.com",
+        "feeds.feedburner.com"
+      ],
+      "providers": [
+        "rss"
+      ],
+      "sha256": "a50022c133dada1c6bebf3101294149e8106414e487241ca8df06de3ca64f35a"
+    },
+    {
+      "id": "us-tech",
+      "name": "US Tech Stocks",
+      "icon": "◆",
+      "version": "1.0.0",
+      "minSquadChat": "0.15.0",
+      "description": "The big US tech names and the Nasdaq, each with today's line. Yahoo Finance, no key. Prices may be delayed.",
+      "author": "squad-chat",
+      "hosts": [
+        "query1.finance.yahoo.com"
+      ],
+      "providers": [
+        "quotes"
+      ],
+      "sha256": "1ed96a60ec5bf7e179120b9b83f47c171dae0468fa6bb4628271d790f4658a96"
+    }
+  ]
+}

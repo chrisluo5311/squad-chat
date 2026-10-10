@@ -84,6 +84,14 @@ export function settingError(st, value, hosts = []) {
   }
 }
 
+// -1, 0 or 1 for two "1.2.3" versions.
+export function compareVersions(a, b) {
+  const x = String(a).split(".").map(Number);
+  const y = String(b).split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0) ? -1 : 1;
+  return 0;
+}
+
 export function parseInterval(s) {
   if (s == null) return null;
   const m = /^(\d+)(ms|s|m|h)$/.exec(String(s));
@@ -160,6 +168,8 @@ export function checkManifest(m, providers) {
   if (!(typeof m.id === "string" && ID.test(m.id))) errors.push("id: 2-24 lowercase letters, digits or -, starting with a letter");
   else if (RESERVED.has(m.id)) errors.push(`id: "${m.id}" is taken`);
   if (!(typeof m.version === "string" && VERSION.test(m.version))) errors.push("version: like 1.0.0");
+  if (m.minSquadChat != null && !(typeof m.minSquadChat === "string" && VERSION.test(m.minSquadChat))) errors.push("minSquadChat: like 0.15.0");
+  if (m.author != null && !str(m.author, 60)) errors.push("author: 1-60 characters");
   if (!str(m.name, 20)) errors.push("name: 1-20 characters");
   if (!(typeof m.icon === "string" && [...m.icon].length === 1)) errors.push("icon: one character");
   if (!COLORS.includes(m.color)) errors.push(`color: one of ${COLORS.join(", ")}`);
