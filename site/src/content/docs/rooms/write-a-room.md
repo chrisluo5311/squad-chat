@@ -59,6 +59,7 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 
 | Type | Params | What its data holds |
 | --- | --- | --- |
+| `http-json` | `url`, `vars`, `rows`, `fields`, `values` (see [Any JSON API](#any-json-api)) | `rows[]` with each field formatted, the `values`, `count`, `updated` |
 | `rss` | `feeds`: feed URLs on the room's hosts | `items[]` (`title`, `url`, `source`, `meta`, `share`), `count`, `failed` |
 | `hn` | `list` (`top`, `best`, `new`, `off`), `count` | `items[]` as `rss`, `count`, `list` |
 | `open-meteo` | `cities`, `units` (`metric` or `imperial`) | `cities[]` (`name`, `icon`, `desc`, `tempText`, `range`, `rainText`, `aqiText`, …), `first`, `days[]`, `updated` |
@@ -67,7 +68,40 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu`, `mem`, `gpu`, `net`, `disk`, `battery`, `band`, … (see the Monitor room's manifest) |
 | `player` | `stations`, `volume` | `now`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
 
-Each provider can reach only the hosts it knows about, and only where the manifest names them too. `rss` reads whatever feeds it's given, so for it the manifest's list alone decides. The rooms squad-chat ships, in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms), are full examples of each.
+Each provider can reach only the hosts it knows about, and only where the manifest names them too. `rss` and `http-json` read whatever they're pointed at, so for them the manifest's list alone decides. The rooms squad-chat ships, in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms), are full examples of each.
+
+## Any JSON API
+
+`http-json` reads one https URL on the room's hosts and makes its answer fit the widgets, with no code. The Crypto room in the store reads CoinGecko like this:
+
+```json
+"params": {
+  "url": "https://api.coingecko.com/api/v3/simple/price?ids={coins}&vs_currencies={currency}&include_24hr_change=true",
+  "vars": { "coins": "$settings.coins", "currency": "$settings.currency" },
+  "rows": { "from": "", "key": "id", "order": "coins" },
+  "fields": {
+    "price": { "path": "{currency}", "format": "number" },
+    "change": { "path": "{currency}_24h_change", "format": "signed-percent", "digits": 2 }
+  }
+}
+```
+
+* **`url`**: `{name}` holes are filled from `vars`, a list joined with commas, each part URL-encoded. A var is usually a setting.
+* **`rows`**: where the list is (`from`, a path, empty for the top), as an array or as an object of objects. An object becomes one row per key, its key under `key` (a number becomes `value`). `order` keeps rows in the order a var lists them.
+* **`fields`**: for each row, a value by `path` (holes filled from `vars` too) and a `format`: `text`, `number` (`digits` for fixed decimals), `compact` (185.8M), `percent`, `signed`, `signed-percent`, `date` or `age` (3h). Each gives `<name>` to show and `<name>Value`, the number. A signed one adds `<name>Arrow` (▲ ▼ or – when it rounds to nothing) and `<name>Color`, green for up (`"up": "red"` for red), for a table column's `colorFrom`.
+* **`values`**: the same, for single values at the top of the answer (`base`, `date`).
+
+## Alerts
+
+A room can toast when something crosses a line, once until it crosses back, and never during do not disturb:
+
+```json
+"alerts": [
+  { "rows": "c.rows", "field": "changeValue", "beyond": "$settings.move", "text": "₿ {id} {changeArrow} {change}", "id": "{id}-{changeArrow}" }
+]
+```
+
+`rows` and `field` watch each row, or `value` watches one number. `above`, `below` or `beyond` (either way) is the line: a number, or a setting, where `0` turns the alert off. `text` and `id` are templates filled from the row, and the `id` decides what counts as the same alert.
 
 ## Widgets
 

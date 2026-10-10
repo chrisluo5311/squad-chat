@@ -35,8 +35,9 @@ import rss from "./providers/rss.mjs";
 import sysinfo from "./providers/sysinfo.mjs";
 import quotes from "./providers/quotes.mjs";
 import player from "./providers/player.mjs";
+import httpJson from "./providers/http-json.mjs";
 
-export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysinfo, quotes, player].map((p) => [p.type, p]));
+export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysinfo, quotes, player, httpJson].map((p) => [p.type, p]));
 
 // What a provider runs on this computer: a command its own code names (a
 // manifest can't name one), with no shell, a time limit and an output limit.
@@ -161,13 +162,40 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
   function emitSettings(id) {
     if (rooms.get(id)?.settings) emit({ type: "fnsettings", id, values: settingsOf(id) });
   }
-  // A provider's params, with "$settings.<key>" filled in.
+  // A provider's params, with "$settings.<key>" filled in at any depth.
   function paramsOf(m, p) {
     const values = settingsOf(m.id);
-    const out = {};
-    for (const [k, v] of Object.entries(p.params ?? {})) {
-      const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
-      out[k] = ref ? values[ref[1]] : v;
+    const fill = (v) => {
+      if (typeof v === "string") { const ref = /^\$settings\.(.+)$/.exec(v); return ref ? values[ref[1]] : v; }
+      if (Array.isArray(v)) return v.map(fill);
+      if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)]));
+      return v;
+    };
+    return fill(p.params ?? {});
+  }
+
+  // The manifest's own alerts on a provider's fresh data: each row (or the
+  // one value) past its threshold, as { id, text }, joined to the provider's.
+  function manifestAlerts(m, pid, data) {
+    const out = [];
+    const values = settingsOf(m.id);
+    const limit = (v) => (typeof v === "string" ? Number(values[/^\$settings\.(.+)$/.exec(v)?.[1]]) : Number(v));
+    const fillRow = (t, row) => String(t).replace(/\{([A-Za-z0-9_.]+)\}/g, (_, path) => String(path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), row) ?? ""));
+    for (const a of m.alerts ?? []) {
+      const path = a.rows ?? a.value;
+      const [first, ...rest] = path.split(".");
+      if (first !== pid) continue;
+      const at = rest.reduce((o, k) => (o == null ? undefined : o[k]), data);
+      const rows = a.rows ? (Array.isArray(at) ? at : []) : [{ value: at }];
+      const field = a.rows ? a.field : "value";
+      for (const row of rows) {
+        const n = Number(field.split(".").reduce((o, k) => (o == null ? undefined : o[k]), row));
+        if (!Number.isFinite(n)) continue;
+        const hit = a.above != null ? n >= limit(a.above)
+          : a.below != null ? n <= limit(a.below)
+          : limit(a.beyond) > 0 && Math.abs(n) >= limit(a.beyond);
+        if (hit) out.push({ id: `m:${fillRow(a.id, row)}`.slice(0, 80), text: fillRow(a.text, row).slice(0, 120) });
+      }
     }
     return out;
   }
@@ -215,6 +243,8 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
     clearTimeout(timers.get(k));
     try {
       const data = clean(await providers[p.type].fetch(paramsOf(m, p), ctxFor(m, p)));
+      const extra = m.alerts ? manifestAlerts(m, pid, data) : [];
+      if (extra.length || (m.alerts && data && typeof data === "object")) data.alerts = [...(Array.isArray(data.alerts) ? data.alerts : []), ...extra];
       const at = Date.now();
       last.set(k, { data, at });
       emit({ type: "fnroom", id, provider: pid, data, at });

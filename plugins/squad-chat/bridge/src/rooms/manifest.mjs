@@ -158,6 +158,50 @@ function checkWidget(body, where, errors) {
   for (const key of Object.keys(body)) if (key !== "type" && !(key in spec)) errors.push(`${where}.${key}: not a field of ${body.type}`);
 }
 
+// http-json's params: a URL, and fields with formats it knows.
+const FORMATS = ["text", "number", "compact", "percent", "signed", "signed-percent", "date", "age"];
+function checkHttpJson(params, where, errors) {
+  if (!(typeof params.url === "string" && /^https:\/\/[^\s]+$/.test(params.url) && params.url.length <= 300)) errors.push(`${where}.url: an https URL`);
+  if (params.vars != null && (typeof params.vars !== "object" || Array.isArray(params.vars))) errors.push(`${where}.vars: an object`);
+  if (params.rows != null) {
+    if (typeof params.rows !== "object") errors.push(`${where}.rows: an object`);
+    else if (params.rows.order != null && !(params.vars && Object.hasOwn(params.vars, params.rows.order))) errors.push(`${where}.rows.order: no var called ${params.rows.order}`);
+  }
+  for (const group of ["fields", "values"]) {
+    const g = params[group];
+    if (g == null) continue;
+    if (typeof g !== "object" || Array.isArray(g) || Object.keys(g).length > 12) { errors.push(`${where}.${group}: up to 12 fields`); continue; }
+    for (const [name, spec] of Object.entries(g)) {
+      if (!/^[a-z][A-Za-z0-9_]{0,19}$/.test(name)) errors.push(`${where}.${group}.${name}: a field name`);
+      if (!(typeof spec?.path === "string" && spec.path.length <= 100)) errors.push(`${where}.${group}.${name}.path: missing`);
+      if (spec?.format != null && !FORMATS.includes(spec.format)) errors.push(`${where}.${group}.${name}.format: one of ${FORMATS.join(", ")}`);
+    }
+  }
+}
+
+// A manifest's alerts: a field in each row, or one value, past a threshold
+// (a number, or a setting), toasted with a template.
+function checkAlerts(alerts, m, errors) {
+  if (alerts == null) return;
+  if (!Array.isArray(alerts) || alerts.length > 6) return errors.push("alerts: up to 6");
+  alerts.forEach((a, i) => {
+    const where = `alerts[${i}]`;
+    const path = a?.rows ?? a?.value;
+    if (!(typeof path === "string" && PATH.test(path)) || (a.rows != null) === (a.value != null)) errors.push(`${where}: a rows or a value path, not both`);
+    else if (!(m.providers ?? []).some((p) => p?.id === path.split(".")[0])) errors.push(`${where}: no provider called ${path.split(".")[0]}`);
+    if (a?.rows != null && !(typeof a.field === "string" && PATH.test(a.field))) errors.push(`${where}.field: the row's field to watch`);
+    const limits = ["above", "below", "beyond"].filter((k) => a?.[k] != null);
+    if (limits.length !== 1) errors.push(`${where}: one of above, below or beyond`);
+    for (const k of limits) {
+      const v = a[k];
+      const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
+      if (!(typeof v === "number" || (ref && m.settings && Object.hasOwn(m.settings, ref[1])))) errors.push(`${where}.${k}: a number or "$settings.<key>"`);
+    }
+    if (!str(a?.text, 100)) errors.push(`${where}.text: 1-100 characters`);
+    if (!str(a?.id, 60)) errors.push(`${where}.id: 1-60 characters`);
+  });
+}
+
 // Returns the list of problems: empty when the manifest is fine.
 // `providers` is the bridge's table of provider types.
 export function checkManifest(m, providers) {
@@ -188,10 +232,15 @@ export function checkManifest(m, providers) {
       else seen.add(p.id);
       if (!providers[p?.type]) errors.push(`${where}.type: no provider called "${p?.type}"`);
       if (p?.params != null && (typeof p.params !== "object" || Array.isArray(p.params))) errors.push(`${where}.params: an object`);
-      for (const [k, v] of Object.entries(p?.params ?? {})) {
-        const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
-        if (ref && !(m.settings && Object.hasOwn(m.settings, ref[1]))) errors.push(`${where}.params.${k}: no setting called ${ref[1]}`);
-      }
+      // "$settings.<key>" anywhere in the params must name a setting.
+      const refs = (v, at) => {
+        if (typeof v === "string") {
+          const ref = /^\$settings\.(.+)$/.exec(v);
+          if (ref && !(m.settings && Object.hasOwn(m.settings, ref[1]))) errors.push(`${at}: no setting called ${ref[1]}`);
+        } else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) refs(x, `${at}.${k}`);
+      };
+      refs(p?.params ?? {}, `${where}.params`);
+      if (p?.type === "http-json") checkHttpJson(p.params ?? {}, `${where}.params`, errors);
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];
         if (v != null && !(INTERVAL.test(v) && parseInterval(v) >= 1000)) errors.push(`${where}.interval.${k}: like 30s or 10m, at least 1s`);
@@ -200,6 +249,7 @@ export function checkManifest(m, providers) {
   }
 
   checkSettings(m.settings, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
+  checkAlerts(m.alerts, m, errors);
 
   const l = m.layout;
   if (!l || typeof l !== "object") errors.push("layout: missing");

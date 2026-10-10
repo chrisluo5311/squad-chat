@@ -115,7 +115,7 @@ Nothing plays or reaches the network until you press play. mpv stops when the se
 
 ## The room store
 
-More rooms, written by anyone, live in the [room store](/squad-chat/rooms/store/): `/chat store` lists them, and `/chat install dev-blogs` shows one, with the hosts it reaches, then installs it on a second run. `/chat update` brings installed rooms up to date (asking again if a new version reaches new hosts), and `/chat uninstall <id>` removes one with its settings. A room is one JSON file that can only use squad-chat's own providers and reach the hosts it names, so installing one never runs anyone's code. [Write a room](/squad-chat/rooms/write-a-room/) shows how to add yours.
+More rooms, written by anyone, live in the [room store](/squad-chat/rooms/store/): `/chat store` lists them, and `/chat install dev-blogs` shows one, with the hosts it reaches, then installs it on a second run. Crypto prices, exchange rates, dev blogs and security news are there to start. `/chat update` brings installed rooms up to date (asking again if a new version reaches new hosts), and `/chat uninstall <id>` removes one with its settings. A room is one JSON file that can only use squad-chat's own providers and reach the hosts it names, so installing one never runs anyone's code. [Write a room](/squad-chat/rooms/write-a-room/) shows how to add yours.
 
 ## Share a snapshot or hide tabs
 

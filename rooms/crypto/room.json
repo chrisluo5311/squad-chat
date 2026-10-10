@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "id": "crypto",
+  "version": "1.0.0",
+  "minSquadChat": "0.16.0",
+  "name": "Crypto",
+  "icon": "₿",
+  "color": "amber",
+  "description": "Coin prices and their 24-hour change, from CoinGecko, no key. Not investment advice.",
+  "author": "squad-chat",
+  "permissions": { "hosts": ["api.coingecko.com"] },
+  "settings": {
+    "coins": { "type": "list", "label": "Coins (CoinGecko ids)", "default": ["bitcoin", "ethereum", "solana"], "max": 12 },
+    "currency": { "type": "enum", "label": "Currency", "values": ["usd", "eur", "gbp", "jpy", "twd"], "default": "usd" },
+    "move": { "type": "int", "label": "Alert at 24h % move", "default": 10, "min": 0, "max": 50 }
+  },
+  "providers": [
+    {
+      "id": "c",
+      "type": "http-json",
+      "params": {
+        "url": "https://api.coingecko.com/api/v3/simple/price?ids={coins}&vs_currencies={currency}&include_24hr_change=true",
+        "vars": { "coins": "$settings.coins", "currency": "$settings.currency" },
+        "rows": { "from": "", "key": "id", "order": "coins" },
+        "fields": {
+          "price": { "path": "{currency}", "format": "number" },
+          "change": { "path": "{currency}_24h_change", "format": "signed-percent", "digits": 2 }
+        }
+      },
+      "interval": { "visible": "1m", "background": "10m" }
+    }
+  ],
+  "alerts": [
+    { "rows": "c.rows", "field": "changeValue", "beyond": "$settings.move", "text": "₿ {id} {changeArrow} {change} in 24h, at {price}", "id": "{id}-{changeArrow}" }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "COINS",
+        "meta": "24h · {c.updated}",
+        "body": [
+          { "type": "table", "items": "c.rows", "columns": [
+            { "field": "changeArrow", "width": 2, "colorFrom": "changeColor" },
+            { "field": "id", "width": 14 },
+            { "field": "price", "width": 14, "right": true },
+            { "field": "change", "right": true, "colorFrom": "changeColor" }
+          ], "empty": "No coins: /set coins bitcoin, ethereum" },
+          { "type": "text", "text": "Not investment advice." }
+        ]
+      }
+    ],
+    "band": "{c.rows.0.id} {c.rows.0.price} {c.rows.0.change}",
+    "hint": "/set coins +dogecoin · /set currency eur · /set move 5 · r"
+  }
+}

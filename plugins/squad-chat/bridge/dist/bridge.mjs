@@ -17796,7 +17796,7 @@ var PostgrestClient = class PostgrestClient2 {
   * }
   * ```
   */
-  rpc(fn, args = {}, { head: head2 = false, get: get3 = false, count } = {}) {
+  rpc(fn, args = {}, { head: head2 = false, get: get4 = false, count } = {}) {
     var _this$fetch2;
     let method;
     const url = new URL(`${this.url}/rpc/${fn}`);
@@ -17806,7 +17806,7 @@ var PostgrestClient = class PostgrestClient2 {
     if (_hasObjectArg) {
       method = "POST";
       body = args;
-    } else if (head2 || get3) {
+    } else if (head2 || get4) {
       method = head2 ? "HEAD" : "GET";
       Object.entries(args).filter(([_, value]) => value !== void 0).map(([name, value]) => [name, Array.isArray(value) ? `{${value.join(",")}}` : `${value}`]).forEach(([name, value]) => {
         url.searchParams.append(name, value);
@@ -22982,6 +22982,48 @@ function checkWidget(body, where, errors) {
   }
   for (const key of Object.keys(body)) if (key !== "type" && !(key in spec)) errors.push(`${where}.${key}: not a field of ${body.type}`);
 }
+var FORMATS = ["text", "number", "compact", "percent", "signed", "signed-percent", "date", "age"];
+function checkHttpJson(params, where, errors) {
+  if (!(typeof params.url === "string" && /^https:\/\/[^\s]+$/.test(params.url) && params.url.length <= 300)) errors.push(`${where}.url: an https URL`);
+  if (params.vars != null && (typeof params.vars !== "object" || Array.isArray(params.vars))) errors.push(`${where}.vars: an object`);
+  if (params.rows != null) {
+    if (typeof params.rows !== "object") errors.push(`${where}.rows: an object`);
+    else if (params.rows.order != null && !(params.vars && Object.hasOwn(params.vars, params.rows.order))) errors.push(`${where}.rows.order: no var called ${params.rows.order}`);
+  }
+  for (const group of ["fields", "values"]) {
+    const g = params[group];
+    if (g == null) continue;
+    if (typeof g !== "object" || Array.isArray(g) || Object.keys(g).length > 12) {
+      errors.push(`${where}.${group}: up to 12 fields`);
+      continue;
+    }
+    for (const [name, spec] of Object.entries(g)) {
+      if (!/^[a-z][A-Za-z0-9_]{0,19}$/.test(name)) errors.push(`${where}.${group}.${name}: a field name`);
+      if (!(typeof spec?.path === "string" && spec.path.length <= 100)) errors.push(`${where}.${group}.${name}.path: missing`);
+      if (spec?.format != null && !FORMATS.includes(spec.format)) errors.push(`${where}.${group}.${name}.format: one of ${FORMATS.join(", ")}`);
+    }
+  }
+}
+function checkAlerts(alerts, m, errors) {
+  if (alerts == null) return;
+  if (!Array.isArray(alerts) || alerts.length > 6) return errors.push("alerts: up to 6");
+  alerts.forEach((a, i) => {
+    const where = `alerts[${i}]`;
+    const path = a?.rows ?? a?.value;
+    if (!(typeof path === "string" && PATH.test(path)) || a.rows != null === (a.value != null)) errors.push(`${where}: a rows or a value path, not both`);
+    else if (!(m.providers ?? []).some((p) => p?.id === path.split(".")[0])) errors.push(`${where}: no provider called ${path.split(".")[0]}`);
+    if (a?.rows != null && !(typeof a.field === "string" && PATH.test(a.field))) errors.push(`${where}.field: the row's field to watch`);
+    const limits = ["above", "below", "beyond"].filter((k) => a?.[k] != null);
+    if (limits.length !== 1) errors.push(`${where}: one of above, below or beyond`);
+    for (const k of limits) {
+      const v = a[k];
+      const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
+      if (!(typeof v === "number" || ref && m.settings && Object.hasOwn(m.settings, ref[1]))) errors.push(`${where}.${k}: a number or "$settings.<key>"`);
+    }
+    if (!str(a?.text, 100)) errors.push(`${where}.text: 1-100 characters`);
+    if (!str(a?.id, 60)) errors.push(`${where}.id: 1-60 characters`);
+  });
+}
 function checkManifest(m, providers) {
   const errors = [];
   actionsUsed = [];
@@ -23008,10 +23050,14 @@ function checkManifest(m, providers) {
       else seen.add(p.id);
       if (!providers[p?.type]) errors.push(`${where}.type: no provider called "${p?.type}"`);
       if (p?.params != null && (typeof p.params !== "object" || Array.isArray(p.params))) errors.push(`${where}.params: an object`);
-      for (const [k, v] of Object.entries(p?.params ?? {})) {
-        const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
-        if (ref && !(m.settings && Object.hasOwn(m.settings, ref[1]))) errors.push(`${where}.params.${k}: no setting called ${ref[1]}`);
-      }
+      const refs = (v, at) => {
+        if (typeof v === "string") {
+          const ref = /^\$settings\.(.+)$/.exec(v);
+          if (ref && !(m.settings && Object.hasOwn(m.settings, ref[1]))) errors.push(`${at}: no setting called ${ref[1]}`);
+        } else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) refs(x, `${at}.${k}`);
+      };
+      refs(p?.params ?? {}, `${where}.params`);
+      if (p?.type === "http-json") checkHttpJson(p.params ?? {}, `${where}.params`, errors);
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];
         if (v != null && !(INTERVAL.test(v) && parseInterval(v) >= 1e3)) errors.push(`${where}.interval.${k}: like 30s or 10m, at least 1s`);
@@ -23019,6 +23065,7 @@ function checkManifest(m, providers) {
     });
   }
   checkSettings(m.settings, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
+  checkAlerts(m.alerts, m, errors);
   const l = m.layout;
   if (!l || typeof l !== "object") errors.push("layout: missing");
   else {
@@ -23519,8 +23566,8 @@ function cpuTimes(list) {
 function parseVmStat(text) {
   if (!text) return null;
   const page = Number(/page size of (\d+) bytes/.exec(text)?.[1]) || 4096;
-  const get3 = (name) => Number(new RegExp(`${name}:\\s+(\\d+)`).exec(text)?.[1]) || 0;
-  return { used: (get3("Pages active") + get3("Pages wired down") + get3("Pages occupied by compressor")) * page };
+  const get4 = (name) => Number(new RegExp(`${name}:\\s+(\\d+)`).exec(text)?.[1]) || 0;
+  return { used: (get4("Pages active") + get4("Pages wired down") + get4("Pages occupied by compressor")) * page };
 }
 function parseSysctl(text) {
   if (!text) return null;
@@ -23567,13 +23614,13 @@ var signed64 = (s) => {
 };
 function parseBatteryPower(text) {
   if (!text) return null;
-  const get3 = (name) => new RegExp(`"${name}" ?= ?(\\d+|Yes|No)`).exec(text)?.[1];
-  if (get3("ExternalConnected") === "Yes") {
-    const mw = Number(get3("SystemPowerIn"));
+  const get4 = (name) => new RegExp(`"${name}" ?= ?(\\d+|Yes|No)`).exec(text)?.[1];
+  if (get4("ExternalConnected") === "Yes") {
+    const mw = Number(get4("SystemPowerIn"));
     return Number.isFinite(mw) && mw > 0 ? `${watts(mw / 1e3)} in` : "";
   }
-  const amps = signed64(get3("InstantAmperage"));
-  const volts = Number(get3("Voltage"));
+  const amps = signed64(get4("InstantAmperage"));
+  const volts = Number(get4("Voltage"));
   return Number.isFinite(amps) && Number.isFinite(volts) && amps < 0 ? `${watts(-amps * volts / 1e6)} out` : "";
 }
 function parseGpuUse(text) {
@@ -24303,8 +24350,115 @@ var player_default = {
   close: stop
 };
 
+// src/rooms/providers/http-json.mjs
+var MAX_ROWS = 100;
+var get3 = (obj, path) => String(path ?? "").split(".").filter(Boolean).reduce((o, k) => o == null ? void 0 : o[k], obj);
+function fillVars(template, vars, encode = false) {
+  return String(template ?? "").replace(/\{([a-z][a-z0-9_]*)\}/gi, (m, name) => {
+    if (!Object.hasOwn(vars, name)) return m;
+    const v = vars[name];
+    const parts = (Array.isArray(v) ? v : [v]).map((x) => String(x ?? ""));
+    return parts.map((p) => encode ? encodeURIComponent(p) : p).join(",");
+  });
+}
+function toTime(v) {
+  if (typeof v === "number") return v < 1e12 ? v * 1e3 : v;
+  const t = Date.parse(String(v ?? ""));
+  return Number.isFinite(t) ? t : NaN;
+}
+function compact(n) {
+  const a = Math.abs(n);
+  if (a >= 1e12) return `${(n / 1e12).toFixed(1)}T`;
+  if (a >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (a >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return String(Math.round(n));
+}
+function ago2(ms, now) {
+  const s = Math.max(0, Math.round((now - ms) / 1e3));
+  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+function formatField(raw, spec, now = Date.now()) {
+  const fmt = spec.format ?? "text";
+  const out = {};
+  if (fmt === "text") return { text: raw == null ? "" : String(raw) };
+  if (fmt === "date" || fmt === "age") {
+    const t = toTime(raw);
+    if (!Number.isFinite(t)) return { text: "" };
+    out.value = t;
+    out.text = fmt === "age" ? ago2(t, now) : new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    return out;
+  }
+  const n = typeof raw === "number" ? raw : Number(String(raw ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(n)) return { text: "\u2013" };
+  const d = Number.isInteger(spec.digits) ? Math.max(0, Math.min(8, spec.digits)) : null;
+  const num2 = (x) => x.toLocaleString("en-US", d == null ? { maximumFractionDigits: Math.abs(x) >= 100 ? 2 : 4 } : { minimumFractionDigits: d, maximumFractionDigits: d });
+  out.value = n;
+  if (fmt === "number") out.text = num2(n);
+  else if (fmt === "compact") out.text = compact(n);
+  else if (fmt === "percent") out.text = `${n.toFixed(d ?? 1)}%`;
+  else {
+    const body = fmt === "signed-percent" ? `${Math.abs(n).toFixed(d ?? 2)}%` : num2(Math.abs(n));
+    const shown = /[1-9]/.test(body) ? Math.sign(n) : 0;
+    out.text = `${shown > 0 ? "+" : shown < 0 ? "\u2212" : ""}${body}`;
+    const upColor = spec.up === "red" ? "rose" : "leaf";
+    out.arrow = shown > 0 ? "\u25B2" : shown < 0 ? "\u25BC" : "\u2013";
+    out.color = shown > 0 ? upColor : shown < 0 ? upColor === "rose" ? "leaf" : "rose" : "sand";
+  }
+  return out;
+}
+function applyFields(target, src, fields, vars, now) {
+  for (const [name, spec] of Object.entries(fields ?? {})) {
+    const f = formatField(get3(src, fillVars(spec.path, vars)), spec, now);
+    target[name] = f.text;
+    if (f.value != null) target[`${name}Value`] = f.value;
+    if (f.arrow) {
+      target[`${name}Arrow`] = f.arrow;
+      target[`${name}Color`] = f.color;
+    }
+  }
+  return target;
+}
+function toRows(src, key = "id") {
+  if (Array.isArray(src)) return src.slice(0, MAX_ROWS).map((x) => x && typeof x === "object" ? { ...x } : { value: x });
+  if (!src || typeof src !== "object") return [];
+  return Object.entries(src).slice(0, MAX_ROWS).map(([k, v]) => v && typeof v === "object" && !Array.isArray(v) ? { [key]: k, ...v } : { [key]: k, value: v });
+}
+var http_json_default = {
+  type: "http-json",
+  hosts: "*",
+  async fetch(params, ctx) {
+    const vars = params.vars && typeof params.vars === "object" ? params.vars : {};
+    const url = fillVars(params.url, vars, true);
+    if (!/^https:\/\//i.test(url)) throw new RoomError(400, "http-json reads https URLs only");
+    const r = await ctx.fetch(url, { headers: { accept: "application/json" } });
+    if (!r.ok) throw new RoomError(502, `${new URL(url).hostname} answered ${r.status}`);
+    const json = r.json();
+    const now = ctx.now?.() ?? Date.now();
+    const out = applyFields({}, json, params.values, vars, now);
+    if (params.rows) {
+      const key = params.rows.key || "id";
+      let rows = toRows(params.rows.from ? get3(json, fillVars(params.rows.from, vars)) : json, key);
+      const order = params.rows.order && Array.isArray(vars[params.rows.order]) ? vars[params.rows.order].map((x) => String(x).toLowerCase()) : null;
+      if (order) {
+        const rank = (row) => {
+          const i = order.indexOf(String(row[key]).toLowerCase());
+          return i < 0 ? order.length : i;
+        };
+        rows = rows.sort((a, b) => rank(a) - rank(b));
+      }
+      out.rows = rows.map((row) => applyFields({ ...row }, row, params.fields, vars, now));
+      out.count = out.rows.length;
+    }
+    out.updated = new Date(now).toTimeString().slice(0, 5);
+    return out;
+  }
+};
+
 // src/rooms/registry.mjs
-var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default].map((p) => [p.type, p]));
+var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default, http_json_default].map((p) => [p.type, p]));
 function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
   return new Promise((resolve2) => {
     execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve2(err ? null : String(stdout)));
@@ -24425,10 +24579,35 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
   }
   function paramsOf(m, p) {
     const values = settingsOf(m.id);
-    const out = {};
-    for (const [k, v] of Object.entries(p.params ?? {})) {
-      const ref = typeof v === "string" && /^\$settings\.(.+)$/.exec(v);
-      out[k] = ref ? values[ref[1]] : v;
+    const fill = (v) => {
+      if (typeof v === "string") {
+        const ref = /^\$settings\.(.+)$/.exec(v);
+        return ref ? values[ref[1]] : v;
+      }
+      if (Array.isArray(v)) return v.map(fill);
+      if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)]));
+      return v;
+    };
+    return fill(p.params ?? {});
+  }
+  function manifestAlerts(m, pid, data) {
+    const out = [];
+    const values = settingsOf(m.id);
+    const limit = (v) => typeof v === "string" ? Number(values[/^\$settings\.(.+)$/.exec(v)?.[1]]) : Number(v);
+    const fillRow = (t, row) => String(t).replace(/\{([A-Za-z0-9_.]+)\}/g, (_, path) => String(path.split(".").reduce((o, k) => o == null ? void 0 : o[k], row) ?? ""));
+    for (const a of m.alerts ?? []) {
+      const path = a.rows ?? a.value;
+      const [first, ...rest] = path.split(".");
+      if (first !== pid) continue;
+      const at = rest.reduce((o, k) => o == null ? void 0 : o[k], data);
+      const rows = a.rows ? Array.isArray(at) ? at : [] : [{ value: at }];
+      const field = a.rows ? a.field : "value";
+      for (const row of rows) {
+        const n = Number(field.split(".").reduce((o, k) => o == null ? void 0 : o[k], row));
+        if (!Number.isFinite(n)) continue;
+        const hit = a.above != null ? n >= limit(a.above) : a.below != null ? n <= limit(a.below) : limit(a.beyond) > 0 && Math.abs(n) >= limit(a.beyond);
+        if (hit) out.push({ id: `m:${fillRow(a.id, row)}`.slice(0, 80), text: fillRow(a.text, row).slice(0, 120) });
+      }
     }
     return out;
   }
@@ -24474,6 +24653,8 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     clearTimeout(timers.get(k));
     try {
       const data = clean(await providers[p.type].fetch(paramsOf(m, p), ctxFor(m, p)));
+      const extra = m.alerts ? manifestAlerts(m, pid, data) : [];
+      if (extra.length || m.alerts && data && typeof data === "object") data.alerts = [...Array.isArray(data.alerts) ? data.alerts : [], ...extra];
       const at = Date.now();
       last.set(k, { data, at });
       emit2({ type: "fnroom", id, provider: pid, data, at });
@@ -24608,13 +24789,13 @@ var PREVIEW_TTL_MS = 10 * 6e4;
 var ID3 = /^[a-z][a-z0-9-]{1,23}$/;
 var SHA = /^[0-9a-f]{64}$/;
 var sha256 = (text) => createHash("sha256").update(text).digest("hex");
-function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, registry, providers, version: version4, fetch: get3 = limitedFetch }) {
+function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, registry, providers, version: version4, fetch: get4 = limitedFetch }) {
   const base = String(url).replace(/\/+$/, "");
   const hosts = [new URL(base).hostname.toLowerCase()];
   let index = null;
   const pending = /* @__PURE__ */ new Map();
   async function fetchText(path) {
-    const r = await get3(`${base}/${path}`, { hosts });
+    const r = await get4(`${base}/${path}`, { hosts });
     if (r.status === 404) throw new RoomError(404, `the store has no ${path}`);
     if (!r.ok) throw new RoomError(502, `the store answered ${r.status} for ${path}`);
     return r.text;

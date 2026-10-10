@@ -2,6 +2,22 @@
   "schema": 1,
   "rooms": [
     {
+      "id": "crypto",
+      "name": "Crypto",
+      "icon": "₿",
+      "version": "1.0.0",
+      "minSquadChat": "0.16.0",
+      "description": "Coin prices and their 24-hour change, from CoinGecko, no key. Not investment advice.",
+      "author": "squad-chat",
+      "hosts": [
+        "api.coingecko.com"
+      ],
+      "providers": [
+        "http-json"
+      ],
+      "sha256": "89a8e4fb3bf9e20846a30f1ae0cf6a00273dc626d242e709465e169ac91fabce"
+    },
+    {
       "id": "dev-blogs",
       "name": "Dev Blogs",
       "icon": "✎",
@@ -18,6 +34,22 @@
         "rss"
       ],
       "sha256": "ddd34742d15dc223785803e97f73c32026565f925137c8d596420e1a1d5fa723"
+    },
+    {
+      "id": "fx-rates",
+      "name": "FX Rates",
+      "icon": "¤",
+      "version": "1.0.0",
+      "minSquadChat": "0.16.0",
+      "description": "Exchange rates against the currency you pick, from the European Central Bank's daily reference rates via Frankfurter. No key.",
+      "author": "squad-chat",
+      "hosts": [
+        "api.frankfurter.dev"
+      ],
+      "providers": [
+        "http-json"
+      ],
+      "sha256": "8df3d8154a8a2e4d067e856e7c31e8e63017352df9f7d899bcac662e18f13805"
     },
     {
       "id": "security-news",
