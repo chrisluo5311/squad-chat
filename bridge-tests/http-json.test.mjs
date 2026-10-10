@@ -114,6 +114,11 @@ describe("a manifest's alerts", () => {
     assert.equal((await run([{ ...alerts[0], beyond: 0.2 }])).length, 2);   // a number in the manifest
   });
 
+  it("a setting of 0 turns any alert off; a 0 written in the manifest is just 0", async () => {
+    assert.deepEqual(await run([{ value: "c.fear", above: "$settings.move", text: "x", id: "x" }], { move: 0 }), []);
+    assert.deepEqual(await run([{ value: "c.fear", above: 0, text: "at {value}", id: "zero" }]), [{ id: "m:zero", text: "at 81" }]);
+  });
+
   it("watches one value, above or below", async () => {
     assert.deepEqual(await run([{ value: "c.fear", above: 80, text: "greed at {value}", id: "greed" }]), [{ id: "m:greed", text: "greed at 81" }]);
     assert.deepEqual(await run([{ value: "c.fear", below: 20, text: "fear at {value}", id: "fear" }]), []);

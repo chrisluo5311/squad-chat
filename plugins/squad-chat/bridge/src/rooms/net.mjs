@@ -84,7 +84,13 @@ export function clean(value, depth = 0) {
   if (Array.isArray(value)) return value.slice(0, 500).map((v) => clean(v, depth + 1));
   if (value && typeof value === "object") {
     const out = {};
-    for (const [k, v] of Object.entries(value)) out[cleanString(k)] = clean(v, depth + 1);
+    for (const [k, v] of Object.entries(value)) {
+      // "__proto__" as a key (once cleaned: "__pro\0to__" becomes it) would
+      // set the copy's prototype, not add a field.
+      const key = cleanString(k);
+      if (key === "__proto__") continue;
+      out[key] = clean(v, depth + 1);
+    }
     return out;
   }
   return typeof value === "number" || typeof value === "boolean" || value == null ? value : null;

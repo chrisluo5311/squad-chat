@@ -66,7 +66,7 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | `quotes` | `watchlist`, `colors` (`market`, `red-up`, `green-up`), `move` | `quotes[]` (`symbol`, `name`, `priceText`, `pctText`, `arrow`, `color`, `spark`, `volText`, `when`), `markets`, `band`, `note`, `updated` |
 | `local-list` | `max` | `items[]` (`id`, `name`, `lang`, `body`), `count` |
 | `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu`, `mem`, `gpu`, `net`, `disk`, `battery`, `band`, … (see the Monitor room's manifest) |
-| `player` | `stations`, `volume` | `now`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
+| `player` | `stations` (https, on the room's hosts), `volume` | `now`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
 
 Each provider can reach only the hosts it knows about, and only where the manifest names them too. `rss` and `http-json` read whatever they're pointed at, so for them the manifest's list alone decides. The rooms squad-chat ships, in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms), are full examples of each.
 
@@ -101,7 +101,7 @@ A room can toast when something crosses a line, once until it crosses back, and 
 ]
 ```
 
-`rows` and `field` watch each row, or `value` watches one number. `above`, `below` or `beyond` (either way) is the line: a number, or a setting, where `0` turns the alert off. `text` and `id` are templates filled from the row, and the `id` decides what counts as the same alert.
+`rows` and `field` watch each row, or `value` watches one number. `above`, `below` or `beyond` (either way) is the line: a number, or a setting, and a setting of `0` turns the alert off (a `0` written in the manifest is just zero). `text` and `id` are templates filled from the row, and the `id` decides what counts as the same alert.
 
 ## Widgets
 

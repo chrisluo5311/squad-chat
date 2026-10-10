@@ -65,7 +65,7 @@ These four are off until you turn them on, and each says where it goes when you 
 
 The bridge holds each room to its own sites, so a room can't reach anywhere else, and a feed you add has to be on one of them. What comes back is cleaned of terminal escapes before it's drawn, and none of it reaches Claude. The settings you pick stay in `~/.config/squad-chat/room-data/<room>/settings.json`, readable only by you.
 
-Lo-fi is the one room whose streams don't go through the bridge's host check: mpv fetches them itself, and it plays what you add, from wherever it is. Files and folders you add stay where they are, and the list of them is kept in `room-data/lofi/list.json`. mpv runs only after you press play, and stops when the session ends.
+Lo-fi's streams don't go through the bridge's fetch, since mpv fetches them itself. Its stations are still held to the room's hosts, both when a room is checked and again before one plays, so a store room can't use the player to reach a host it doesn't name. What you add yourself with `/lofi add` plays from wherever it is. Files and folders you add stay where they are, and the list of them is kept in `room-data/lofi/list.json`. mpv runs only after you press play, and stops when the session ends.
 
 Only `/chat-share usage|git|agents|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 

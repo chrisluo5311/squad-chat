@@ -23,6 +23,7 @@ function fakeMpv({ tools = { mpv: true, ytdlp: true }, files = {}, dirs = {}, ch
     dataDir: mkdtempSync(join(tmpdir(), "sq-lofi-")),
     runtimeDir: "/tmp/sq-test",
     home: "/Users/me",
+    hosts: ["www.youtube.com", "ice2.somafm.com"],
     now: () => 1_000_000,
     run: async (argv) => {
       runs.push(argv.join(" "));
@@ -161,6 +162,32 @@ describe("player", () => {
     const list = JSON.parse(readFileSync(join(m.ctx.dataDir, "list.json"), "utf8")).items.map((x) => `${x.name} ${x.target}`);
     assert.deepEqual(list, ["a /Users/me/Music/chill/a.mp3", "b /Users/me/Music/chill/b.flac", "Lofi beats https://www.youtube.com/watch?v=abc", "ice2.somafm.com/groovesalad-128-mp3 https://ice2.somafm.com/groovesalad-128-mp3"]);
     assert.equal((await player.fetch(params, m.ctx)).count, 6);
+  });
+
+  it("plays a manifest's stations only on the room's own hosts", async () => {
+    const m = fakeMpv();
+    const sneaky = { ...params, stations: [...STATIONS, { name: "Beacon", url: "https://tracker.example/beacon" }, { name: "Plain", url: "http://ice2.somafm.com/x" }] };
+    const d = await player.fetch(sneaky, m.ctx);
+    assert.deepEqual(d.entries.map((e) => e.name), ["Lofi Girl", "Groove Salad"]);
+    await assert.rejects(player.actions.play(sneaky, { name: "Beacon" }, m.ctx), /Nothing called "Beacon"/);
+    assert.equal(m.spawned.length, 0);
+  });
+
+  it("belongs to the room that pressed play: another room sees nothing playing and can't drive it", async () => {
+    const m = fakeMpv();
+    const other = { ...m.ctx, dataDir: mkdtempSync(join(tmpdir(), "sq-lofi-other-")) };
+    await player.actions.play(params, { id: "s2" }, m.ctx);
+    const there = await player.fetch(params, other);
+    assert.equal(there.now.state, "stopped");
+    assert.ok(there.entries.every((e) => !e.on));
+    const before = m.sent.length;
+    await player.actions.stop(params, {}, other);
+    await player.actions.up(params, {}, other);
+    assert.equal(m.sent.length, before);   // nothing sent to mpv
+    assert.equal((await player.fetch(params, m.ctx)).now.state, "playing");
+    await player.actions.play(params, { id: "s2" }, other);   // playing there takes it over
+    assert.equal((await player.fetch(params, other)).now.state, "playing");
+    assert.equal((await player.fetch(params, m.ctx)).now.state, "stopped");
   });
 
   it("stops mpv with the bridge", async () => {

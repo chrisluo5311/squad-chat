@@ -3,7 +3,7 @@
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import quotes, { classify, twOpen, resetQuotes } from "../plugins/squad-chat/bridge/src/rooms/providers/quotes.mjs";
+import quotes, { classify, twOpen, twOpensAt, resetQuotes } from "../plugins/squad-chat/bridge/src/rooms/providers/quotes.mjs";
 
 // Friday 2026-10-09: 10:00 in Taipei (TWSE open), then 22:00 (US open, TWSE closed).
 const TPE_10AM = Date.parse("2026-10-09T02:00:00Z");
@@ -93,6 +93,24 @@ describe("quotes", () => {
     const before = seen.length;
     await quotes.fetch({ watchlist: ["2330", "0050"] }, ctx);
     assert.ok(seen.length > before);
+  });
+
+  it("doesn't let the closed-market rest run past the next open", async () => {
+    const at859 = Date.parse("2026-10-09T00:59:00Z");   // Friday 08:59 in Taipei
+    assert.equal(twOpensAt(at859), Date.parse("2026-10-09T01:00:00Z"));
+    assert.equal(twOpensAt(TPE_10AM), null);
+    assert.equal(twOpensAt(Date.parse("2026-10-10T00:30:00Z")), null);   // Saturday
+    const now = { at: at859 };
+    let day = "20261008";
+    const { ctx, seen } = fakeCtx(now, { twse: () => [200, { msgArray: [tw("2330", "tse", "台積電", "2550", "2585", day)] }], yahoo: (s) => [200, chart(s, 1, 1, { start: 0, end: 1, at: 0, tz: "Asia/Taipei" })] });
+    const a = await quotes.fetch({ watchlist: ["2330"] }, ctx);
+    assert.equal(a.quotes[0].when, "closed");
+    now.at += 60_000;   // 09:00: open, and the rest is over
+    day = "20261009";
+    const asked = seen.length;
+    const b = await quotes.fetch({ watchlist: ["2330"] }, ctx);
+    assert.ok(seen.length > asked);
+    assert.equal(b.quotes[0].when, "open");
   });
 
   it("falls back to Yahoo when TWSE is down, and fails only when nothing answers", async () => {

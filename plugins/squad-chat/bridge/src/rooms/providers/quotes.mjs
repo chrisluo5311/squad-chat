@@ -69,6 +69,13 @@ export function twOpen(dataDay, now) {
   return dataDay === c.day && !c.weekend && c.minutes >= 9 * 60 && c.minutes <= 13 * 60 + 30;
 }
 
+// When TWSE opens next, if that's later today (a weekday before 9:00 Taipei
+// time); otherwise it's hours away, past any cache.
+export function twOpensAt(now) {
+  const c = clock(now, "Asia/Taipei");
+  return !c.weekend && c.minutes < 9 * 60 ? now - (now % 60_000) + (9 * 60 - c.minutes) * 60_000 : null;
+}
+
 async function twse(entries, ctx) {
   if (!entries.length) return new Map();
   const ex = entries.flatMap((e) => (e.symbol === "TAIEX" ? ["tse_t00.tw"] : e.market ? [`${e.market}_${e.tw.toLowerCase()}.tw`] : [`tse_${e.tw.toLowerCase()}.tw`, `otc_${e.tw.toLowerCase()}.tw`]));
@@ -122,7 +129,9 @@ export default {
     const now = ctx.now?.() ?? Date.now();
     const key = JSON.stringify([list, params.colors, params.move]);
     const was = cache.get(ctx.dataDir);
-    if (was && was.key === key && !was.data.anyOpen && now - was.at < CLOSED_REFRESH_MS) return was.data;
+    // Everything closed: the last answer stands for 15 minutes, but never past
+    // the next session's start, so an open isn't missed.
+    if (was && was.key === key && !was.data.anyOpen && now - was.at < CLOSED_REFRESH_MS && !(was.data.opensAt && now >= was.data.opensAt)) return was.data;
 
     const entries = list.map((e) => ({ entry: e, ...classify(e) }));
     // TWSE down: Yahoo's .TW quote stands in.
@@ -160,6 +169,8 @@ export default {
         volText: volume(t ? t.volume : y.volume, isTw),
         market: isTw ? "TW" : "",
         open,
+        // The next session's start, when it's still ahead today.
+        opensAt: open ? null : isTw ? twOpensAt(now) : y?.session && y.session.start * 1000 > now ? y.session.start * 1000 : null,
         when: open ? "open" : "closed",
       };
     });
@@ -167,6 +178,8 @@ export default {
     // Nothing came back at all: an error, so the last quotes stay, marked stale.
     if (list.length && quotes.every((q) => q.price == null)) throw twError ?? yh.find((x) => x?.error)?.error ?? new RoomError(502, "no quotes");
     const anyOpen = quotes.some((q) => q.open);
+    const starts = quotes.map((q) => q.opensAt).filter(Number.isFinite);
+    const opensAt = starts.length ? Math.min(...starts) : null;
     const tws = quotes.filter((q) => q.market === "TW");
     const others = quotes.filter((q) => q.price != null && q.market !== "TW");
     const markets = [tws.length ? `TW ${tws.some((q) => q.open) ? "open" : "closed"}` : null, others.length ? `others ${others.some((q) => q.open) ? "open" : "closed"}` : null].filter(Boolean).join(" · ");
@@ -180,6 +193,7 @@ export default {
       count: quotes.length,
       markets,
       anyOpen,
+      opensAt,
       updated: new Date(now).toTimeString().slice(0, 5),
       band: quotes.filter((q) => q.price != null).slice(0, 4).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(" · ") || "no quotes",
       note: "Prices may be delayed. Not investment advice.",

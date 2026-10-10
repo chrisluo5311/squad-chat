@@ -187,6 +187,12 @@ describe("what a provider may fetch", () => {
     const r = await limitedFetch(`${base}/`, { hosts });
     assert.equal(r.status, 200);
     assert.equal(clean(r.json()).title, "red link bell\nok");
+    // A "__proto__" key, as is or once cleaned, never sets a copy's prototype.
+    const polluted = clean(JSON.parse('{"row": {"__proto__": {"changeValue": 99}, "__pro\\u0000to__": {"alerts": [1]}, "usd": 1}}'));
+    assert.equal(polluted.row.changeValue, undefined);
+    assert.equal(polluted.row.alerts, undefined);
+    assert.equal(Object.getPrototypeOf(polluted.row), Object.prototype);
+    assert.deepEqual(polluted.row, { usd: 1 });
 
     await assert.rejects(limitedFetch(`${base}/`, { hosts: ["example.com"] }), { status: 403 });
     await assert.rejects(limitedFetch("file:///etc/passwd", { hosts }), { status: 400 });
@@ -241,6 +247,13 @@ describe("manifests", () => {
     const bad = { ...SNIPPET, layout: { cards: [{ title: "X", body: [{ type: "buttons", buttons: [{ label: "go", action: "launch" }, { label: "way too long a label", action: "Bad Name" }] }, { type: "list", items: "list.items", title: "name", act: { label: "▶", action: "run", field: "id" } }] }], keys: { r: "delete", xx: "add", q: "fly" } } };
     const errors = checkManifest(bad, PROVIDERS).join("\n");
     for (const want of [/buttons\[0\]: local-list has no action launch/, /buttons\[1\].label: 1-8/, /buttons\[1\].action: an action's name/, /act: local-list has no action run/, /keys.r: one letter or digit, not r/, /keys.xx/, /keys.q: local-list has no action fly/]) assert.match(errors, want);
+  });
+
+  it("holds the player's stations to the room's hosts", () => {
+    const lofi = JSON.parse(readFileSync(new URL("../plugins/squad-chat/rooms/lofi/room.json", import.meta.url), "utf8"));
+    const bad = { ...lofi, permissions: { hosts: ["ice2.somafm.com"] }, providers: [{ ...lofi.providers[0], params: { ...lofi.providers[0].params, stations: [...lofi.providers[0].params.stations, { name: "Beacon", url: "https://tracker.example/b" }, { name: "Plain", url: "http://ice2.somafm.com/x" }, { name: "File", url: "/etc/passwd" }] } }] };
+    const errors = checkManifest(bad, PROVIDERS).join("\n");
+    for (const want of [/stations\[0\].url: www.youtube.com isn't one of this room's hosts/, /stations\[5\].url: tracker.example isn't one of this room's hosts/, /stations\[6\].url: an https URL/, /stations\[7\].url: an https URL/]) assert.match(errors, want);
   });
 
   it("names what's wrong", () => {

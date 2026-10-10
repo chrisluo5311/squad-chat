@@ -11,6 +11,13 @@
 //     one JSON file, changed under the same lock as Snippets.
 //   * If Pixel Play is playing too, the room says so: two players at once
 //     is rarely what anyone wants.
+//   * A manifest's stations must be https and on the room's own hosts (a
+//     YouTube one needs www.youtube.com, whose audio then comes from
+//     Google's video servers), like any provider's reach. What the person
+//     adds with /lofi add plays from wherever it is: that's their choice.
+//   * There's one mpv, and it belongs to the room that last pressed play.
+//     Another room using this provider shows nothing playing and can't
+//     drive it, until it plays something itself.
 
 import { join, resolve, extname, basename } from "node:path";
 import { readFileSync, writeFileSync, renameSync, mkdirSync, chmodSync } from "node:fs";
@@ -70,10 +77,18 @@ function saveList(dir, items) {
   renameSync(tmp, file);
 }
 
-// The room's stations (from the manifest), then its own list.
+// A station's host, when it's an https URL; else null.
+export function stationHost(url) {
+  try { const u = new URL(String(url)); return u.protocol === "https:" ? u.hostname.toLowerCase() : null; } catch { return null; }
+}
+
+// The room's stations (from the manifest, only those on its hosts), then
+// its own list.
 function entries(params, ctx) {
+  const hosts = ctx.hosts ?? [];
   const stations = (Array.isArray(params.stations) ? params.stations : []).filter((s) => s?.url && s.name)
-    .map((s, i) => ({ id: `s${i + 1}`, name: String(s.name), target: String(s.url), kind: kindOf(s.url) }));
+    .map((s, i) => ({ id: `s${i + 1}`, name: String(s.name), target: String(s.url), kind: kindOf(s.url) }))
+    .filter((s) => hosts.includes(stationHost(s.target)));
   let own = [];
   try { own = loadList(ctx.dataDir); } catch { /* shown as an error by fetch */ }
   return [...stations, ...own.map((x) => ({ ...x, kind: kindOf(x.target) }))];
@@ -112,7 +127,10 @@ async function liveStreams(url, ctx) {
 
 // ---------------------------------------------------------------- mpv
 
-let mpv = null;   // { child, conn, pending, seq, buf, entryId, ctx }
+let mpv = null;   // { child, conn, pending, seq, buf, entryId, owner }
+
+// mpv is playing for this room (owner: the room's data folder).
+const mine = (ctx) => !!mpv?.conn && mpv.owner === ctx.dataDir;
 
 function ipc(command, timeoutMs = 2_000) {
   return new Promise((resolve, reject) => {
@@ -150,7 +168,7 @@ async function start(ctx, volume) {
   const args = ["--idle=yes", "--no-video", "--no-terminal", "--force-window=no", `--volume=${volume}`, `--input-ipc-server=${sock}`, "--ytdl-format=bestaudio/best"];
   if (t.ytdlp?.startsWith("/")) args.push(`--script-opts=ytdl_hook-ytdl_path=${t.ytdlp}`);
   const child = ctx.spawn(["/bin/sh", "-c", watch, t.mpv, ...args], { detached: true });
-  const state = { child, conn: null, pending: new Map(), seq: 0, buf: "", entryId: null };
+  const state = { child, conn: null, pending: new Map(), seq: 0, buf: "", entryId: null, owner: ctx.dataDir };
   mpv = state;
   child.on?.("exit", () => { if (mpv === state) { try { state.conn?.destroy(); } catch { /* gone */ } mpv = null; } });
   for (let waited = 0; waited < 5_000 && mpv === state; waited += 100) {
@@ -194,6 +212,7 @@ async function playEntry(entry, ctx, params) {
   for (const url of queue.slice(1)) await ipc(["loadfile", url, "append"]);
   await ipc(["set_property", "pause", false]);
   mpv.entryId = entry.id;
+  mpv.owner = ctx.dataDir;
   return { ok: true, playing: entry.name };
 }
 
@@ -239,7 +258,7 @@ function pick(list, args) {
 }
 
 async function step(params, ctx, dir) {
-  if (mpv?.conn) {
+  if (mine(ctx)) {
     const [pos, count] = await Promise.all([get("playlist-pos"), get("playlist-count")]);
     if (Number.isInteger(pos) && Number.isInteger(count) && count > 1 && pos + dir >= 0 && pos + dir < count) {
       await ipc([dir > 0 ? "playlist-next" : "playlist-prev", "force"]);
@@ -248,7 +267,7 @@ async function step(params, ctx, dir) {
   }
   const list = entries(params, ctx);
   if (!list.length) throw new RoomError(404, "Nothing to play: /lofi add <url or path>");
-  const i = list.findIndex((e) => e.id === mpv?.entryId);
+  const i = mine(ctx) ? list.findIndex((e) => e.id === mpv.entryId) : -1;
   return playEntry(list[(i + dir + list.length) % list.length], ctx, params);
 }
 
@@ -260,9 +279,9 @@ async function play(params, args, ctx) {
     if (!e) throw new RoomError(404, `Nothing called "${args.name ?? args.id}" to play.`);
     return playEntry(e, ctx, params);
   }
-  if (mpv?.conn && !(await get("idle-active"))) { await ipc(["set_property", "pause", false]); return { ok: true }; }
+  if (mine(ctx) && !(await get("idle-active"))) { await ipc(["set_property", "pause", false]); return { ok: true }; }
   if (!list.length) throw new RoomError(404, "Nothing to play: /lofi add <url or path>");
-  return playEntry(list.find((e) => e.id === mpv?.entryId) ?? list[0], ctx, params);
+  return playEntry((mine(ctx) && list.find((e) => e.id === mpv.entryId)) || list[0], ctx, params);
 }
 
 export default {
@@ -276,7 +295,7 @@ export default {
     let listError = "";
     try { loadList(ctx.dataDir); } catch (err) { listError = err.message; }
     const now = { state: "stopped", title: "", source: "", timeText: "", pct: null, volume: params.volume ?? 60, mark: "■" };
-    if (mpv?.conn) {
+    if (mine(ctx)) {
       const [title, meta, pos, dur, paused, vol, idle] = await Promise.all(["media-title", "metadata", "time-pos", "duration", "pause", "volume", "idle-active"].map(get));
       const entry = list.find((e) => e.id === mpv?.entryId);
       if (!idle) {
@@ -297,7 +316,7 @@ export default {
       available: !!t.mpv,
       ytdlp: !!t.ytdlp,
       now,
-      entries: list.map((e) => ({ id: e.id, name: e.name, tag: TAG[e.kind] + (e.kind !== "file" && e.kind !== "stream" && !t.ytdlp ? " (needs yt-dlp)" : ""), on: e.id === mpv?.entryId && now.state !== "stopped" ? "♫" : "" })),
+      entries: list.map((e) => ({ id: e.id, name: e.name, tag: TAG[e.kind] + (e.kind !== "file" && e.kind !== "stream" && !t.ytdlp ? " (needs yt-dlp)" : ""), on: mine(ctx) && e.id === mpv.entryId && now.state !== "stopped" ? "♫" : "" })),
       count: list.length,
       hint: [hint, listError].filter(Boolean).join(" "),
       conflict,
@@ -308,22 +327,22 @@ export default {
   actions: {
     play,
     async pause(params, args, ctx) {
-      if (!mpv?.conn || (await get("idle-active"))) return play(params, {}, ctx);
+      if (!mine(ctx) || (await get("idle-active"))) return play(params, {}, ctx);
       await ipc(["cycle", "pause"]);
       return { ok: true };
     },
-    async stop() {
-      if (mpv?.conn) await ipc(["stop"]);
+    async stop(params, args, ctx) {
+      if (mine(ctx)) await ipc(["stop"]);
       return { ok: true };
     },
     next: (params, args, ctx) => step(params, ctx, 1),
     prev: (params, args, ctx) => step(params, ctx, -1),
-    async up() { if (mpv?.conn) await ipc(["add", "volume", 5]); return { ok: true }; },
-    async down() { if (mpv?.conn) await ipc(["add", "volume", -5]); return { ok: true }; },
-    async volume(params, args) {
+    async up(params, args, ctx) { if (mine(ctx)) await ipc(["add", "volume", 5]); return { ok: true }; },
+    async down(params, args, ctx) { if (mine(ctx)) await ipc(["add", "volume", -5]); return { ok: true }; },
+    async volume(params, args, ctx) {
       const v = Math.max(0, Math.min(130, Number(args.level)));
       if (!Number.isFinite(v)) throw new RoomError(400, "Volume is 0-130.");
-      if (mpv?.conn) await ipc(["set_property", "volume", v]);
+      if (mine(ctx)) await ipc(["set_property", "volume", v]);
       return { ok: true, volume: v };
     },
     // A URL, a file, or a folder of audio files (each one added).
