@@ -68,7 +68,8 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat store` / `install <id>` / `update [id]` / `uninstall <id>` | Rooms from the room store: list, install (a look first), update, remove |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo` |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to a chat room |
-| `/snippet add <name>` | Save the selection, or else Claude's last code block, to the Snippets room |
+| `/snippet add <text>` | Save the text as a snippet. Snippets are numbered 1, 2, 3 and on |
+| `/snippet add` | Save the selection, or else Claude's last code block, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
 | `/lofi play [name]` / `pause` / `next` / `vol <0-100>` / `add <url or path>` / `import` | The Lo-fi room's player and list, from the prompt |

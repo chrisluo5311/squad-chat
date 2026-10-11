@@ -124,12 +124,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
     bridge.emit(msg(1, 'bob', 'hi there'), msg(2, 'me', 'hey bob'))
     await settle()
     const ui = await $.ui.mount({ ...PANE, surface, props: props('dock') })
-    expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()            // the active tab
+    if (surface === 'terminal') expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()   // the active tab
+    else expect(await ui.find({ type: 'Svg', alt: '#lobby' })).toBeDefined()                             // a drawn pill on the desktop
     expect(await ui.find({ type: 'Text', text: '1/2 online' })).toBeDefined()          // FRIENDS card meta
     expect(await ui.find({ type: 'Text', text: '1 here' })).toBeDefined()              // room card meta
     expect(await ui.find({ type: 'Text', text: /^bob$/ })).toBeDefined()               // a group header
     expect(await ui.find({ type: 'Text', text: 'hi there' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^you$/ })).toBeDefined()              // own messages say "you"
+    // Own messages say "you" in the terminal; the desktop, like a phone, puts
+    // them at the right in your color with no name, and the time under each group.
+    if (surface === 'terminal') expect(await ui.find({ type: 'Text', text: /^you$/ })).toBeDefined()
+    else {
+      expect(await ui.find({ type: 'Text', text: /^you$/ })).toBeUndefined()
+      expect(await ui.find({ type: 'Box', key: 't2' })).toBeDefined()                  // the time under yours
+      expect(await ui.find({ type: 'Svg', alt: /online$/ })).toBeDefined()             // a friend's chip, drawn whole
+    }
     expect(await ui.find({ type: 'Text', text: 'hey bob' })).toBeDefined()
 
     await ui.input({ key: 'compose', text: 'hello all' })
@@ -934,6 +942,21 @@ test('Usage room: context, limits, spend, cache, tool timings and subagents', SL
   expect(await desk.find({ type: 'Text', text: /^ {2,}[\d$–]/ })).toBeUndefined()   // no spaces padding a number right
   expect((await desk.find({ type: 'Input' }) as any)?.props.autoFocus).toBeUndefined()
   expect(await desk.find({ type: 'Box', key: 'gap-Spend' })).toBeDefined()        // cards sit a row apart
+  // Bars are drawn lines, not "━" set in a font that runs past their column.
+  expect(await desk.find({ type: 'Svg', alt: '85%' })).toBeDefined()           // the context meter's bar
+  expect(await desk.find({ type: 'Text', text: /━/ })).toBeUndefined()
+  // Spend as three tiles, each figure set large; Subagents' counts set large over the rows.
+  expect(await desk.find({ type: 'Svg', alt: '$4.21' })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: '90%' })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: 'cache ring' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'CACHE HITS' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'RUNNING' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'AGENT TIME' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'map the repo' })).toBeDefined()
+  // The field is sized to its frame, and the cards sit a row below the tabs.
+  expect(await desk.find({ type: 'Text', text: '/help' })).toBeDefined()           // the frame's spare room says where help is
+  expect(await desk.find({ type: 'Text', text: /^1 tool · 1 call$/ })).toBeDefined()   // Tools: a count up top, labels in a row of their own
+  expect(await desk.find({ type: 'Svg', alt: 'gap' })).toBeDefined()
   await desk.unmount()
 })
 
@@ -969,6 +992,14 @@ test('Git room: branch, PR, reviews and checks from gh; a refresh that turns CI 
   expect(seen.toasts).toContain('✗ Checks failed on #5')
   expect(seen.statuses.at(-1)).toBe('✗ CI')
   await ui.unmount()
+
+  // The desktop opens links (↗) where the terminal copies them (⧉).
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: tall })
+  await settle()
+  expect((await desk.findAll({ type: 'Link' })).length).toBeGreaterThan(0)
+  expect(await desk.find({ type: 'Button', key: 'copy-pr' })).toBeUndefined()
+  expect(await desk.find({ type: 'Button', key: 'copy' })).toBeUndefined()
+  await desk.unmount()
 })
 
 test('Git room: says how to set up gh when it is missing', SLOW, async ($, on) => {
@@ -1022,6 +1053,16 @@ test('Agents room: lists the other sessions on this computer, and heartbeats to 
 
   await ui.press({ key: 'filter' })                                              // all → here
   expect(await ui.find({ type: 'Text', text: 'npm test' })).toBeUndefined()
+
+  // The desktop: each session's state as a chip, its subagents in a tree of
+  // drawn lines, a running one with a ring.
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Text', text: /^ working · Bash 2\ds $/ })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'find the routes' })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: 'running' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'here' })).toBeDefined()
+  await desk.unmount()
 
   await bridge.clock.advance(1_000)
   await settle()
@@ -1197,6 +1238,36 @@ test('Snippet room: an empty list says how to add one; a long one gives way with
   await ui.unmount()
 })
 
+// The desktop draws snippets as code blocks with labeled buttons, and its
+// Delete asks once more before it runs.
+test('Snippet room on the desktop: code blocks with their own copy, a Share button, and a Delete that asks first', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(SNIPPET_ROOM))
+  room.layout.cards[0].desktop = { ...room.layout.cards[0].body, act: { label: 'Delete', action: 'delete', field: 'name' }, code: true }
+  const bridge = fakeBridge(on, { store: { view: 'snippet' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [room], invalid: [] }, { type: 'fnroom', id: 'snippet', provider: 'list', data: { items: SNIPS, count: SNIPS.length }, at: Date.now() })
+  await settle()
+  bridge.replies['/fnroom/action'] = (b) => [200, { ok: true, item: { name: b.args.name } }]
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  const first = SNIPS[0]
+  expect(await desk.find({ type: 'Code' })).toBeDefined()
+  expect(await desk.find({ key: `copy-c0-${first.id}` })).toBeUndefined()   // the code block carries its own copy
+  expect(await desk.find({ key: `share-c0-${first.id}` })).toBeDefined()
+  const del = `act-c0-${first.id}`
+  await desk.press({ key: del })
+  expect(bridge.calls.some((c) => c.path === '/fnroom/action')).toBe(false)     // the first press only asks
+  expect((await desk.find({ key: del }) as any)?.props.label).toBe('Sure?')
+  await desk.press({ key: del })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'snippet', action: 'delete', args: { name: first.name } } })
+  // What's typed in the box here is a new snippet: the button says add.
+  expect((await desk.find({ type: 'Input' }) as any)?.props.submitLabel).toBe('add')
+  bridge.replies['/fnroom/action'] = (b) => [200, { ok: true, item: { name: b.args.name, body: b.args.body } }]
+  await desk.input({ key: 'compose', text: 'git status' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'snippet', provider: 'list', action: 'add', args: { name: '1', body: 'git status', lang: null } } })
+  await desk.unmount()
+})
+
 test('/snippet saves the selection or the last code block, and renames, deletes, copies and shares', SLOW, async ($, on) => {
   const logs = recordLogs(on)
   const copied: string[] = []
@@ -1211,14 +1282,23 @@ test('/snippet saves the selection or the last code block, and renames, deletes,
   await settle()
   bridge.replies['/fnroom/action'] = (b) => [200, { ok: true, item: { name: b.args.to ?? b.args.name, lang: b.args.lang ?? null, body: b.args.body ?? 'x' } }]
 
-  await $.command.run({ command: 'snippet', args: 'add last five' })
-  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'snippet', provider: 'list', action: 'add', args: { name: 'last five', body: 'git log --oneline -5', lang: null } } })
-  expect(logs.at(-1)).toBe('Saved "last five", 1 line.')
+  // "/snippet add" alone saves the selection, numbered one past the highest
+  // number taken (the saved ones are named, so 1).
+  await $.command.run({ command: 'snippet', args: 'add' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'snippet', provider: 'list', action: 'add', args: { name: '1', body: 'git log --oneline -5', lang: null } } })
+  expect(logs.at(-1)).toBe('Saved #1, 1 line.')
 
   selection = ''
-  await $.command.run({ command: 'snippet', args: 'add hello' })
-  expect(bridge.calls.at(-1)!.body.args).toEqual({ name: 'hello', body: 'print("hi")', lang: 'py' })
-  expect(logs.at(-1)).toBe('Saved "hello" (py), 1 line.')
+  await $.command.run({ command: 'snippet', args: 'add' })
+  expect(bridge.calls.at(-1)!.body.args).toEqual({ name: '1', body: 'print("hi")', lang: 'py' })
+  expect(logs.at(-1)).toBe('Saved #1 (py), 1 line.')
+
+  // The text typed after "add" is the snippet, its lines kept.
+  await $.command.run({ command: 'snippet', args: 'add vercel deploy\nvercel alias' })
+  expect(bridge.calls.at(-1)!.body.args).toEqual({ name: '1', body: 'vercel deploy\nvercel alias', lang: null })
+
+  await $.command.run({ command: 'snippet', args: 'delete #2' })                 // "#2" is snippet 2
+  expect(bridge.calls.at(-1)!.body.args).toEqual({ name: '2' })
 
   await $.command.run({ command: 'snippet', args: 'rename jq tidy -> jq pretty' })
   expect(bridge.calls.at(-1)!.body).toEqual({ room: 'snippet', provider: 'list', action: 'rename', args: { name: 'jq tidy', to: 'jq pretty' } })
@@ -1237,11 +1317,10 @@ test('/snippet saves the selection or the last code block, and renames, deletes,
   expect(logs.filter((l) => l === 'Ready to share to #lobby: code · sh · 1 line')).toHaveLength(2)
 
   bridge.replies['/fnroom/action'] = () => [409, { error: 'There\'s already a snippet called "hello". Rename or delete it first.' }]
-  selection = 'x'
-  await $.command.run({ command: 'snippet', args: 'add hello' })
+  await $.command.run({ command: 'snippet', args: 'add x' })
   expect(logs.at(-1)).toBe('There\'s already a snippet called "hello". Rename or delete it first.')
   await $.command.run({ command: 'snippet', args: 'frobnicate' })
-  expect(logs.at(-1)).toMatch(/^Use \/snippet add <name>/)
+  expect(logs.at(-1)).toMatch(/^Use \/snippet add <text>/)
 })
 
 test('/chat rooms takes function rooms too, and +name or -name', SLOW, async ($, on) => {
@@ -1370,6 +1449,66 @@ const loadedRooms = () => [
   { type: 'fnsettings', id: 'news', values: { hn: 'top', feeds: NEWS_ROOM.settings.feeds.default } },
 ]
 
+// The desktop's header: the built-in rooms as icons with a "+" that lists the
+// rooms without a tab, the chat rooms on a line of their own with "＋ join".
+test('desktop header: "+" lists the rooms without a tab and adds one; "＋ join" asks for the name, then the passcode', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...loadedRooms())
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'chats' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'add-weather' })).toBeUndefined()
+  await ui.press({ key: 'add-room' })
+  await settle()
+  expect(await ui.find({ type: 'Button', key: 'add-weather' })).toBeDefined()     // a room without a tab
+  expect(await ui.find({ type: 'Button', key: 'add-usage' })).toBeUndefined()     // one with a tab isn't offered
+  await ui.press({ key: 'add-weather' })
+  await settle()
+  expect(await ui.find({ type: 'Button', key: 'sys-weather' })).toBeDefined()     // it has a tab now
+  expect(await ui.find({ type: 'Text', text: /Weather reaches/ })).toBeDefined()  // and says where it goes
+  // "＋ join" folds back after 5 seconds with nothing typed, and ✕ folds it at once.
+  await ui.press({ key: 'join-room' })
+  await settle()
+  expect(await ui.find({ type: 'Input', key: 'join-name' })).toBeDefined()
+  await bridge.clock.advance(5_000)
+  await settle()
+  expect(await ui.find({ type: 'Input', key: 'join-name' })).toBeUndefined()
+  await ui.press({ key: 'join-room' })
+  await settle()
+  await ui.press({ key: 'join-cancel' })
+  await settle()
+  expect(await ui.find({ type: 'Input', key: 'join-name' })).toBeUndefined()
+  // "＋ join" stays put while the fields are open, and folds them when pressed again.
+  await ui.press({ key: 'join-room' })
+  await settle()
+  expect(await ui.find({ type: 'Button', key: 'join-room' })).toBeDefined()
+  await ui.press({ key: 'join-room' })
+  await settle()
+  expect(await ui.find({ type: 'Input', key: 'join-name' })).toBeUndefined()
+  // The room's name, then its passcode; a refusal stays with its reason.
+  await ui.press({ key: 'join-room' })
+  await settle()
+  expect(await ui.find({ type: 'Input', key: 'join-name' })).toBeDefined()
+  await ui.input({ key: 'join-name', text: 'frontend' })
+  await settle()
+  expect((await ui.find({ type: 'Button', key: 'join-back' }) as any)?.props.label).toBe('#frontend')
+  bridge.replies['/room'] = () => [403, { error: 'Wrong passcode for #frontend.' }]
+  await ui.input({ key: 'join-pass', text: 'hunter3' })
+  await settle()
+  expect(bridge.calls.filter((c) => c.path === '/room').at(-1)?.body).toEqual({ slug: 'frontend', passcode: 'hunter3' })
+  expect(await ui.find({ type: 'Text', text: /Wrong passcode/ })).toBeDefined()
+  expect(await ui.find({ type: 'Input', key: 'join-pass' })).toBeDefined()        // still there to try again
+  bridge.replies['/room'] = () => [200, { slug: 'frontend' }]
+  await ui.input({ key: 'join-pass', text: 'hunter2' })
+  await settle()
+  expect(await ui.find({ type: 'Input', key: 'join-pass' })).toBeUndefined()      // in: the fields close
+  expect(await ui.find({ type: 'Button', key: 'join-room' })).toBeDefined()
+  await ui.unmount()
+})
+
 test("Weather: a city's ✕ drops it, and with one city left there's none", SLOW, async ($, on) => {
   recordUi(on)
   const bridge = fakeBridge(on, { store: { view: 'weather', sysRooms: ['usage', 'weather'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] } })
@@ -1384,6 +1523,49 @@ test("Weather: a city's ✕ drops it, and with one city left there's none", SLOW
   bridge.emit({ type: 'fnsettings', id: 'weather', values: { cities: ['Taipei'], units: 'metric' } })
   await settle()
   expect(await ui.find({ key: 'drop-c0-0' })).toBeUndefined()
+  await ui.unmount()
+})
+
+// The desktop: the cities as tiles (the title picks one), the 24 hours drawn,
+// the week as columns, the sun's arc, and a city typed in the box is added.
+test('Weather room on the desktop: tiles, the 24 hours drawn, the week in columns, the sun, and add', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(WEATHER_ROOM))
+  const desk = [{"type": "grid", "items": "wx.cities", "title": "name", "icon": "icon", "value": "tempText", "sub": "desc", "note": "rangeRain", "across": 3, "pickTitle": true, "hint": "Press a city's name to show its next 24 hours, week and sun below.", "pick": {"setting": "city", "field": "query", "as": "wx.first"}, "drop": {"setting": "cities", "field": "query"}, "empty": "No cities yet: type one below, then add"}, [{"type": "text", "text": "{wx.first.desc}, {wx.first.feels} · humidity {wx.first.humidity} · wind {wx.first.wind}"}, {"type": "forecast", "values": "wx.first.tempHours", "bars": "wx.first.rainHours", "marks": "wx.first.hourMarks", "caption": "{wx.first.hourLine}", "color": "amber", "color2": "sky"}], {"type": "strip", "items": "wx.first.days", "title": "day", "icon": "icon", "value": "hiText", "sub": "loText", "note": "rainPct", "lit": "today"}]
+  room.layout.cards.forEach((c: any, i: number) => { c.desktop = desk[i] })
+  room.layout.cards.push({"title": "SUNRISE & SUNSET", "meta": "{wx.first.name}", "badge": "{wx.first.sun.uvText}", "badgeTone": "wx.first.sun.uvTone", "when": "wx.first.sun", "body": {"type": "text", "text": "{wx.first.sunLine}"}, "desktop": {"type": "sun", "rise": "{wx.first.sun.rise}", "set": "{wx.first.sun.set}", "value": "wx.first.sun.pct", "sub": "{wx.first.sun.length}", "note": "{wx.first.sun.next}"}})
+  room.layout.add = 'cities'
+  const days = [{ day: 'Today', icon: '☂', hiText: '28°', loText: '21°', rainPct: '80%', today: true }, { day: 'Sat', icon: '☁', hiText: '28°', loText: '23°', rainPct: '20%', today: null }]
+  const first = { ...WX.cities[0], days, rangeRain: '28° / 21° · ☂ 80%', tempHours: [21, 22, 25, 28, 26, 23], rainHours: [10, 20, 80, 60, 10, 0], hourMarks: ['Now', '06:00'], hourLine: 'high 28° at 15:00 · low 21° at Now · ☂ 80% at 15:00', sun: { rise: '05:41', set: '17:38', pct: 60, length: '11h 57m of daylight', uvText: 'UV 6 high', uvTone: 'coral', next: 'sunset in 2h 10m' } }
+  const data = { ...WX, cities: [first, WX.cities[1]], first }
+  const bridge = fakeBridge(on, { store: { view: 'weather', sysRooms: ['usage', 'weather'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [SNIPPET_ROOM, room], invalid: [] },
+    { type: 'fnsettings', id: 'weather', values: { cities: ['Taipei', 'Tokyo'], units: 'metric' } }, { type: 'fnroom', id: 'weather', provider: 'wx', data, at: Date.now() })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await ui.find({ type: 'Svg', alt: '23°' })).toBeDefined()                // Taipei's temperature, set large
+  expect(await ui.find({ type: 'Text', text: '28° / 21° · ☂ 80%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Press a city's name/ })).toBeDefined()   // how to switch
+  expect(await ui.find({ type: 'Svg', alt: 'forecast' })).toBeDefined()           // the 24 hours
+  expect(await ui.find({ type: 'Text', text: '06:00' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '28°' })).toBeDefined()               // the high and low, on the chart
+  expect(await ui.find({ type: 'Text', text: '21°' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '80%' })).toBeDefined()              // the week's columns
+  expect(await ui.find({ type: 'Svg', alt: 'sun 60%' })).toBeDefined()           // the sun, part way over
+  expect(await ui.find({ type: 'Text', text: '17:38' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'UV 6 high' })).toBeDefined()                 // the UV in the title line
+  bridge.replies['/fnroom/settings'] = (b) => [200, { values: { [b.key]: b.value } }]
+  await ui.press({ key: 'pick-c0-1' })                                            // Tokyo's title shows it
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/settings', body: { room: 'weather', key: 'city', value: 'tokyo' } })
+  bridge.calls.length = 0
+  await settle()
+  await ui.press({ key: 'pick-c0-0' })                                          // Taipei's name switches back
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/settings', body: { room: 'weather', key: 'city', value: 'Taipei' } })
+  // A city typed in the box is added, whole: "New York" is one city.
+  expect((await ui.find({ type: 'Input' }) as any)?.props.submitLabel).toBe('add')
+  await ui.input({ key: 'compose', text: 'New York' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/settings', body: { room: 'weather', key: 'cities', value: 'New York' } })
   await ui.unmount()
 })
 
@@ -1471,6 +1653,37 @@ test('/chat set and the pane\'s /set change a room\'s settings', SLOW, async ($,
   await ui.unmount()
 })
 
+// The desktop: Hacker News with the score in a box, Feeds grouped by
+// source, and every story opened by a link rather than copied.
+test('Tech News room on the desktop: a score box, feeds by source, a link to open each story', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(NEWS_ROOM))
+  room.layout.cards[0].desktop = { type: 'list', items: 'hn.items', title: 'title', score: 'score', preview: 'detail', open: 'url', share: 'share' }
+  room.layout.cards[1].desktop = { type: 'list', items: 'feeds.items', title: 'title', group: 'source', tag: 'age', open: 'url', share: 'share' }
+  const bridge = fakeBridge(on, { store: { view: 'news', sysRooms: ['news'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] } })
+  await bridge.start($)
+  signedIn(bridge)
+  const hot = { id: '1', title: 'Deno Is Joining Cloudflare', url: 'https://deno.com/blog/cloudflare', score: 458, detail: '254 comments · 2h · deno.com', share: 'x' }
+  const feeds = [
+    { id: 'r0', title: 'Apple hires a team', url: 'https://techcrunch.com/a', source: 'TechCrunch', age: '14h', share: 'y' },
+    { id: 'r1', title: 'Nadella on AI models', url: 'https://www.theverge.com/b', source: 'The Verge', age: '12h', share: 'z' },
+    { id: 'r2', title: 'Cloudflare buys Deno', url: 'https://techcrunch.com/c', source: 'TechCrunch', age: '18h', share: 'w' },
+  ]
+  bridge.emit({ type: 'fnrooms', rooms: [SNIPPET_ROOM, WEATHER_ROOM, room], invalid: [] }, ...loadedRooms().slice(1),
+    { type: 'fnroom', id: 'news', provider: 'hn', data: { items: [hot], count: 1, list: 'top' }, at: Date.now() },
+    { type: 'fnroom', id: 'news', provider: 'feeds', data: { items: feeds, count: 3 }, at: Date.now() })
+  await settle()
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Text', text: '458' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: '254 comments · 2h · deno.com' })).toBeDefined()
+  expect((await desk.findAll({ type: 'Link' })).length).toBe(4)                 // ↗ on every story
+  expect(await desk.find({ key: 'copy-c0-1' })).toBeUndefined()                  // no copy button
+  expect(await desk.find({ type: 'Text', text: ' TechCrunch ' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: '2' })).toBeDefined()            // TechCrunch's count
+  expect(await desk.find({ type: 'Text', text: ' The Verge ' })).toBeDefined()
+  await desk.unmount()
+})
+
 test('Tech News room: stories with their links to copy and share', SLOW, async ($, on) => {
   const copied: string[] = []
   on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
@@ -1517,6 +1730,42 @@ const monitorLoaded = () => [
   { type: 'fnrooms', rooms: [SNIPPET_ROOM, MONITOR_ROOM], invalid: [] },
   { type: 'fnsettings', id: 'monitor', values: { alerts: true, cpu_temp: 95, memory: 95 } },
 ]
+
+// The desktop draws a card's `desktop` body where it has one: CPU and Memory
+// as a large percent, a chart and a thick bar, as rooms/monitor/room.json has them.
+test('Monitor room on the desktop: a large percent, a chart, a thick bar and tiles colored by level', SLOW, async ($, on) => {
+  recordUi(on)
+  const room = JSON.parse(JSON.stringify(MONITOR_ROOM))
+  room.layout.cards[0].desktop = [
+    { type: 'stat', value: 'sys.cpu.pct', right: '{sys.cpu.load}' },
+    { type: 'chart', values: 'sys.cpu.hist', max: 100, color: 'teal', caption: 'last 2 min' },
+  ]
+  room.layout.cards[1].desktop = [
+    { type: 'stat', value: 'sys.mem.pct', right: '{sys.mem.usedOf}' },
+    { type: 'bar', value: 'sys.mem.pct' },
+    { type: 'tiles', tiles: [{ value: '{sys.mem.pressure}%', sub: 'pressure', tone: 'sys.mem.pressureTone' }] },
+  ]
+  const bridge = fakeBridge(on, { store: { view: 'monitor' } })
+  await bridge.start($)
+  const data = SYS({ cpu: { ...SYS().cpu, hist: [10, 40, 42] }, mem: { ...SYS().mem, usedOf: '27.1 GB of 32 GB', pressureTone: 'red' } })
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [SNIPPET_ROOM, room], invalid: [] }, { type: 'fnsettings', id: 'monitor', values: { alerts: true, cpu_temp: 95, memory: 95 } }, { type: 'fnroom', id: 'monitor', provider: 'sys', data, at: Date.now() })
+  await settle()
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Svg', alt: '42%' })).toBeDefined()               // CPU's percent, set large
+  expect(await desk.find({ type: 'Svg', alt: 'chart' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'last 2 min' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: '27.1 GB of 32 GB' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: '57%' })).toBeDefined()              // the pressure tile
+  expect(await desk.find({ type: 'Text', text: 'Pressure' })).toBeUndefined()       // the terminal's meters are not drawn
+  expect(await desk.find({ key: 'scrollbar' })).toBeUndefined()                     // the desktop scrolls the pane itself
+  await desk.unmount()
+  // The terminal keeps the card's own body.
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } } })
+  await settle()
+  expect(await term.find({ type: 'Text', text: 'Pressure' })).toBeDefined()
+  await term.unmount()
+})
 
 test('Monitor room: meters for CPU, memory, network and disk; cards without data stay out', SLOW, async ($, on) => {
   recordUi(on)
@@ -1594,6 +1843,41 @@ const Q = {
   note: 'Prices may be delayed. Not investment advice.', alerts: [],
 }
 
+// The desktop: the watchlist as tiles with their day drawn, and a pin that
+// keeps one symbol in the band (the room's "pin" setting).
+test('Stock room on the desktop: tiles with the day drawn, and a pin for the band', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(STOCK_ROOM))
+  room.settings.pin = { type: 'string', label: 'Pinned in the band', default: 'TAIEX' }
+  room.layout.cards[0].desktop = [{ type: 'grid', items: 'q.quotes', title: 'symbol', sub: 'name', value: 'priceText', change: 'pctText', colorFrom: 'color', line: 'line', pick: { setting: 'pin', field: 'symbol', as: 'q.pinned' }, drop: { setting: 'watchlist', field: 'entry' } }]
+  room.layout.add = 'watchlist'
+  const bridge = fakeBridge(on, { store: { view: 'stock' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [SNIPPET_ROOM, room], invalid: [] },
+    { type: 'fnsettings', id: 'stock', values: { pin: 'AAPL' } })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms +stock' })
+  await $.command.run({ command: 'chat', args: 'stock' })
+  const quotes = Q.quotes.map((q, i) => ({ ...q, entry: q.symbol, line: [1, 2, 3 + i, 2, 4] }))
+  bridge.emit({ type: 'fnroom', id: 'stock', provider: 'q', data: { ...Q, quotes, pinned: quotes[0] }, at: Date.now() })
+  await settle()
+  bridge.replies['/fnroom/settings'] = (b) => [200, { values: { pin: b.value } }]
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Svg', alt: '335.10' })).toBeDefined()          // AAPL's price, set large
+  expect((await desk.findAll({ type: 'Svg', alt: 'chart' })).length).toBeGreaterThanOrEqual(3)   // each tile's day
+  expect((await desk.find({ key: 'pin-c0-0-1' }) as any)?.props.label).toBe('📌')   // AAPL, pinned in the settings
+  await desk.press({ key: 'pin-c0-0-2' })                                          // pin ^GSPC
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/settings', body: { room: 'stock', key: 'pin', value: '^GSPC' } })
+  await desk.press({ key: 'drop-c0-0-1' })                                         // ✕ on AAPL
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/settings', body: { room: 'stock', key: 'watchlist', value: '-AAPL' } })
+  // What's typed in the box is added to the watchlist: the button says add.
+  expect((await desk.find({ type: 'Input' }) as any)?.props.submitLabel).toBe('add')
+  bridge.replies['/fnroom/settings'] = (b) => [200, { values: { watchlist: ['TAIEX', 'TSLA'] } }]
+  await desk.input({ key: 'compose', text: 'TSLA' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/settings', body: { room: 'stock', key: 'watchlist', value: '+TSLA' } })
+  await desk.unmount()
+})
+
 test('Stock room: stays off until asked for; then a watchlist colored by each row', SLOW, async ($, on) => {
   const logs = recordLogs(on)
   recordUi(on)
@@ -1639,6 +1923,81 @@ const PLAYER = (over: Record<string, any> = {}) => ({
   count: 2, hint: '', conflict: '',
   band: '▶ Puff Dragon - Cascade · 3:21 · live', share: '♫ now listening: Puff Dragon - Cascade (Groove Salad · stream)',
   ...over,
+})
+
+// The desktop: a cover and the title with the track's time (or LIVE), the
+// buttons with − volume + at the right, and the station playing lit.
+test('Lo-fi room on the desktop: cover, time or LIVE, volume beside the buttons, the playing row lit', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(LOFI_ROOM))
+  room.layout.cards[0].desktop = [
+    { type: 'media', title: '{p.now.title}', sub: '{p.now.source}', progress: 'p.now.pct', elapsed: '{p.now.posText}', total: '{p.now.durText}', live: 'p.now.live', playing: 'p.playing' },
+    { type: 'buttons', split: 4, level: 'p.now.volume', buttons: room.layout.cards[0].body[2].buttons.map((b: any) => (b.action === 'pause' ? { label: '▶', alt: '⏸', altWhen: 'p.playing', action: 'pause' } : b)) },
+  ]
+  room.layout.cards[1].desktop = { ...room.layout.cards[1].body, lit: 'on', mark: undefined, pause: 'pause', remove: { label: '✕', action: 'remove', field: 'id' } }
+  const bridge = fakeBridge(on, { store: { view: 'lofi' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [room], invalid: [] })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms +lofi' })
+  await $.command.run({ command: 'chat', args: 'lofi' })
+  const file = PLAYER({ playing: true, now: { ...PLAYER().now, title: 'Rainy Window', source: 'Lofi · file', pct: 62, posText: '2:31', durText: '4:05', live: false } })
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: file, at: Date.now() })
+  await settle()
+  let desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Svg', alt: 'cover' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: '2:31' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: '4:05' })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: '62%' })).toBeDefined()            // the time bar
+  expect(await desk.find({ type: 'Text', text: '60%' })).toBeDefined()           // the volume, between − and +
+  expect(await desk.find({ key: 'act-c1-s1' })).toBeDefined()                    // ▶ on the others
+  expect((await desk.find({ key: 'act-c1-s2' }) as any)?.props.label).toBe('♫')   // the one playing: a button the same size, which pauses
+  await desk.press({ key: 'act-c1-s2' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'pause', args: {} } })
+  await desk.press({ key: 'rm-c1-s1' })                                            // ✕ asks first
+  expect((await desk.find({ key: 'rm-c1-s1' }) as any)?.props.label).toBe('Sure?')
+  await desk.press({ key: 'rm-c1-s1' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'remove', args: { id: 's1' } } })
+  await desk.unmount()
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER({ playing: true, now: { ...PLAYER().now, live: true, posText: '3:21' } }), at: Date.now() })
+  await settle()
+  desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Text', text: ' ● LIVE ' })).toBeDefined()
+  expect((await desk.find({ key: 'act-c0-1-1' }) as any)?.props.label).toBe('⏸')   // playing: the toggle shows pause
+  await desk.unmount()
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER({ playing: false, now: { ...PLAYER().now, state: 'paused' } }), at: Date.now() })
+  await settle()
+  desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect((await desk.find({ key: 'act-c0-1-1' }) as any)?.props.label).toBe('▶')   // paused: it shows play
+  await desk.unmount()
+})
+
+// A URL or a path typed in the room's box is added, no /lofi add needed.
+// "/Users/…" is a path, "/help" still a command, "p" still a key.
+test('Lo-fi room: what\'s typed in the box is added as a track', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(LOFI_ROOM))
+  room.layout.add = { action: 'add', field: 'target' }
+  const bridge = fakeBridge(on, { store: { view: 'lofi' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [room], invalid: [] })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms +lofi' })
+  await $.command.run({ command: 'chat', args: 'lofi' })
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER(), at: Date.now() })
+  await settle()
+  bridge.replies['/fnroom/action'] = () => [200, { added: 1, first: 'Rain' }]
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect((await desk.find({ type: 'Input' }) as any)?.props.submitLabel).toBe('add')
+  await desk.input({ key: 'compose', text: 'https://youtu.be/abc # Rain' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'add', args: { target: 'https://youtu.be/abc', name: 'Rain' } } })
+  await desk.input({ key: 'compose', text: '/Users/me/Music/rain.mp3' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'add', args: { target: '/Users/me/Music/rain.mp3' } } })
+  await desk.input({ key: 'compose', text: 'p' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'pause', args: {} } })
+  await desk.unmount()
 })
 
 test('Lo-fi room: what\'s playing, buttons and keys that drive the player, and a ▶ on each row', SLOW, async ($, on) => {

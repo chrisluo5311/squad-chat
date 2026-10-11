@@ -3,6 +3,7 @@
 // Plain logic and element trees, no $ (see squad-chat.mjs).
 
 import { theme, level } from "./theme.mjs";
+import { svg, tint, TRACK } from "./bandkit.mjs";
 
 // ---------------------------------------------------------------- measuring text
 
@@ -155,6 +156,33 @@ export function col(els, key, text, width, { right = false, box = {}, ...style }
   ] });
 }
 
+// A bar `width` cells wide as an element. The terminal draws it in "━"; a
+// surface with Svg (the desktop) draws a thin line instead, as the glyphs set
+// in its proportional font run wider than their cells and end in "…". The
+// line is drawn a little under 8 px a cell, so it never runs past its column.
+const BAR_PX = 7;
+export function barNode(els, key, pct, width, color, { track = true, min = false } = {}) {
+  const { Box, Text, Svg } = els;
+  width = Math.max(1, Math.floor(width));
+  if (Svg) {
+    const w = width * BAR_PX;
+    const h = 8;
+    const p = Math.min(100, Math.max(0, Number(pct) || 0));
+    const fw = p > 0 || min ? Math.max(3, (p / 100) * w) : 0;   // even a sliver shows
+    const hex = /^#[0-9a-f]{6}$/i.test(color ?? "") ? color : null;
+    const body = (track ? `<rect x="0" y="2.5" width="${w}" height="3" rx="1.5" fill="${TRACK}"/>` : "")
+      + (fw ? `<rect x="0" y="2.5" width="${fw.toFixed(1)}" height="3" rx="1.5" fill="${hex ?? tint("#7F7F7F", 0.6)}"/>` : "");
+    return Box({ key, width, flexShrink: 0, alignItems: "center", children: [
+      Svg({ key: "svg", source: svg(w, h, body), alt: `${Math.round(p)}%`, width: w, height: h }),
+    ] });
+  }
+  const { fill, track: rest } = bar(pct, width);
+  return Box({ key, flexDirection: "row", width, flexShrink: 1, minWidth: 0, overflow: "hidden", children: [
+    Text({ key: "fill", color, wrap: "truncate-end", children: fill || (min ? "╸" : "") }),
+    track ? Text({ key: "track", color: theme.muted, wrap: "truncate-end", children: rest }) : null,
+  ].filter(Boolean) });
+}
+
 // One labeled meter row: `Context   ━━━━━━━╸━━━━━  62%  124k/200k`.
 // `width` is the row's width in cells. The bar gives way first, so the
 // numbers at the end always show.
@@ -163,20 +191,97 @@ export function meter(els, { key, label, pct, width, right = "", color, rightCol
   const { Box, Text, Button } = els;
   const rightW = Math.min(11, Math.max(0, width - LABEL_W - 16));
   const barW = Math.min(28, Math.max(4, width - LABEL_W - 1 - 4 - (rightW ? 1 + rightW : 0)));
-  const { fill, track } = bar(pct, barW);
   const tint = color ?? level(pct);
   const known = Number.isFinite(pct);
-  return Box({ key, flexDirection: "row", children: [
+  const pctText = known ? `${Math.round(pct)}%` : "–";
+  if (els.Svg) return meterStacked(els, { key, label, pct, right, tint, known, pctText, rightColor, onPress });
+  return Box({ key, flexDirection: "row", alignItems: "center", children: [
     onPress
       ? Box({ key: "label", width: LABEL_W, flexShrink: 0, children: [Button({ key: "press", plain: true, label: clip(label, LABEL_W - 1), onPress })] })
       : col(els, "label", label, LABEL_W, { color: theme.muted }),
-    Box({ key: "bar", flexDirection: "row", width: barW, flexShrink: 1, minWidth: 0, overflow: "hidden", children: [
-      Text({ key: "fill", color: tint, wrap: "truncate-end", children: fill }),
-      Text({ key: "track", color: theme.muted, wrap: "truncate-end", children: track }),
-    ] }),
-    col(els, "pct", known ? `${Math.round(pct)}%` : "–", 5, { right: true, bold: true, color: known ? tint : theme.muted }),
+    barNode(els, "bar", pct, barW, tint),
+    col(els, "pct", pctText, 5, { right: true, bold: true, color: known ? tint : theme.muted }),
     rightW ? col(els, "right", right, rightW, { color: rightColor ?? theme.muted, box: { marginLeft: 1 } }) : null,
   ].filter(Boolean) });
+}
+
+// A bar that takes whatever room its Box is given, for a surface with Svg:
+// its markup is wider than any pane and stretches to fit, as the desktop
+// sizes a drawing to its slot. `track: false` draws the fill alone; `min`
+// gives even a zero a sliver.
+export function stretchBar(els, key, pct, color, { track = true, min = false, thick = false, box = {} } = {}) {
+  const { Box, Svg } = els;
+  const W = 1000;
+  const H = thick ? 10 : 6;
+  const t = thick ? 8 : 3;
+  const y = (H - t) / 2;
+  const p = Math.min(100, Math.max(0, Number(pct) || 0));
+  const fw = p > 0 || min ? Math.max(4, (p / 100) * W) : 0;
+  const fill = hexOr(color);
+  const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`
+    + (track ? `<rect x="0" y="${y}" width="${W}" height="${t}" fill="${TRACK}"/>` : "")
+    + (fw ? `<rect x="0" y="${y}" width="${fw.toFixed(1)}" height="${t}" fill="${fill}"/>` : "")
+    + `</svg>`;
+  return Box({ key, flexGrow: 1, minWidth: 1, overflow: "hidden", ...box, children: [
+    Svg({ key: "svg", source, alt: `${Math.round(p)}%`, height: H }),
+  ] });
+}
+
+const hexOr = (color, fallback = "#7F7F7F") => (/^#[0-9a-f]{6}$/i.test(color ?? "") ? color : fallback);
+
+// A number set large, as a drawing (a Text has one size): a stat's "24%".
+export function bigNumber(els, key, text, color) {
+  const { Svg } = els;
+  // Wide enough for the font at hand: a "%" takes about half again a digit.
+  const w = [...String(text)].reduce((n, ch) => n + (ch === "%" ? 22 : 14), 0) + 6;
+  const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="28" viewBox="0 0 ${w} 28">`
+    + `<text x="0" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="22" font-weight="600" fill="${hexOr(color, "#E8E6E1")}">${String(text).replace(/[<&>]/g, "")}</text></svg>`;
+  return Svg({ key, source, alt: String(text), width: w, height: 28 });
+}
+
+// One or two series as lines across the row, the first with a fill under
+// it, scaled from zero to `max`, or without one from the lowest value to the
+// highest (a price far from zero still shows its day). Oldest first.
+export function lineChart(els, key, series, colors, { max, height = 40 } = {}) {
+  const { Box, Svg } = els;
+  const W = 1000;
+  const all = series.flat().filter(Number.isFinite);
+  const top = max ?? Math.max(...all, 1e-9);
+  const bottom = max != null ? 0 : Math.min(...all, top);
+  const span = Math.max(top - bottom, Math.abs(top) * 1e-6, 1e-9);
+  const path = (vals) => {
+    const v = vals.filter(Number.isFinite);
+    if (v.length < 2) return "";
+    return v.map((x, i) => `${i ? "L" : "M"}${((i / (v.length - 1)) * W).toFixed(1)} ${(height - 2 - ((Math.min(x, top) - bottom) / span) * (height - 4)).toFixed(1)}`).join(" ");
+  };
+  const body = series.map((vals, i) => {
+    const d = path(vals);
+    if (!d) return "";
+    const c = hexOr(colors[i]);
+    const area = i === 0 && series.length === 1 ? `<path d="${d} L${W} ${height} L0 ${height}Z" fill="${tint(c, 0.2)}"/>` : "";
+    return `${area}<path d="${d}" fill="none" stroke="${c}" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
+  }).join("");
+  const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" preserveAspectRatio="none">${body}</svg>`;
+  return Box({ key, flexDirection: "row", children: [Box({ key: "c", flexGrow: 1, minWidth: 1, overflow: "hidden", children: [
+    Svg({ key: "svg", source, alt: "chart", height }),
+  ] })] });
+}
+
+// The desktop's meter: the label, its percent and the detail on one line,
+// the bar across the whole row under them.
+function meterStacked(els, { key, label, pct, right, tint, known, pctText, rightColor, onPress }) {
+  const { Box, Text, Button } = els;
+  return Box({ key, flexDirection: "column", children: [
+    Box({ key: "line", flexDirection: "row", alignItems: "center", children: [
+      onPress
+        ? Button({ key: "press", plain: true, label, onPress })
+        : Text({ key: "label", color: theme.muted, wrap: "truncate-end", children: label }),
+      Text({ key: "pct", bold: true, color: known ? tint : theme.muted, children: ` ${pctText}` }),
+      Box({ key: "push", flexGrow: 1, minWidth: 1 }),
+      right ? Text({ key: "right", color: rightColor ?? theme.muted, wrap: "truncate-end", children: right }) : null,
+    ].filter(Boolean) }),
+    Box({ key: "bar", flexDirection: "row", children: [stretchBar(els, "fill", pct, tint)] }),
+  ] });
 }
 
 // A big number over a small caption, side by side with others in a row.

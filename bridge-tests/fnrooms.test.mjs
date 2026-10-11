@@ -270,6 +270,13 @@ describe("manifests", () => {
     for (const want of [/buttons\[0\]: local-list has no action launch/, /buttons\[1\].label: 1-8/, /buttons\[1\].action: an action's name/, /act: local-list has no action run/, /keys.r: one letter or digit, not r/, /keys.xx/, /keys.q: local-list has no action fly/]) assert.match(errors, want);
   });
 
+  it("takes the box's add as a list setting or { action, field } the provider has", () => {
+    const card = [{ title: "X", body: { type: "text", text: "x" } }];
+    assert.deepEqual(checkManifest({ ...SNIPPET, layout: { cards: card, add: { action: "add", field: "name" } } }, PROVIDERS), []);
+    const errors = checkManifest({ ...SNIPPET, layout: { cards: card, add: { action: "fly", field: "a b" } } }, PROVIDERS).join("\n");
+    for (const want of [/layout.add: local-list has no action fly/, /layout.add.field: a field's name/]) assert.match(errors, want);
+  });
+
   it("takes a table row's ✕ only for a list setting, a row picked only for a string one, and a list's add and min", () => {
     const settings = { names: { type: "list", default: ["a"], add: true, min: 1 }, mode: { type: "enum", values: ["x"], default: "x" }, one: { type: "string", default: "a" } };
     const table = (drop, pick) => ({ type: "table", items: "list.items", columns: [{ field: "name", grow: true }], drop, pick });

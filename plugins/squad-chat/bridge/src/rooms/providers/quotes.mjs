@@ -184,6 +184,9 @@ export default {
       };
     });
 
+    // Each quote keeps the watchlist entry it came from ("2330.TWO" for 2330),
+    // so a tile's ✕ takes out that entry.
+    quotes.forEach((q, i) => { q.entry = String(entries[i].entry); });
     // Nothing came back at all: an error, so the last quotes stay, marked stale.
     if (list.length && quotes.every((q) => q.price == null)) throw twError ?? yh.find((x) => x?.error)?.error ?? new RoomError(502, "no quotes");
     const anyOpen = quotes.some((q) => q.open);
@@ -199,6 +202,9 @@ export default {
       : [];
     const data = {
       quotes,
+      // The band's one quote: the first with a price, until one is pinned
+      // (the room's "pin" setting puts that one here instead).
+      pinned: quotes.find((q) => q.price != null) ?? null,
       count: quotes.length,
       markets,
       anyOpen,

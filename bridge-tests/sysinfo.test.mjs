@@ -78,10 +78,13 @@ describe("sysinfo on macOS", () => {
     assert.equal(d.cpu.pct, 75);
     assert.deepEqual([d.cpu.cores, d.cpu.load, d.cpu.tempText, d.cpu.power, d.cpu.meta], [2, "load 4.90", "96°C", "1.9 W", "2 cores · 96°C · 1.9 W"]);
     assert.equal(d.cpu.spark, "▅▆");   // 50% then 75%, scaled to 100
-    assert.deepEqual(d.mem, { pct: 85, usedText: "27.2 GB / 32 GB", swapPct: 66, swapText: "3.3 GB / 5 GB", pressure: 63, spark: "▇▇", tone: "amber" });
-    assert.deepEqual(d.gpu, { pct: 9, tempText: "51°C", power: "0.5 W" });
+    assert.deepEqual(d.mem, { pct: 85, usedText: "27.2 GB / 32 GB", swapPct: 66, swapText: "3.3 GB / 5 GB", pressure: 63, spark: "▇▇", tone: "amber", usedOf: "27.2 GB of 32 GB", freeText: "4.8 GB free", pressureTone: "amber", swapTone: "amber" });
+    assert.deepEqual(d.gpu, { pct: 9, tempText: "51°C", power: "0.5 W", tone: "leaf" });
     assert.equal(d.power, "CPU 1.9 W · GPU 0.5 W · all 2.4 W");
     assert.equal(d.fans, "fan 1 1362 rpm · fan 2 1520 rpm");
+    assert.deepEqual(d.powerParts, { cpu: "1.9 W", gpu: "0.5 W", all: "2.4 W" });   // the desktop's tiles
+    assert.equal(d.fansText, "fans 1362 · 1520 rpm");
+    assert.ok(Array.isArray(d.net.rxHist) && Array.isArray(d.net.txHist));            // the desktop's chart
     assert.deepEqual([d.net.rxText, d.net.txText], ["717 KB/s", "4.2 KB/s"]);   // en0 only: not loopback, not the VPN tunnel
     assert.deepEqual(d.disk, { pct: 80, usedText: "738 GB / 926 GB", freeText: "188 GB free" });
     assert.deepEqual(d.battery, { pct: 85, state: "charging", charging: true, tone: "leaf", detail: "charging · 0:42 left · 33 W in" });
@@ -95,7 +98,7 @@ describe("sysinfo on macOS", () => {
     const { ctx } = fakeMac({ macmon: false });
     const d = await sysinfo.fetch({}, ctx);
     assert.equal(d.mem.usedText, "11.1 GB / 32 GB");   // (active + wired + compressed) × 16 KB pages
-    assert.deepEqual(d.gpu, { pct: 16, tempText: "", power: "" });
+    assert.deepEqual(d.gpu, { pct: 16, tempText: "", power: "", tone: "leaf" });
     assert.equal(d.cpu.tempText, "");
     assert.equal(d.power, "");
     assert.equal(d.sensorHint, "brew install macmon for temperatures, power and fans");
@@ -136,7 +139,7 @@ describe("sysinfo on Linux", () => {
     const d = await sysinfo.fetch({}, ctx);
     assert.deepEqual([d.mem.pct, d.mem.usedText, d.mem.swapText, d.mem.pressure], [50, "7.8 GB / 16 GB", "0 B / 2 GB", null]);
     assert.equal(d.cpu.tempText, "61°C");   // the package sensor, not the first zone
-    assert.deepEqual(d.gpu, { pct: 37, tempText: "58°C", power: "22 W" });
+    assert.deepEqual(d.gpu, { pct: 37, tempText: "58°C", power: "22 W", tone: "leaf" });
     assert.deepEqual(d.battery, { pct: 64, state: "on battery", charging: false, tone: "leaf", detail: "on battery · 9.5 W out" });
     assert.equal(d.disk.pct, 61);   // used: total less what is available
   });

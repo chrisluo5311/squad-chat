@@ -22845,12 +22845,25 @@ var HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 var INTERVAL = /^\d+(ms|s|m|h)$/;
 var ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 var WIDGETS = {
-  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
-  buttons: { buttons: "buttons!" },
+  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text", code: "bool", lit: "field", score: "field", group: "field", open: "field", remove: "act", pause: "text" },
+  buttons: { buttons: "buttons!", split: "int", level: "path" },
   table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
-  text: { text: "text!", color: "color" }
+  text: { text: "text!", color: "color" },
+  // Drawn on the desktop (a card's `desktop` body); the terminal makes do.
+  stat: { value: "path!", right: "text", color: "color" },
+  bar: { value: "path!", color: "color" },
+  chart: { values: "path!", values2: "path", color: "color", color2: "color", max: "int", caption: "text" },
+  grid: { items: "path!", title: "field!", sub: "field", value: "field", change: "field", colorFrom: "field", line: "field", pick: "pick", drop: "drop", empty: "text", icon: "field", note: "field", across: "int", pickTitle: "bool", hint: "text" },
+  // A line over the hours with bars under it (temperature, chance of rain),
+  // and times to read it by.
+  forecast: { values: "path!", bars: "path", marks: "path", caption: "text", color: "color", color2: "color" },
+  // Items as columns side by side (a week's days), the `lit` one outlined.
+  strip: { items: "path!", title: "field!", icon: "field", value: "field", sub: "field", note: "field", lit: "field", empty: "text" },
+  // Sunrise to sunset as an arc, the sun at `value` (0-100) through the day.
+  sun: { rise: "text!", set: "text!", value: "path", sub: "text", note: "text" },
+  media: { title: "text!", sub: "text", progress: "path", elapsed: "text", total: "text", live: "path", playing: "path", empty: "text" }
 };
 var DRAWS = ["area", "bars", "orbit", "drop", "battery", "thermometer", "equalizer", "progress", "weather", "icon", "dot"];
 var PILL_ICONS = ["branch", "pr", "stack", "flame", "chip", "net", "spark", "clock"];
@@ -22976,6 +22989,7 @@ function checkWidget(body, where, errors, uses) {
     if ((k === "path" || k === "field") && !(typeof v === "string" && PATH.test(v))) errors.push(`${where}.${key}: not a path`);
     if (k === "text" && !str(v, 200)) errors.push(`${where}.${key}: 1-200 characters`);
     if (k === "int" && !(Number.isInteger(v) && v > 0 && v <= 100)) errors.push(`${where}.${key}: a whole number 1-100`);
+    if (k === "bool" && typeof v !== "boolean") errors.push(`${where}.${key}: true or false`);
     if (k === "color" && !COLORS.includes(v)) errors.push(`${where}.${key}: one of ${COLORS.join(", ")}`);
     if (k === "columns") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.columns: 1-8 columns`);
@@ -23009,6 +23023,8 @@ function checkWidget(body, where, errors, uses) {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
       else v.forEach((btn, i) => {
         if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
+        if (btn?.alt != null && !str(btn.alt, 8)) errors.push(`${where}.buttons[${i}].alt: 1-8 characters`);
+        if (btn?.altWhen != null && !(typeof btn.altWhen === "string" && PATH.test(btn.altWhen))) errors.push(`${where}.buttons[${i}].altWhen: not a path`);
         if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
         else uses.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
         if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);
@@ -23020,6 +23036,7 @@ function checkWidget(body, where, errors, uses) {
         if (!str(t?.value, 100)) errors.push(`${where}.tiles[${i}].value: 1-100 characters`);
         if (t?.sub != null && !str(t.sub, 100)) errors.push(`${where}.tiles[${i}].sub: 1-100 characters`);
         if (t?.color != null && !COLORS.includes(t.color)) errors.push(`${where}.tiles[${i}].color: one of ${COLORS.join(", ")}`);
+        if (t?.tone != null && !(typeof t.tone === "string" && PATH.test(t.tone))) errors.push(`${where}.tiles[${i}].tone: not a path`);
       });
     }
   }
@@ -23132,11 +23149,22 @@ function checkManifest(m, providers) {
       if (!str(c?.title, 30)) errors.push(`layout.cards[${i}].title: 1-30 characters`);
       if (c?.meta != null && !str(c.meta, 100)) errors.push(`layout.cards[${i}].meta: 1-100 characters`);
       if (c?.when != null && !(typeof c.when === "string" && PATH.test(c.when))) errors.push(`layout.cards[${i}].when: not a path`);
+      if (c?.badge != null && !str(c.badge, 60)) errors.push(`layout.cards[${i}].badge: 1-60 characters`);
+      if (c?.badgeTone != null && !(typeof c.badgeTone === "string" && PATH.test(c.badgeTone))) errors.push(`layout.cards[${i}].badgeTone: not a path`);
       checkBody(c?.body, `layout.cards[${i}].body`, errors, actionsUsed);
+      if (c?.desktop != null) checkBody(c.desktop, `layout.cards[${i}].desktop`, errors, actionsUsed);
     });
     if (l.inline != null) checkBody(l.inline, "layout.inline", errors, actionsUsed);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
     checkPills(l.pills, errors);
+    if (l.add != null) {
+      if (typeof l.add === "object" && !Array.isArray(l.add)) {
+        if (!(typeof l.add.action === "string" && ACTION.test(l.add.action))) errors.push("layout.add.action: an action's name");
+        else actionsUsed.push({ where: "layout.add", action: l.add.action });
+        if (!(typeof l.add.field === "string" && SETTING_KEY.test(l.add.field))) errors.push("layout.add.field: a field's name");
+      } else if (!(typeof l.add === "string" && SETTING_KEY.test(l.add))) errors.push("layout.add: a setting's key, or { action, field }");
+      else actionsUsed.push({ where: "layout.add", setting: l.add, settingType: "list" });
+    }
     if (l.keys != null) {
       const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;
       if (!keys || keys.length > 10) errors.push("layout.keys: up to 10 keys");
@@ -23452,7 +23480,7 @@ async function city(name, units, ctx) {
   const imperial = units === "imperial";
   const q = `latitude=${p.lat}&longitude=${p.lon}&timezone=auto`;
   const [fr, ar] = await Promise.all([
-    ctx.fetch(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,is_day&hourly=precipitation_probability&forecast_hours=24&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=7${imperial ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : ""}`),
+    ctx.fetch(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,is_day&hourly=precipitation_probability,temperature_2m&forecast_hours=24&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max&forecast_days=7${imperial ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : ""}`),
     ctx.fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${q}&current=us_aqi`).catch(() => null)
   ]);
   if (!fr.ok) throw new RoomError(502, `Open-Meteo answered ${fr.status} for ${p.name}`);
@@ -23468,13 +23496,55 @@ async function city(name, units, ctx) {
   const deg = "\xB0";
   const days = (d.time ?? []).map((t, i) => {
     const [di] = sky(d.weather_code?.[i]);
+    const hi = round(d.temperature_2m_max?.[i]);
+    const lo = round(d.temperature_2m_min?.[i]);
+    const rain = round(d.precipitation_probability_max?.[i]) ?? 0;
     return {
       day: i === 0 ? "Today" : DAY(t),
       icon: di,
-      range: `${round(d.temperature_2m_max?.[i])}${deg} / ${round(d.temperature_2m_min?.[i])}${deg}`,
-      rain: `\u2602 ${round(d.precipitation_probability_max?.[i]) ?? 0}%`
+      range: `${hi}${deg} / ${lo}${deg}`,
+      rain: `\u2602 ${rain}%`,
+      // For the desktop's columns: each part on its own, today marked.
+      hiText: `${hi}${deg}`,
+      loText: `${lo}${deg}`,
+      rainPct: `${rain}%`,
+      today: i === 0 || null
     };
   });
+  const hourTimes = f.hourly?.time ?? [];
+  const tempHours = (f.hourly?.temperature_2m ?? []).map((v) => round(v));
+  const at = (i) => i === 0 ? "Now" : hourTimes[i]?.slice(11, 16) ?? "";
+  const hourMarks = [0, 6, 12, 18].filter((i) => i < hourTimes.length).map(at);
+  const known = tempHours.filter((v) => v != null);
+  const hiAt = tempHours.indexOf(Math.max(...known));
+  const loAt = tempHours.indexOf(Math.min(...known));
+  const hourLine = known.length ? [`high at ${at(hiAt)}`, `low at ${at(loAt)}`, peak ? `\u2602 ${peak}% at ${peakTime}` : "no rain"].join(" \xB7 ") : "";
+  const rise = d.sunrise?.[0] ?? "";
+  const set = d.sunset?.[0] ?? "";
+  const nowLocal = c.time ?? "";
+  const mins = (iso) => iso ? Number(iso.slice(11, 13)) * 60 + Number(iso.slice(14, 16)) : NaN;
+  const [r0, s0, n0] = [mins(rise), mins(set), mins(nowLocal)];
+  const daylight = s0 - r0;
+  const sunPct = Number.isFinite(daylight) && daylight > 0 && n0 >= r0 && n0 <= s0 ? Math.round((n0 - r0) / daylight * 100) : null;
+  const uv = round(d.uv_index_max?.[0]);
+  const uvWord = uv == null ? "" : uv <= 2 ? "low" : uv <= 5 ? "moderate" : uv <= 7 ? "high" : uv <= 10 ? "very high" : "extreme";
+  const span = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+  const riseNext = mins(d.sunrise?.[1] ?? "");
+  let next = "";
+  if (Number.isFinite(n0) && Number.isFinite(r0) && Number.isFinite(s0)) {
+    if (n0 < r0) next = `sunrise in ${span(r0 - n0)}`;
+    else if (n0 <= s0) next = `sunset in ${span(s0 - n0)}`;
+    else if (Number.isFinite(riseNext)) next = `sunrise in ${span(24 * 60 - n0 + riseNext)}`;
+  }
+  const sun = rise && set ? {
+    next,
+    rise: rise.slice(11, 16),
+    set: set.slice(11, 16),
+    pct: sunPct,
+    length: Number.isFinite(daylight) && daylight > 0 ? `${Math.floor(daylight / 60)}h ${daylight % 60}m of daylight` : "",
+    uvText: uv == null ? "" : `UV ${uv} ${uvWord}`,
+    uvTone: uv == null ? null : uv <= 2 ? "leaf" : uv <= 5 ? "amber" : uv <= 7 ? "coral" : "red"
+  } : null;
   const temp = round(c.temperature_2m);
   return {
     name: p.name,
@@ -23489,6 +23559,7 @@ async function city(name, units, ctx) {
     range: days[0]?.range ?? "",
     rain: round(d.precipitation_probability_max?.[0]) ?? 0,
     rainText: `\u2602 ${round(d.precipitation_probability_max?.[0]) ?? 0}%`,
+    rangeRain: days[0] ? `${days[0].range} \xB7 \u2602 ${round(d.precipitation_probability_max?.[0]) ?? 0}%` : "",
     humidity: `${round(c.relative_humidity_2m)}%`,
     wind: `${round(c.wind_speed_10m)} ${imperial ? "mph" : "km/h"}`,
     aqi,
@@ -23496,6 +23567,12 @@ async function city(name, units, ctx) {
     aqiTone: aqi == null ? null : aqi <= 50 ? "leaf" : aqi <= 100 ? "amber" : "red",
     rainNext: rainHours.slice(0, 8),
     rainLine: rainHours.length ? `\u2602 ${spark(rainHours)}  ${peak ? `peak ${peak}% at ${peakTime}` : "no rain"}` : "",
+    rainHours,
+    tempHours,
+    hourMarks,
+    hourLine,
+    sun,
+    sunLine: sun ? `\u2600 ${sun.rise} \u2192 ${sun.set}${sun.length ? ` \xB7 ${sun.length}` : ""}${sun.uvText ? ` \xB7 ${sun.uvText}` : ""}` : "",
     days
   };
 }
@@ -23570,6 +23647,7 @@ var hn_default = {
         comments: s.descendants ?? 0,
         age: ago(s.time, now),
         meta: `\u25B2 ${s.score ?? 0} \xB7 ${s.descendants ?? 0} comments \xB7 ${ago(s.time, now)}`,
+        detail: `${s.descendants ?? 0} comments \xB7 ${ago(s.time, now)} \xB7 ${host(s.url) ?? "HN"}`,
         share: `${s.title}
 ${url}${url === discuss ? "" : `
 ${discuss}`}`
@@ -23637,6 +23715,7 @@ var rss_default = {
       url: x.link,
       source: x.source,
       meta: `${x.source}${x.at ? ` \xB7 ${ago(x.at / 1e3, now)}` : ""}`,
+      age: x.at ? ago(x.at / 1e3, now) : "",
       share: `${x.title}
 ${x.link}`
     }));
@@ -23909,12 +23988,18 @@ var sysinfo_default = {
         swapPct: m.swapTotal > 0 ? pctOf(m.swapUsed, m.swapTotal) : 0,
         swapText: m.swapTotal > 0 ? `${bytes(m.swapUsed)} / ${bytes(m.swapTotal, 0)}` : "no swap",
         pressure: os.pressure,
-        spark: spark2(s.hist.mem, 100)
+        spark: spark2(s.hist.mem, 100),
+        usedOf: `${bytes(m.used)} of ${bytes(m.total, 0)}`,
+        freeText: `${bytes(Math.max(0, m.total - m.used))} free`,
+        pressureTone: tone(os.pressure ?? 0, 60, 85, "leaf"),
+        swapTone: tone(m.swapTotal > 0 ? pctOf(m.swapUsed, m.swapTotal) : 0, 60, 85, "leaf")
       } : null,
-      gpu,
+      gpu: gpu ? { ...gpu, tone: tone(gpu.pct ?? 0, 60, 85, "leaf") } : null,
+      powerParts: sen && Number.isFinite(sen.allPower) ? { cpu: watts(sen.cpuPower), gpu: watts(sen.gpuPower), all: watts(sen.allPower) } : null,
+      fansText: (sen?.fans ?? []).length ? `fans ${sen.fans.map((r) => Math.round(r)).join(" \xB7 ")} rpm` : "",
       power: sen && Number.isFinite(sen.allPower) ? `CPU ${watts(sen.cpuPower)} \xB7 GPU ${watts(sen.gpuPower)} \xB7 all ${watts(sen.allPower)}` : "",
       fans: (sen?.fans ?? []).length ? sen.fans.map((r, i) => `fan ${i + 1} ${Math.round(r)} rpm`).join(" \xB7 ") : "",
-      net: { ...net, rxSpark: spark2(s.hist.rx, netMax), txSpark: spark2(s.hist.tx, netMax) },
+      net: { ...net, rxSpark: spark2(s.hist.rx, netMax), txSpark: spark2(s.hist.tx, netMax), rxHist: [...s.hist.rx], txHist: [...s.hist.tx] },
       disk: d ? { pct: pctOf(d.used, d.total), usedText: `${bytes(d.used, 0)} / ${bytes(d.total, 0)}`, freeText: `${bytes(d.free, 0)} free` } : null,
       battery: b ? { pct: b.pct, state: b.state, charging: b.state !== "on battery", tone: b.state === "on battery" ? tone(100 - b.pct, 80, 90, "leaf") : "leaf", detail: [b.state, b.timeText, b.power].filter(Boolean).join(" \xB7 ") } : null,
       sensorHint: os.sensorHint,
@@ -24072,6 +24157,9 @@ var quotes_default = {
         when: open ? "open" : "closed"
       };
     });
+    quotes.forEach((q, i) => {
+      q.entry = String(entries2[i].entry);
+    });
     if (list.length && quotes.every((q) => q.price == null)) throw twError ?? yh.find((x) => x?.error)?.error ?? new RoomError(502, "no quotes");
     const anyOpen = quotes.some((q) => q.open);
     const starts = quotes.map((q) => q.opensAt).filter(Number.isFinite);
@@ -24084,6 +24172,9 @@ var quotes_default = {
     const alerts = move > 0 ? quotes.filter((q) => Number.isFinite(q.pct) && Math.abs(q.pct) >= move).map((q) => ({ id: `${q.symbol}:${q.pct > 0 ? "up" : "down"}:${day}`, text: `$ ${q.symbol} ${q.arrow} ${q.pctText} at ${q.priceText}` })) : [];
     const data = {
       quotes,
+      // The band's one quote: the first with a price, until one is pinned
+      // (the room's "pin" setting puts that one here instead).
+      pinned: quotes.find((q) => q.price != null) ?? null,
       count: quotes.length,
       markets,
       anyOpen,
@@ -24140,6 +24231,21 @@ function loadList(dir) {
     throw new RoomError(500, `Couldn't read the Lo-fi list (${err.code ?? "not JSON"}). Nothing was changed.`);
   }
 }
+function loadHidden(dir) {
+  try {
+    const data = JSON.parse(readFileSync5(join5(dir, "hidden.json"), "utf8"));
+    return Array.isArray(data.targets) ? data.targets.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+function saveHidden(dir, targets) {
+  mkdirSync5(dir, { recursive: true, mode: 448 });
+  const file = join5(dir, "hidden.json");
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync5(tmp, JSON.stringify({ v: 1, targets }, null, 1), { mode: 384 });
+  renameSync5(tmp, file);
+}
 function saveList(dir, items) {
   mkdirSync5(dir, { recursive: true, mode: 448 });
   chmodSync5(dir, 448);
@@ -24159,12 +24265,13 @@ function stationHost(url) {
 function entries(params, ctx) {
   const hosts = ctx.hosts ?? [];
   const stations = (Array.isArray(params.stations) ? params.stations : []).filter((s) => s?.url && s.name).map((s, i) => ({ id: `s${i + 1}`, name: String(s.name), target: String(s.url), kind: kindOf(s.url) })).filter((s) => hosts.includes(stationHost(s.target)));
+  const hidden = new Set(ctx.dataDir ? loadHidden(ctx.dataDir) : []);
   let own = [];
   try {
     own = loadList(ctx.dataDir);
   } catch {
   }
-  return [...stations, ...own.map((x) => ({ ...x, kind: kindOf(x.target) }))];
+  return [...stations.filter((s) => !hidden.has(s.target)), ...own.map((x) => ({ ...x, kind: kindOf(x.target) }))];
 }
 var tools = null;
 async function findTools(ctx) {
@@ -24398,7 +24505,7 @@ var player_default = {
     } catch (err) {
       listError = err.message;
     }
-    const now = { state: "stopped", title: "", source: "", timeText: "", pct: null, volume: params.volume ?? 60, mark: "\u25A0" };
+    const now = { state: "stopped", title: "", source: "", timeText: "", pct: null, volume: params.volume ?? 60, mark: "\u25A0", live: false, posText: "", durText: "" };
     if (mine(ctx)) {
       const [title, meta, pos, dur, paused, vol, idle] = await Promise.all(["media-title", "metadata", "time-pos", "duration", "pause", "volume", "idle-active"].map(get2));
       const entry = list.find((e) => e.id === mpv?.entryId);
@@ -24410,6 +24517,9 @@ var player_default = {
         const live = !Number.isFinite(dur) || dur <= 0 || entry?.kind === "channel" || entry?.kind === "stream";
         now.timeText = entry?.kind === "channel" ? "live" : live ? `${clock2(pos)} \xB7 live` : `${clock2(pos)} / ${clock2(dur)}`;
         now.pct = live ? null : Math.round(pos / dur * 100);
+        now.live = live;
+        now.posText = clock2(pos);
+        now.durText = live ? "" : clock2(dur);
       }
       if (Number.isFinite(vol)) now.volume = Math.round(vol);
     }
@@ -24487,10 +24597,20 @@ var player_default = {
       const items = loadList(ctx.dataDir);
       const want = String(args.name ?? "").trim().toLowerCase();
       const i = items.findIndex((x) => x.name.toLowerCase() === want || x.id === args.id);
-      if (i < 0) throw new RoomError(404, `Nothing called "${args.name}" on your list. Stations can't be removed.`);
+      if (i < 0) {
+        const st = entries(params, ctx).find((x) => /^s\d+$/.test(x.id) && (x.name.toLowerCase() === want || x.id === args.id));
+        if (!st) throw new RoomError(404, `Nothing called "${args.name ?? args.id}" on the list.`);
+        saveHidden(ctx.dataDir, [.../* @__PURE__ */ new Set([...loadHidden(ctx.dataDir), st.target])]);
+        return { ok: true, removed: st.name, hidden: true };
+      }
       const [gone] = items.splice(i, 1);
       saveList(ctx.dataDir, items);
       return { ok: true, removed: gone.name };
+    }),
+    restore: (params, args, ctx) => locked(ctx.dataDir, "list", () => {
+      const n = loadHidden(ctx.dataDir).length;
+      saveHidden(ctx.dataDir, []);
+      return { ok: true, restored: n };
     }),
     // Pixel Play's playlist, ~/.claude/pixel-play/playlist.txt, added in.
     import: (params, args, ctx) => locked(ctx.dataDir, "list", async () => {

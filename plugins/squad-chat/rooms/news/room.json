@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "news",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Tech News",
   "icon": "✦",
   "color": "lilac",
@@ -27,12 +27,14 @@
       {
         "title": "HACKER NEWS",
         "meta": "{hn.list}",
-        "body": { "type": "list", "items": "hn.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "max": 8, "empty": "Hacker News is off. /set hn top brings it back." }
+        "body": { "type": "list", "items": "hn.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "max": 8, "empty": "Hacker News is off. /set hn top brings it back." },
+        "desktop": { "type": "list", "items": "hn.items", "title": "title", "score": "score", "preview": "detail", "open": "url", "share": "share", "max": 8, "empty": "Hacker News is off. /set hn top brings it back." }
       },
       {
         "title": "FEEDS",
         "meta": "{feeds.count} stories",
-        "body": { "type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "empty": "No feeds. /set feeds https://techcrunch.com/feed/ adds one." }
+        "body": { "type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "empty": "No feeds. /set feeds https://techcrunch.com/feed/ adds one." },
+        "desktop": { "type": "list", "items": "feeds.items", "title": "title", "group": "source", "tag": "age", "open": "url", "share": "share", "empty": "No feeds. /set feeds https://techcrunch.com/feed/ adds one." }
       }
     ],
     "inline": { "type": "list", "items": "hn.items", "title": "title", "copy": "url", "share": "share", "max": 4, "empty": "Hacker News is off: /set hn top" },
@@ -42,7 +44,7 @@
       {"when": "hn.items.0", "color": "sand", "sub": "{hn.items.0.comments} comments · {hn.items.0.age}"}
     ],
     "band": "▲ {hn.items.0.title}",
-    "hint": "⧉ copies the link · ⇪ shares it · r refreshes",
+    "hint": "↗ opens the link · ⧉ copies it · ⇪ shares it · r refreshes",
     "placeholder": "/set hn best · /set feeds +https://… · r · /help"
   }
 }

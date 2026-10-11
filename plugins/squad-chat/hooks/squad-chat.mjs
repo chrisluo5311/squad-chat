@@ -19,6 +19,7 @@ import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
 
 const PANE_ID = "squad-chat";
+
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
 const TYPING_PING_MS = 2_000;
@@ -394,6 +395,68 @@ async function submitFromPane($, value) {
   }
 }
 
+// The desktop header's join: the field in front takes the keyboard, and
+// the fields fold back after 5 seconds with nothing typed.
+const JOIN_IDLE_MS = 5_000;
+let joinIdle = null;
+function armJoinIdle($) {
+  joinIdle?.cancel?.();
+  joinIdle = null;
+  if (!state.join) return;
+  Promise.resolve($.clock.after(JOIN_IDLE_MS, () => {
+    joinIdle = null;
+    if (state.join && !state.join.busy) { state.join = null; focusAfterDraw($, "compose"); }
+  })).then((t) => { joinIdle = t; }, () => { /* no timer: ✕ still folds it */ });
+}
+// A pressed button that the press takes away (＋ join turning into its
+// field, ✕ folding the fields, a room added from the "+" list) took the
+// pane's focus with it, so the next click only gave the focus back. Once
+// the new tree is drawn, the focus goes where the person carries on.
+function focusAfterDraw($, key) {
+  $.ui.invalidate("ui.render");
+  void (async () => {
+    await $.clock.sleep(80);   // let the new tree draw first
+    // The pane lost the keyboard with the element: take it back, then put
+    // the ring on the element (focus alone moves it only inside a pane that has it).
+    await $.ui.open({ id: PANE_ID, title: "Squad Chat", focus: true });
+    await $.ui.focus({ requestId: PANE_ID, key });
+  })().catch(() => { /* a click away */ });
+}
+function closeJoin($) {
+  joinIdle?.cancel?.();
+  joinIdle = null;
+  state.join = null;
+  focusAfterDraw($, "compose");
+}
+function joinFocus($, key) {
+  armJoinIdle($);
+  focusAfterDraw($, key);
+}
+
+// Join (or make) the room named in the header's fields, as /room does: in
+// it, the fields close and the chat shows it; refused, the passcode field
+// stays with the reason under it.
+async function joinFromPane($, value) {
+  const j = state.join;
+  if (!j) return;
+  const passcode = String(value ?? "").trim();
+  const joined = state.rooms.some((r) => r.slug === j.name.toLowerCase());
+  if (!passcode && !joined) { state.join = { ...j, error: "Type the room's passcode." }; return joinFocus($, "join-pass"); }
+  const before = { current: state.current, count: state.rooms.length, view: state.view };
+  j.busy = true;   // not folded away while the server answers
+  try {
+    await room((path, body) => callBridge($, path, body), `${j.name} ${passcode}`.trim(), () => {});
+  } catch (err) {
+    state.join = { ...j, busy: false, draft: "", error: err?.message ?? String(err) };
+    return joinFocus($, "join-pass");
+  }
+  closeJoin($);
+  state.notice = "";
+  if (state.view !== "chat") await setView($, "chat");
+  else $.ui.invalidate("ui.render");
+  try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
+}
+
 async function selectRoom($, id) {
   const before = { current: state.current, count: state.rooms.length, view: state.view };
   try {
@@ -654,7 +717,10 @@ export function register(on, options) {
     state.paneFocused = props.isFocused === true;
     if (state.paneFocused) void markRead($);
     if (!state.paneShown) { state.paneShown = true; syncRooms($); }
-    return paneView($.ui.resolve(e), { ...props, surface: e.surface }, {
+    // The pane draws lines and charts as Svg where a surface paints them; the
+    // terminal keeps its glyphs, so it is drawn as though it had no Svg.
+    const els = $.ui.resolve(e);
+    return paneView(e.surface === "terminal" ? { ...els, Svg: undefined } : els, { ...props, surface: e.surface }, {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void (async () => { if (state.view !== "chat") await setView($, "chat"); await selectRoom($, id); })(); },
@@ -666,6 +732,21 @@ export function register(on, options) {
         })();
       },
       onShare: (verb) => { void shareFromPane($, verb); },
+      onToggleAddRoom: () => { state.addingRoom = !state.addingRoom; focusAfterDraw($, "add-room"); },
+      onAddRoom: (id) => { state.addingRoom = false; void submitFromPane($, `/chat rooms +${id}`).then(() => focusAfterDraw($, "compose")); },
+      onJoinStart: () => { state.join = { step: "name", name: "" }; joinFocus($, "join-name"); },
+      // What's typed, kept for the buttons beside the field (no redraw: the
+      // field holds its own text); each key pushes the fold back 5 seconds.
+      onJoinTyping: (value) => { if (state.join) { state.join.draft = value; armJoinIdle($); } },
+      onJoinName: (value) => {
+        const name = String(value ?? "").trim().replace(/^#/, "");
+        if (!name || /\s/.test(name)) { state.join = { step: "name", name, error: name ? "A room's name is one word." : "Type a room's name." }; return joinFocus($, "join-name"); }
+        state.join = { step: "pass", name };
+        joinFocus($, "join-pass");
+      },
+      onJoinPass: (value) => { void joinFromPane($, value); },
+      onJoinBack: () => { state.join = { step: "name", name: state.join?.name ?? "" }; joinFocus($, "join-name"); },
+      onJoinCancel: () => closeJoin($),
       onShareTarget: (id) => {
         const r = retargetShare(id);
         state.notice = typeof r === "string" ? r : "";
@@ -674,6 +755,7 @@ export function register(on, options) {
       onCopy: (text, surface) => { void copySnippet($, text, surface); },
       onShareItem: (item) => shareItemFromPane($, item),
       onAction: (room, act) => { void roomAction($, room, act); },
+      onRedraw: () => $.ui.invalidate("ui.render"),
       onSetSetting: (room, key, value) => { void setRoomSetting($, room, key, value); },
       onRefresh: () => { void refreshGit($); },
       onToggleBreakdown: () => toggleBreakdown($),

@@ -99,7 +99,7 @@ describe("player", () => {
 
     Object.assign(m.props, { metadata: { "icy-title": "Puff Dragon - Cascade" }, "time-pos": 201 });
     const d = await player.fetch(params, m.ctx);
-    assert.deepEqual(d.now, { state: "playing", title: "Puff Dragon - Cascade", source: "Groove Salad · stream", timeText: "3:21 · live", pct: null, volume: 40, mark: "▶" });
+    assert.deepEqual(d.now, { state: "playing", title: "Puff Dragon - Cascade", source: "Groove Salad · stream", timeText: "3:21 · live", pct: null, volume: 40, mark: "▶", live: true, posText: "3:21", durText: "" });
     assert.equal(d.band, "▶ Puff Dragon - Cascade · 3:21 · live");
     assert.equal(d.entries[1].on, "♫");
     assert.equal(d.share, "♫ now listening: Puff Dragon - Cascade (Groove Salad · stream)");
@@ -158,7 +158,12 @@ describe("player", () => {
     await assert.rejects(player.actions.add(params, { target: "~/nowhere" }, m.ctx), /No file or folder at \/Users\/me\/nowhere/);
     assert.deepEqual(await player.actions.import(params, {}, m.ctx), { ok: true, added: 2 });
     assert.deepEqual(await player.actions.remove(params, { name: "deep space one" }, m.ctx), { ok: true, removed: "Deep Space One" });
-    await assert.rejects(player.actions.remove(params, { name: "Groove Salad" }, m.ctx), /Stations can't be removed/);
+    // A station of the room's own is hidden, not lost, and comes back with restore.
+    assert.deepEqual(await player.actions.remove(params, { name: "Groove Salad" }, m.ctx), { ok: true, removed: "Groove Salad", hidden: true });
+    assert.ok(!(await player.fetch(params, m.ctx)).entries.some((e) => e.name === "Groove Salad"));
+    assert.deepEqual(await player.actions.restore(params, {}, m.ctx), { ok: true, restored: 1 });
+    assert.ok((await player.fetch(params, m.ctx)).entries.some((e) => e.name === "Groove Salad"));
+    await assert.rejects(player.actions.remove(params, { name: "nothing like it" }, m.ctx), /Nothing called/);
     const list = JSON.parse(readFileSync(join(m.ctx.dataDir, "list.json"), "utf8")).items.map((x) => `${x.name} ${x.target}`);
     assert.deepEqual(list, ["a /Users/me/Music/chill/a.mp3", "b /Users/me/Music/chill/b.flac", "Lofi beats https://www.youtube.com/watch?v=abc", "ice2.somafm.com/groovesalad-128-mp3 https://ice2.somafm.com/groovesalad-128-mp3"]);
     assert.equal((await player.fetch(params, m.ctx)).count, 6);

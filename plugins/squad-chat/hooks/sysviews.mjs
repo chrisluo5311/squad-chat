@@ -9,7 +9,8 @@ import { state } from "./state.mjs";
 import { theme, level, nameColor } from "./theme.mjs";
 import {
   cells, clip, fit, fmtTokens, fmtUsd, fmtDur, fmtSpan, relTime, age, resetLabel,
-  bar, sparkline, meter, tiles, line, col, stackCards, card, CARD_GAP, LABEL_W,
+  bar, barNode, stretchBar, sparkline, meter, tiles, line, col, stackCards, card, CARD_GAP, LABEL_W,
+  bigNumber, lineChart,
 } from "./widgets.mjs";
 import {
   totalTokens, cacheRatio, burnRate, limitWindows, spendSeries, toolRows, agentTree, agentCounts, isEnded, topTool,
@@ -53,7 +54,11 @@ function limitName(kind) {
 
 const sized = (name, node, rowCount) => ({ name, node, height: 3 + rowCount });
 const muted = (els, key, text) => els.Text({ key, color: theme.muted, wrap: "truncate-end", children: text });
-const copyButton = (els, key, url, handlers) => (url ? { node: els.Button({ key, plain: true, dimColor: true, label: "⧉", onPress: () => handlers.onCopy?.(url) }) } : null);
+// A row's link: the desktop opens it (↗), the terminal copies it (⧉).
+const openLink = (els, url) => els.Link({ href: String(url), label: "↗" });
+const copyButton = (els, key, url, handlers) => (url
+  ? { node: els.Svg ? openLink(els, url) : els.Button({ key, plain: true, dimColor: true, label: "⧉", onPress: () => handlers.onCopy?.(url) }) }
+  : null);
 
 // ---------------------------------------------------------------- Usage
 
@@ -85,7 +90,57 @@ function usageCard(els, w, handlers, now) {
   return sized("Usage", card(els, { key: "usage", title: "USAGE", color: theme.usage, meta, rows }), rows.length);
 }
 
+// The desktop's Spend: three tiles, each a figure set large over its
+// caption with a small drawing under it: the cost with its last hour, the
+// tokens with a bar of what went in and what came out, the cache hits with a
+// ring.
+function spendCardDesk(els, now) {
+  const { Box, Text, Svg } = els;
+  const u = state.usage;
+  const series = spendSeries(u, now);
+  const rate = burnRate(u, now);
+  const cache = cacheRatio(u);
+  const t = u.tokens;
+  const cacheC = cache == null ? "#8F8D87" : cache >= 60 ? theme.online : cache >= 30 ? theme.amber : theme.error;
+  const label = (text) => Text({ key: "l", color: theme.muted, children: text });
+  const cap = (text, wrap = "truncate-end") => Text({ key: "c", color: theme.muted, wrap, children: text });
+  const tile = (key, kids) => Box({ key, flexDirection: "column", width: 1, flexGrow: 1, minWidth: 0, borderStyle: "round", borderColor: theme.border, paddingX: 1, children: kids.filter(Boolean) });
+  // What went in (fresh, and read from or written to the cache) and what came out, as one bar.
+  const inTok = t.input + t.cacheRead + t.cacheWrite;
+  const all = inTok + t.output;
+  const split = all ? Box({ key: "split", flexDirection: "row", children: [Box({ key: "c", flexGrow: 1, minWidth: 1, overflow: "hidden", children: [
+    Svg({ key: "svg", alt: `${Math.round((t.output / all) * 100)}% out`, height: 6, source: `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="6" viewBox="0 0 1000 6" preserveAspectRatio="none">`
+      + `<rect width="1000" height="6" rx="3" fill="#33322F"/><rect width="${Math.max(2, (inTok / all) * 1000).toFixed(1)}" height="6" fill="${theme.agents}"/>`
+      + `<rect x="${((inTok / all) * 1000).toFixed(1)}" width="${Math.max(6, (t.output / all) * 1000).toFixed(1)}" height="6" fill="${theme.amber}"/></svg>` }),
+  ] })] }) : null;
+  const C = 2 * Math.PI * 9;
+  const ring = cache == null ? null : Svg({ key: "ring", alt: "cache ring", width: 22, height: 22, source: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">`
+    + `<circle cx="12" cy="12" r="9" fill="none" stroke="#33322F" stroke-width="4"/>`
+    + `<circle cx="12" cy="12" r="9" fill="none" stroke="${cacheC}" stroke-width="4" stroke-dasharray="${((cache / 100) * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 12 12)"/></svg>` });
+  const row = Box({ key: "tiles", flexDirection: "row", columnGap: 1, children: [
+    tile("cost", [
+      label("COST"),
+      bigNumber(els, "v", u.cost ? fmtUsd(u.cost.usd) : "–", theme.usage),
+      cap(rate != null ? `+${fmtUsd(rate)}/h` : "this session"),
+      series.some((v) => v > 0) ? lineChart(els, "hour", [series], [theme.usage], { height: 16 }) : null,
+    ]),
+    tile("tokens", [
+      label("TOKENS"),
+      bigNumber(els, "v", fmtTokens(totalTokens(u)), "#E8E6E1"),
+      cap(`${fmtTokens(t.output)} out`),
+      split,
+    ]),
+    tile("cache", [
+      label("CACHE HITS"),
+      Box({ key: "vr", flexDirection: "row", alignItems: "center", columnGap: 1, children: [bigNumber(els, "v", cache == null ? "–" : `${Math.round(cache)}%`, cacheC), ring].filter(Boolean) }),
+      cap("of input read from cache", "wrap"),   // a narrow tile takes it on two lines
+    ]),
+  ] });
+  return sized("Spend", card(els, { key: "spend", title: "SPEND", color: theme.usage, meta: "this session", rows: [row] }), 7);
+}
+
 function spendCard(els, w, now) {
+  if (els.Svg) return spendCardDesk(els, now);
   const u = state.usage;
   const series = spendSeries(u, now);
   const rate = burnRate(u, now);
@@ -104,6 +159,40 @@ const TOOL_COLS = [["p50", 6], ["p95", 6], ["calls", 7], ["fail", 6]];
 const TOOL_NUMS = TOOL_COLS.reduce((n, [, w]) => n + w, 0);
 const toolHeader = () => TOOL_COLS.map(([h, w]) => fit(h, w, { right: true })).join("");
 
+// The desktop's Tools card: a count in the title row, the column labels in a
+// row of their own over a rule, and each tool's bar taking the room between
+// its name and its numbers, so every number sits under its label.
+function toolsCardDesk(els, list) {
+  const { Box, Text } = els;
+  const NAME = 14;
+  const [[, w50], [, w95], [, wCalls], [, wFail]] = TOOL_COLS;
+  const top = Math.max(...list.map((t) => t.total), 1);
+  const calls = list.reduce((n, t) => n + t.count, 0);
+  const nums = (key, cells) => Box({ key, flexDirection: "row", flexShrink: 0, children: cells });
+  const rows = [
+    Box({ key: "cols", flexDirection: "row", children: [
+      col(els, "n", "tool", NAME, { color: theme.muted }),
+      Box({ key: "b", flexGrow: 1 }),
+      nums("h", TOOL_COLS.map(([h, cw]) => col(els, h, h, cw, { right: true, color: theme.muted }))),
+    ] }),
+    Box({ key: "rule", flexDirection: "row", children: [stretchBar(els, "line", 100, "#7F7F7F", { track: false })] }),
+  ];
+  for (const t of list) {
+    rows.push(Box({ key: `t-${t.name}`, flexDirection: "row", alignItems: "center", children: [
+      col(els, "n", clip(t.name, NAME - 1), NAME),
+      stretchBar(els, "b", (t.total / top) * 100, theme.usage, { track: false, min: true, box: { marginRight: 1 } }),
+      nums("v", [
+        col(els, "p50", fmtDur(t.p50), w50, { right: true }),
+        col(els, "p95", fmtDur(t.p95), w95, { right: true, color: theme.muted }),
+        col(els, "c", String(t.count), wCalls, { right: true }),
+        col(els, "e", String(t.errors), wFail, { right: true, bold: t.errors > 0, color: t.errors ? theme.error : theme.muted }),
+      ]),
+    ] }));
+  }
+  const meta = `${list.length} tool${list.length === 1 ? "" : "s"} · ${calls} call${calls === 1 ? "" : "s"}`;
+  return sized("Tools", card(els, { key: "tools", title: "TOOLS", color: theme.usage, meta, rows }), rows.length);
+}
+
 function toolsCard(els, w, max) {
   const { Box } = els;
   const list = toolRows(state.usage).slice(0, max);
@@ -113,13 +202,11 @@ function toolsCard(els, w, max) {
   const barW = Math.max(3, w - NAME - TOOL_NUMS);
   const top = Math.max(...list.map((t) => t.total), 1);
   const [[, w50], [, w95], [, wCalls], [, wFail]] = TOOL_COLS;
+  if (els.Svg && list.length) return toolsCardDesk(els, list);
   for (const t of list) {
-    const fill = bar((t.total / top) * 100, barW).fill || "╸";   // even a quick tool gets a mark
-    rows.push(Box({ key: `t-${t.name}`, flexDirection: "row", children: [
+    rows.push(Box({ key: `t-${t.name}`, flexDirection: "row", alignItems: "center", children: [
       col(els, "n", clip(t.name, NAME - 1), NAME),
-      Box({ key: "b", width: barW, flexShrink: 1, minWidth: 0, overflow: "hidden", children: [
-        els.Text({ key: "t", color: theme.usage, wrap: "truncate-end", children: fill }),
-      ] }),
+      barNode(els, "b", (t.total / top) * 100, barW, theme.usage, { track: false, min: true }),   // even a quick tool gets a mark
       col(els, "p50", fmtDur(t.p50), w50, { right: true }),
       col(els, "p95", fmtDur(t.p95), w95, { right: true, color: theme.muted }),
       col(els, "c", String(t.count), wCalls, { right: true }),
@@ -154,7 +241,35 @@ function agentRow(els, key, a, { indent = "", now }) {
   ]);
 }
 
+// The desktop's Subagents: how many are running and done, and the time
+// they've spent between them, set large; the agents as rows under them.
+function subagentsCardDesk(els, max, now) {
+  const { Box, Text } = els;
+  const tree = agentTree(state.usage);
+  const { running, done } = agentCounts(state.usage);
+  const spent = [...state.usage.agents.values()].reduce((n, a) => n + Math.max(0, (a.endedAt ?? now) - a.startedAt), 0);
+  const stat = (key, value, label, color) => Box({ key, flexDirection: "column", children: [
+    bigNumber(els, "v", value, color),
+    Text({ key: "l", color: theme.muted, children: label }),
+  ] });
+  const rows = [];
+  if (tree.length) {
+    rows.push(Box({ key: "stats", flexDirection: "row", columnGap: 4, marginBottom: 1, children: [
+      stat("run", String(running), "RUNNING", running ? theme.agents : "#8F8D87"),
+      stat("done", String(done), "DONE", done ? theme.online : "#8F8D87"),
+      stat("time", fmtDur(spent), "AGENT TIME", "#E8E6E1"),
+    ] }));
+  }
+  rows.push(...tree.slice(0, max).map(({ agent: a, depth, last }) => agentRow(els, `a-${a.id}`, { ...a, top: topTool(a) }, {
+    indent: depth ? `${"   ".repeat(depth - 1)}${last ? "└─ " : "├─ "}` : "", now,
+  })));
+  if (tree.length > max) rows.push(muted(els, "more", `+${tree.length - max} more`));
+  if (!tree.length) rows.push(muted(els, "none", "None yet. They show up here as Claude starts them."));
+  return sized("Subagents", card(els, { key: "subagents", title: "SUBAGENTS", color: theme.usage, meta: "this session", rows }), rows.length + (tree.length ? 3 : 0));
+}
+
 function subagentsCard(els, max, now) {
+  if (els.Svg) return subagentsCardDesk(els, max, now);
   const tree = agentTree(state.usage);
   const { running, done } = agentCounts(state.usage);
   const rows = tree.slice(0, max).map(({ agent: a, depth, last }) => agentRow(els, `a-${a.id}`, { ...a, top: topTool(a) }, {
@@ -372,6 +487,18 @@ function issuesCard(els, handlers, max, now) {
 }
 
 function gitDock(els, w, capacity, handlers, now) {
+  // The desktop: one header with the state as chips, the PR's numbers as
+  // tiles, Actions with branch chips, and a graph of the newest commits.
+  if (els.Svg) {
+    return stackCards(els, [
+      repoCardDesk(els, handlers, now),
+      branchCardDesk(els, w, handlers),
+      graphCard(els, now),
+      prsCard(els, handlers, 4, now),
+      runsCardDesk(els, handlers, 3, now),
+      issuesCard(els, handlers, 3, now),
+    ], capacity, handlers.scroll);
+  }
   return stackCards(els, [
     repoCard(els, handlers, now),
     branchCard(els, handlers),
@@ -379,6 +506,178 @@ function gitDock(els, w, capacity, handlers, now) {
     runsCard(els, handlers, 3, now),
     issuesCard(els, handlers, 3, now),
   ], capacity, handlers.scroll);
+}
+
+// ---------------------------------------------------------------- Git on the desktop
+
+// A word on a tinted ground, in its color: "18 changed", "PR #28 merged".
+const chip = (els, key, text, color) => els.Text({ key, color, backgroundColor: K.tint(/^#/.test(color) ? color : "#8F8D87", 0.18), children: ` ${text} ` });
+
+function repoCardDesk(els, handlers, now) {
+  const g = state.git;
+  const l = g.local;
+  const when = ago(g, now);
+  const rows = [];
+  if (l) {
+    const chips = [];
+    if (l.upstream) chips.push(chip(els, "sync", `↑${l.ahead} ↓${l.behind}`, l.behind ? theme.amber : l.ahead ? theme.sky : theme.muted));
+    else chips.push(chip(els, "sync", l.unpushed ? `↑${l.unpushed} local` : "local", l.unpushed ? theme.amber : theme.muted));
+    chips.push(l.changed ? chip(els, "tree", `${l.changed} changed`, theme.amber) : chip(els, "tree", "clean", theme.muted));
+    if (g.pr) { const st = prState(g.pr); chips.push(chip(els, "pr", `PR #${g.pr.number} ${st.text}`, st.color)); }
+    rows.push(els.Box({ key: "chips", flexDirection: "row", flexWrap: "wrap", columnGap: 1, children: chips }));
+  }
+  const help = ghStatusText(g);
+  if (help) rows.push(els.Text({ key: "help", color: theme.warn, wrap: "wrap", children: help }));
+  else if (g.error && (g.stale || !g.fetchedAt || g.error === "no GitHub remote")) rows.push(muted(els, "err", g.error === "no GitHub remote" ? "No GitHub remote: only the local branch shows here." : `⚠ ${g.error}`));
+  if (!rows.length) rows.push(muted(els, "wait", "Reading the repository…"));
+  const metaNode = els.Box({ key: "meta", flexDirection: "row", columnGap: 1, flexShrink: 1, minWidth: 0, children: [
+    els.Text({ key: "repo", color: g.stale ? theme.amber : theme.muted, wrap: "truncate-end", children: g.repo?.name || when.text }),
+    els.Button({ key: "refresh", plain: true, dimColor: true, label: "↻", onPress: () => handlers.onRefresh?.() }),
+  ] });
+  return sized("Repo", card(els, { key: "repo", title: `⎇ ${l?.branch ?? "?"}`, color: theme.git, metaNode, rows }), rows.length);
+}
+
+function branchCardDesk(els, w, handlers) {
+  const g = state.git;
+  if (g.status !== "ok" || !g.repo) return null;
+  const pr = g.pr;
+  if (!pr) {
+    return sized("This branch", card(els, { key: "branch", title: "PULL REQUEST", color: theme.git, meta: "none", rows: [
+      muted(els, "none", g.local?.ahead ? "Pushed commits, no PR yet. Open one with gh pr create." : "No pull request for this branch."),
+    ] }), 1);
+  }
+  const st = prState(pr);
+  const c = pr.checks;
+  const checkTile = !c.total ? { value: "–", sub: "checks", color: theme.muted }
+    : c.fail ? { value: `${c.fail} ✗`, sub: "checks failed", color: theme.error }
+      : c.pending ? { value: `${c.pending} ●`, sub: "checks running", color: theme.amber }
+        : { value: `${c.pass} ✓`, sub: "checks", color: theme.online };
+  const approved = pr.reviews.filter((r) => r.state === "APPROVED").length;
+  const changes = pr.reviews.filter((r) => r.state === "CHANGES_REQUESTED").length;
+  const reviewTile = changes ? { value: `${changes} ✗`, sub: "changes asked", color: theme.error }
+    : approved ? { value: `${approved} ✓`, sub: "approved", color: theme.online }
+      : pr.requested.length ? { value: String(pr.requested.length), sub: "reviews asked", color: theme.amber }
+        : { value: "0", sub: "reviews", color: undefined };
+  const merge = mergePiece(pr);
+  const rows = [
+    line(els, "title", [{ text: `#${pr.number} `, color: theme.muted }, { text: pr.title, grow: true, bold: true }]),
+    tiles(els, [checkTile, reviewTile, { value: pr.state === "OPEN" ? merge.text : st.text, sub: "state", color: pr.state === "OPEN" ? merge.color : st.color }], w),
+  ];
+  const metaNode = pr.url ? openLink(els, pr.url) : undefined;
+  return sized("This branch", card(els, { key: "branch", title: "PULL REQUEST", color: theme.git, metaNode, rows }), 3);
+}
+
+function runsCardDesk(els, handlers, max, now) {
+  const g = state.git;
+  if (g.status !== "ok" || !g.repo) return null;
+  const rows = g.runs.slice(0, max).map((r) => {
+    const st = runGlyph(r, now);
+    const when = r.status === "completed" ? age(r.updatedAt, now) : `${r.status === "queued" ? "queued" : "running"} ${fmtDur(now - r.startedAt)}`;
+    return els.Box({ key: `run-${r.id}`, flexDirection: "row", alignItems: "center", columnGap: 1, children: [
+      els.Text({ key: "dot", color: st.color, children: st.g === "✓" ? "●" : st.g }),
+      els.Text({ key: "n", bold: true, wrap: "truncate-end", children: r.name }),
+      els.Box({ key: "push", flexGrow: 1, minWidth: 1 }),
+      r.branch ? chip(els, "br", r.branch, theme.muted) : null,
+      els.Text({ key: "t", color: r.status === "completed" ? theme.muted : theme.amber, children: when }),
+      r.url ? openLink(els, r.url) : null,
+    ].filter(Boolean) });
+  });
+  if (!rows.length) rows.push(muted(els, "none", "No workflow runs."));
+  const failing = g.runs.filter((r) => r.status === "completed" && runGlyph(r, now).g === "✗").length;
+  const running = g.runs.filter((r) => r.status !== "completed").length;
+  const meta = [running ? `${running} running` : null, failing ? `${failing} failed` : null].filter(Boolean).join(" · ") || (g.runs.length ? "all green" : "");
+  return sized("Actions", card(els, { key: "runs", title: "ACTIONS", color: theme.git, meta, metaColor: failing ? theme.error : running ? theme.amber : theme.muted, rows }), rows.length);
+}
+
+// The newest commits of every branch as Fork draws them: a colored lane per
+// line of history, a dot per commit, its branches and remotes as tags, the
+// subject and the time. One drawing, scaled to the card.
+const LANE_COLORS = ["#E2B86B", "#E06C75", "#7FB6E2", "#6CC070", "#C8A2E0", "#6FC2B5"];
+// About how wide a text is in the graph's 11.5 px system font: the drawing
+// can't measure, and one width for every letter leaves tags too long.
+export function textW(str) {
+  let w = 0;
+  for (const ch of String(str)) {
+    if (/[ilj.,:;'|!/ ]/.test(ch)) w += 3.1;
+    else if (/[ftr\-()]/.test(ch)) w += 4.1;
+    else if (/[mwMW]/.test(ch)) w += 9.2;
+    else if (/[A-Z]/.test(ch)) w += 7.4;
+    else if (/[0-9]/.test(ch)) w += 6.6;
+    else if (cells(ch) === 2) w += 11.5;
+    else w += 6.3;
+  }
+  return w;
+}
+// Cut to `px` wide, with "…" when anything was cut.
+function clipW(str, px) {
+  if (textW(str) <= px) return str;
+  let out = "";
+  for (const ch of String(str)) {
+    if (textW(out + ch) > px - 8) break;
+    out += ch;
+  }
+  return `${out}…`;
+}
+const xml = (s) => String(s).replace(/[<>&"]/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[ch]);
+function commitTime(ms, now) {
+  const d = new Date(ms);
+  const n = new Date(now);
+  if (d.toDateString() === n.toDateString()) {
+    const h = d.getHours();
+    return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}${h < 12 ? "am" : "pm"}`;
+  }
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function graphCard(els, now) {
+  const log = state.git.log ?? [];
+  if (!log.length) return null;
+  const W = 440;
+  const ROW = 22;
+  const LANE = 14;
+  const lanes = Math.max(1, ...log.map((r) => Math.max(r.before.length, r.after.length, r.col + 1)));
+  const x0 = 8;
+  const textX = x0 + lanes * LANE + 6;
+  const cx = (i) => x0 + i * LANE;
+  const color = (i) => LANE_COLORS[i % LANE_COLORS.length];
+  const edges = [];
+  const dots = [];
+  const texts = [];
+  log.forEach((r, i) => {
+    const top = i * ROW;
+    const mid = top + ROW / 2;
+    const bottom = top + ROW;
+    const curve = (xa, ya, xb, yb, c) => edges.push(`<path d="M${xa} ${ya} C${xa} ${(ya + yb) / 2} ${xb} ${(ya + yb) / 2} ${xb} ${yb}" stroke="${c}"/>`);
+    r.before.forEach((h, j) => {
+      if (h == null) return;
+      if (h === r.hash) curve(cx(j), top, cx(r.col), mid, color(j));
+      else { const k = r.after.indexOf(h); if (k >= 0) curve(cx(j), top, cx(k), bottom, color(k)); }
+    });
+    if (i < log.length - 1 || r.parents.length) {
+      r.parents.forEach((p) => { const k = r.after.indexOf(p); if (k >= 0) curve(cx(r.col), mid, cx(k), bottom, color(k)); });
+    }
+    dots.push(`<circle cx="${cx(r.col)}" cy="${mid}" r="4.5" fill="${color(r.col)}" stroke="#1f1f1e" stroke-width="1.5"/>`);
+    let x = textX;
+    for (const ref of r.refs.slice(0, 2)) {
+      const label = `${ref === r.head ? "✓ " : ""}${clip(ref, 18)}`;
+      // The text is held to the width the tag was given (textLength), so the
+      // border fits it in whatever font the surface draws with.
+      const tw = textW(label) * 1.04;
+      const w = tw + 12;
+      const c = ref === r.head ? theme.git : ref.includes("/") ? theme.amber : color(r.col);
+      texts.push(`<rect x="${x}" y="${top + 3.5}" width="${w.toFixed(1)}" height="15" rx="3" fill="none" stroke="${c}"/><text x="${x + 6}" y="${top + 15}" fill="${c}" textLength="${tw.toFixed(1)}" lengthAdjust="spacingAndGlyphs">${xml(label)}</text>`);
+      x += w + 5;
+    }
+    const time = commitTime(r.at, now);
+    const room = W - 4 - textW(time) - 12 - x;
+    texts.push(`<text x="${x}" y="${top + 15}" fill="${r.refs.includes(r.head) ? "#E8E6E1" : "#B9B6AE"}"${r.head ? ' font-weight="600"' : ""}>${xml(clipW(r.subject, Math.max(30, r.head ? room * 0.92 : room)))}</text>`);
+    texts.push(`<text x="${W - 4}" y="${top + 15}" text-anchor="end" fill="#8F8D87">${xml(time)}</text>`);
+  });
+  const H = log.length * ROW;
+  const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system, system-ui, sans-serif" font-size="11.5">`
+    + `<defs><clipPath id="c"><rect width="${W}" height="${H}"/></clipPath></defs>`
+    + `<g fill="none" stroke-width="2" clip-path="url(#c)">${edges.join("")}</g>${dots.join("")}${texts.join("")}</svg>`;
+  const rows = [els.Svg({ key: "graph", source, alt: `the newest ${log.length} commits, as a graph` })];
+  return sized("Graph", card(els, { key: "graph", title: "GRAPH", color: theme.git, meta: `last ${log.length} commits`, rows }), Math.ceil(H / 19));
 }
 
 // ---------------------------------------------------------------- Agents
@@ -449,6 +748,91 @@ function sessionsCard(els, handlers, maxRows, now) {
   return sized("Sessions", card(els, { key: "sessions", title: "SESSIONS", color: theme.agents, meta, rows }), rows.length);
 }
 
+// What a session is doing, as a chip's words and color.
+function sessionState(s, now) {
+  const a = s.activity ?? { state: "idle" };
+  const live = liveAgents(s);
+  const since = a.since ? now - a.since : 0;
+  if (a.state === "tool") return { text: `working · ${a.tool} ${fmtDur(since)}`, color: theme.amber };
+  if (a.state === "thinking") return { text: `thinking ${fmtDur(since)}`, color: theme.agents };
+  if (live) return { text: `waiting on ${live} agent${live === 1 ? "" : "s"}`, color: theme.agents };
+  return { text: `idle${a.since ? ` ${age(a.since, now)}` : ""}`, color: theme.muted };
+}
+
+// One branch of a subagent tree, as tall as its row so the lines meet: the
+// trunk down (all the way, or to the elbow on the last), and the elbow.
+const TREE_ROW = 22;
+function treeLimb(els, key, depth, last) {
+  const w = 10 + depth * 14 + 12;
+  const x = 5 + depth * 14;
+  const trunks = Array.from({ length: depth }, (_, d) => `M${5 + d * 14} 0 V${TREE_ROW}`).join(" ");
+  const d = `${trunks} M${x} 0 V${last ? TREE_ROW / 2 : TREE_ROW} M${x} ${TREE_ROW / 2} H${w}`;
+  return els.Svg({ key, source: K.svg(w, TREE_ROW, `<path d="${d}" stroke="#5A5955" stroke-width="1.5" fill="none"/>`), alt: "", width: w, height: TREE_ROW });
+}
+
+// A running subagent's ring: a quarter arc that turns a step each second.
+function agentRing(els, key, now) {
+  const turn = (Math.floor(now / 1000) % 4) * 90;
+  const body = `<circle cx="7" cy="7" r="5.5" stroke="rgba(127,127,127,0.3)" stroke-width="2" fill="none"/>`
+    + `<path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" stroke="${theme.agents}" stroke-width="2" fill="none" stroke-linecap="round" transform="rotate(${turn} 7 7)"/>`;
+  return els.Svg({ key, source: K.svg(14, 14, body), alt: "running", width: 14, height: 14 });
+}
+
+function sessionBlockDesk(els, s, handlers, now, maxAgents) {
+  const { Box, Text, Button } = els;
+  const here = s.id === state.sessionId;
+  const color = nameColor(s.id);
+  const st = sessionState(s, now);
+  const folded = state.collapsed.has(s.id);
+  const agents = s.agents ?? [];
+  const live = liveAgents(s);
+  const nodes = [Box({ key: `s-${s.id}`, flexDirection: "row", alignItems: "center", columnGap: 1, children: [
+    Text({ key: "dot", color: sessionBusy(s) ? color : theme.muted, children: "●" }),
+    Text({ key: "p", bold: true, wrap: "truncate-end", children: s.project }),
+    here ? Text({ key: "here", color: theme.muted, children: "here" }) : null,
+    chip(els, "st", st.text, st.color),
+    Box({ key: "push", flexGrow: 1, minWidth: 1 }),
+    s.branch ? Text({ key: "br", color: theme.muted, wrap: "truncate-end", children: s.branch }) : null,
+    Text({ key: "m", color: theme.muted, children: shortModel(s.model) }),
+    agents.length ? Button({ key: "fold", plain: true, dimColor: true, label: folded ? `▸ ${live || agents.length}` : "▾", onPress: () => handlers.onToggleSession?.(s.id) }) : null,
+  ].filter(Boolean) })];
+  if (!folded) {
+    const shown = agents.slice(0, maxAgents);
+    shown.forEach((a, i) => {
+      const last = i === shown.length - 1 && agents.length <= maxAgents;
+      const ended = isEnded(a.status);
+      const g = agentGlyph(a.status, now);
+      const took = (a.endedAt ?? now) - a.startedAt;
+      nodes.push(Box({ key: `ag-${s.id}-${a.id}`, flexDirection: "row", alignItems: "center", columnGap: 1, children: [
+        treeLimb(els, "limb", a.depth ?? 0, last || a.last),
+        ended ? Text({ key: "g", color: g.color, children: g.g }) : agentRing(els, "ring", now),
+        Text({ key: "t", bold: !ended, children: a.type }),
+        Text({ key: "d", color: theme.muted, wrap: "truncate-end", children: a.description ?? "" }),
+        Box({ key: "push", flexGrow: 1, minWidth: 1 }),
+        Text({ key: "took", color: ended ? theme.muted : theme.agents, children: fmtDur(took) }),
+      ] }));
+    });
+    if (agents.length > maxAgents) nodes.push(muted(els, `agm-${s.id}`, `     +${agents.length - maxAgents} more`));
+  }
+  return nodes;
+}
+
+function sessionsCardDesk(els, handlers, now) {
+  const list = allSessions();
+  const rows = [];
+  list.forEach((s, i) => {
+    if (i) rows.push(sessionRule(els, `sep-${s.id}`));
+    rows.push(...sessionBlockDesk(els, s, handlers, now, s.id === state.sessionId ? 6 : 3));
+  });
+  if (!rows.length) rows.push(muted(els, "none", "Starting…"));
+  const busy = list.filter(sessionBusy).length;
+  const meta = busy ? `${busy} working · ${list.length - busy} idle` : `${list.length} on this computer`;
+  return sized("Sessions", card(els, { key: "sessions", title: "SESSIONS", color: theme.agents, meta, rows }), rows.length);
+}
+
+// A thin rule across the row, between sessions.
+const sessionRule = (els, key) => els.Box({ key, flexDirection: "row", marginY: 0, children: [stretchBar(els, "l", 100, "#3A3936", { track: false })] });
+
 const FILTERS = { all: "all", here: "here", errors: "errors" };
 
 function feedRow(els, f, w, now) {
@@ -472,10 +856,15 @@ function feedCard(els, w, rowsLeft, handlers, now) {
     .map((f) => feedRow(els, f, w, now));
   if (!rows.length) rows.push(muted(els, "none", state.feedFilter === "errors" ? "No failed tool calls." : "Tool calls show up here as they run."));
   const metaNode = els.Button({ key: "filter", plain: true, dimColor: true, label: `${FILTERS[state.feedFilter]} ▾`, onPress: () => handlers.onCycleFilter?.() });
-  return { name: "Live", node: card(els, { key: "feed", title: "LIVE", color: theme.agents, metaNode, rows, grow: true }), height: 3 + Math.min(rows.length, 1) };
+  // The terminal's feed fills the pane's spare rows; the desktop's pane
+  // scrolls, so there the card ends with its last call.
+  return { name: "Live", node: card(els, { key: "feed", title: "LIVE", color: theme.agents, metaNode, rows, grow: !els.Svg }), height: 3 + Math.min(rows.length, 1) };
 }
 
 function agentsDock(els, w, capacity, handlers, now) {
+  // The desktop: sessions with their subagent trees drawn in lines, and the
+  // live feed held to its newest 30 calls (the pane scrolls, nothing windows it).
+  if (els.Svg) return stackCards(els, [sessionsCardDesk(els, handlers, now), feedCard(els, w, 30, handlers, now)], capacity, handlers.scroll);
   const sessions = sessionsCard(els, handlers, Math.max(3, Math.floor((capacity - 4) * 0.55)), now);
   const left = capacity - sessions.height - CARD_GAP - 3;
   return stackCards(els, [sessions, feedCard(els, w, left, handlers, now)], capacity, handlers.scroll);

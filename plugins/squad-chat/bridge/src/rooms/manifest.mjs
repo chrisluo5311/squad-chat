@@ -21,12 +21,25 @@ const ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 // list setting), "pick" (a row pressed is kept in a string setting, and
 // shown at the path `as` in place of what the provider put there).
 const WIDGETS = {
-  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
-  buttons: { buttons: "buttons!" },
+  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text", code: "bool", lit: "field", score: "field", group: "field", open: "field", remove: "act", pause: "text" },
+  buttons: { buttons: "buttons!", split: "int", level: "path" },
   table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" },
+  // Drawn on the desktop (a card's `desktop` body); the terminal makes do.
+  stat: { value: "path!", right: "text", color: "color" },
+  bar: { value: "path!", color: "color" },
+  chart: { values: "path!", values2: "path", color: "color", color2: "color", max: "int", caption: "text" },
+  grid: { items: "path!", title: "field!", sub: "field", value: "field", change: "field", colorFrom: "field", line: "field", pick: "pick", drop: "drop", empty: "text", icon: "field", note: "field", across: "int", pickTitle: "bool", hint: "text" },
+  // A line over the hours with bars under it (temperature, chance of rain),
+  // and times to read it by.
+  forecast: { values: "path!", bars: "path", marks: "path", caption: "text", color: "color", color2: "color" },
+  // Items as columns side by side (a week's days), the `lit` one outlined.
+  strip: { items: "path!", title: "field!", icon: "field", value: "field", sub: "field", note: "field", lit: "field", empty: "text" },
+  // Sunrise to sunset as an arc, the sun at `value` (0-100) through the day.
+  sun: { rise: "text!", set: "text!", value: "path", sub: "text", note: "text" },
+  media: { title: "text!", sub: "text", progress: "path", elapsed: "text", total: "text", live: "path", playing: "path", empty: "text" },
 };
 
 // The desktop band's pills: each a small drawing, words around it and a card
@@ -161,6 +174,7 @@ function checkWidget(body, where, errors, uses) {
     if ((k === "path" || k === "field") && !(typeof v === "string" && PATH.test(v))) errors.push(`${where}.${key}: not a path`);
     if (k === "text" && !str(v, 200)) errors.push(`${where}.${key}: 1-200 characters`);
     if (k === "int" && !(Number.isInteger(v) && v > 0 && v <= 100)) errors.push(`${where}.${key}: a whole number 1-100`);
+    if (k === "bool" && typeof v !== "boolean") errors.push(`${where}.${key}: true or false`);
     if (k === "color" && !COLORS.includes(v)) errors.push(`${where}.${key}: one of ${COLORS.join(", ")}`);
     if (k === "columns") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.columns: 1-8 columns`);
@@ -194,6 +208,9 @@ function checkWidget(body, where, errors, uses) {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
       else v.forEach((btn, i) => {
         if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
+        // A toggle: `alt` is the label while the path `altWhen` holds (⏸ while playing).
+        if (btn?.alt != null && !str(btn.alt, 8)) errors.push(`${where}.buttons[${i}].alt: 1-8 characters`);
+        if (btn?.altWhen != null && !(typeof btn.altWhen === "string" && PATH.test(btn.altWhen))) errors.push(`${where}.buttons[${i}].altWhen: not a path`);
         if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
         else uses.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
         if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);
@@ -205,6 +222,7 @@ function checkWidget(body, where, errors, uses) {
         if (!str(t?.value, 100)) errors.push(`${where}.tiles[${i}].value: 1-100 characters`);
         if (t?.sub != null && !str(t.sub, 100)) errors.push(`${where}.tiles[${i}].sub: 1-100 characters`);
         if (t?.color != null && !COLORS.includes(t.color)) errors.push(`${where}.tiles[${i}].color: one of ${COLORS.join(", ")}`);
+        if (t?.tone != null && !(typeof t.tone === "string" && PATH.test(t.tone))) errors.push(`${where}.tiles[${i}].tone: not a path`);
       });
     }
   }
@@ -327,11 +345,25 @@ export function checkManifest(m, providers) {
       if (!str(c?.title, 30)) errors.push(`layout.cards[${i}].title: 1-30 characters`);
       if (c?.meta != null && !str(c.meta, 100)) errors.push(`layout.cards[${i}].meta: 1-100 characters`);
       if (c?.when != null && !(typeof c.when === "string" && PATH.test(c.when))) errors.push(`layout.cards[${i}].when: not a path`);
+      // "badge": a few words before the meta, colored by `badgeTone` (a path to a color's name): "UV 7 high".
+      if (c?.badge != null && !str(c.badge, 60)) errors.push(`layout.cards[${i}].badge: 1-60 characters`);
+      if (c?.badgeTone != null && !(typeof c.badgeTone === "string" && PATH.test(c.badgeTone))) errors.push(`layout.cards[${i}].badgeTone: not a path`);
       checkBody(c?.body, `layout.cards[${i}].body`, errors, actionsUsed);
+      if (c?.desktop != null) checkBody(c.desktop, `layout.cards[${i}].desktop`, errors, actionsUsed);
     });
     if (l.inline != null) checkBody(l.inline, "layout.inline", errors, actionsUsed);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
     checkPills(l.pills, errors);
+    // "add": a list setting that what's typed in the room's box goes into,
+    // or { action, field }: an action that gets what's typed as args[field].
+    if (l.add != null) {
+      if (typeof l.add === "object" && !Array.isArray(l.add)) {
+        if (!(typeof l.add.action === "string" && ACTION.test(l.add.action))) errors.push("layout.add.action: an action's name");
+        else actionsUsed.push({ where: "layout.add", action: l.add.action });
+        if (!(typeof l.add.field === "string" && SETTING_KEY.test(l.add.field))) errors.push("layout.add.field: a field's name");
+      } else if (!(typeof l.add === "string" && SETTING_KEY.test(l.add))) errors.push("layout.add: a setting's key, or { action, field }");
+      else actionsUsed.push({ where: "layout.add", setting: l.add, settingType: "list" });
+    }
     if (l.keys != null) {
       const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;
       if (!keys || keys.length > 10) errors.push("layout.keys: up to 10 keys");
