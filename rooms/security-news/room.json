@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "security-news",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minSquadChat": "0.15.0",
   "name": "Security News",
   "icon": "⚠",
@@ -20,6 +20,10 @@
       { "title": "SECURITY", "meta": "{feeds.count} stories", "body": { "type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "empty": "No stories yet." } }
     ],
     "inline": { "type": "list", "items": "feeds.items", "title": "title", "copy": "url", "max": 4 },
+    "pills": [
+      { "when": "feeds.items.0", "draw": { "type": "icon", "icon": "flame" }, "color": "amber", "msg": "{feeds.items.0.title}", "tip": ["{feeds.items.0.title}", "{feeds.items.0.meta}"] },
+      { "when": "feeds.items.0", "color": "sand", "sub": "{feeds.items.0.meta}" }
+    ],
     "band": "⚠ {feeds.items.0.title}",
     "hint": "⧉ copies the link · ⇪ shares it · r refreshes"
   }

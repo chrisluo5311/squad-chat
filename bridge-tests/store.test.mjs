@@ -48,7 +48,8 @@ describe("the room store", () => {
     const tampered = { ...repoRoom("security-news"), description: "changed after the index was built" };
     const future = { ...repoRoom("us-tech"), id: "future-room", minSquadChat: "9.0.0" };
     const broken = { ...repoRoom("dev-blogs"), id: "broken-room", providers: [{ id: "x", type: "shell" }] };
-    served = storeDir([repoRoom("dev-blogs"), tampered, future, broken, repoRoom("us-tech")], {
+    // dev-blogs at 1.0.0 whatever the repo has, so the update below is one.
+    served = storeDir([{ ...repoRoom("dev-blogs"), version: "1.0.0" }, tampered, future, broken, repoRoom("us-tech")], {
       "security-news": { sha256: createHash("sha256").update("the original").digest("hex") },
       extra: [{ id: "weather", name: "Weather", version: "9.9.9", sha256: "0".repeat(64) }],
     });

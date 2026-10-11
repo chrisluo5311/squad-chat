@@ -5,7 +5,7 @@
       "id": "crypto",
       "name": "Crypto",
       "icon": "₿",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "minSquadChat": "0.16.0",
       "description": "Coin prices and their 24-hour change, from CoinGecko, no key. Not investment advice.",
       "author": "squad-chat",
@@ -15,13 +15,13 @@
       "providers": [
         "http-json"
       ],
-      "sha256": "89a8e4fb3bf9e20846a30f1ae0cf6a00273dc626d242e709465e169ac91fabce"
+      "sha256": "6bdd7494378cda333cf25a92f22256ef0c2a6fe4ddc070fb917839fb4a79376b"
     },
     {
       "id": "dev-blogs",
       "name": "Dev Blogs",
       "icon": "✎",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "minSquadChat": "0.15.0",
       "description": "New posts from the Cloudflare, Deno and Node.js blogs, newest first.",
       "author": "squad-chat",
@@ -33,13 +33,13 @@
       "providers": [
         "rss"
       ],
-      "sha256": "ddd34742d15dc223785803e97f73c32026565f925137c8d596420e1a1d5fa723"
+      "sha256": "53a59f1c42b91d5d69584af96523ffbfa4142a5415d529154babce3529592f86"
     },
     {
       "id": "fx-rates",
       "name": "FX Rates",
       "icon": "¤",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "minSquadChat": "0.16.0",
       "description": "Exchange rates against the currency you pick, from the European Central Bank's daily reference rates via Frankfurter. No key.",
       "author": "squad-chat",
@@ -49,13 +49,13 @@
       "providers": [
         "http-json"
       ],
-      "sha256": "8df3d8154a8a2e4d067e856e7c31e8e63017352df9f7d899bcac662e18f13805"
+      "sha256": "02db60c1ce68c106158041075b1da736543266a041b170299e07ff3dbcaefe9c"
     },
     {
       "id": "security-news",
       "name": "Security News",
       "icon": "⚠",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "minSquadChat": "0.15.0",
       "description": "Breaches, vulnerabilities and patches from Krebs on Security and The Hacker News.",
       "author": "squad-chat",
@@ -66,13 +66,13 @@
       "providers": [
         "rss"
       ],
-      "sha256": "a50022c133dada1c6bebf3101294149e8106414e487241ca8df06de3ca64f35a"
+      "sha256": "7fdd8c262a4230fa0ecc632ba4ccb1956672aec1eb9bebd5e28be8875aa93881"
     },
     {
       "id": "us-tech",
       "name": "US Tech Stocks",
       "icon": "◆",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "minSquadChat": "0.15.0",
       "description": "The big US tech names and the Nasdaq, each with today's line. Yahoo Finance, no key. Prices may be delayed.",
       "author": "squad-chat",
@@ -82,7 +82,7 @@
       "providers": [
         "quotes"
       ],
-      "sha256": "1ed96a60ec5bf7e179120b9b83f47c171dae0468fa6bb4628271d790f4658a96"
+      "sha256": "5fd885e70d04613ab18ba485c495a96a26947dbf7504e1fd40a7bd6a3eca1327"
     }
   ]
 }
