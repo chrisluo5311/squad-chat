@@ -218,7 +218,7 @@ function gridWidget(els, b, data, w, key, handlers, room, accent) {
       Box({ key: "top", flexDirection: "row", alignItems: "center", columnGap: 1, children: [
         // `pickTitle`: the title is pressed to pick the tile, in place of a pin.
         b.pick && b.pickTitle
-          ? Button({ key: `pick-${key}-${i}`, plain: true, onPress: pick, children: [Text({ key: "t", bold: true, children: title })] })
+          ? Button({ key: `pick-${key}-${i}`, plain: true, label: title, onPress: pick })
           : Text({ key: "t", bold: true, wrap: "truncate-end", children: title }),
         Box({ key: "push", flexGrow: 1, minWidth: 1 }),
         b.change ? Text({ key: "c", color: c, children: show(lookup(it, b.change)) }) : null,

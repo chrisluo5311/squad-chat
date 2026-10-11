@@ -389,10 +389,12 @@ function headerDesk(els, handlers) {
   if (state.auth === "signed_in") {
     for (const r of state.rooms) {
       if (r.id === state.current && view === "chat") { chats.push(outlined(`tab-${r.id}`, `#${r.slug}`)); continue; }
-      chats.push(Button({ key: `tab-${r.id}`, onPress: () => handlers.onSelectRoom(r.id), children: [
-        Text({ key: "n", children: `#${r.slug}` }),
-        ...(r.unread ? [Text({ key: "u", bold: true, color: theme.accent, children: ` ${r.unread}` })] : []),
-      ] }));
+      // A Button holds only its label (older releases refuse Text inside it):
+      // the unread count is a pill beside the chip.
+      const chipBtn = Button({ key: `tab-${r.id}`, label: `#${r.slug}`, onPress: () => handlers.onSelectRoom(r.id) });
+      chats.push(r.unread
+        ? Box({ key: `chipbox-${r.id}`, flexDirection: "row", alignItems: "center", columnGap: 1, children: [chipBtn, pill("badge", String(r.unread), theme.accent, theme.onAccent, { h: 18 })] })
+        : chipBtn);
     }
     // "＋ join" opens one field at a time to its right: the room's name, then
     // (Enter, or next) its passcode with the name as a chip before it.
