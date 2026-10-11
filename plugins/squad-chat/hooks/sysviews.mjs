@@ -170,7 +170,7 @@ function usageDock(els, w, capacity, handlers, now) {
     spendCard(els, w, now),
     toolsCard(els, w, 5),
     subagentsCard(els, 4, now),
-  ], capacity);
+  ], capacity, handlers.scroll);
 }
 
 // ---------------------------------------------------------------- Git
@@ -376,7 +376,7 @@ function gitDock(els, w, capacity, handlers, now) {
     prsCard(els, handlers, 4, now),
     runsCard(els, handlers, 3, now),
     issuesCard(els, handlers, 3, now),
-  ], capacity);
+  ], capacity, handlers.scroll);
 }
 
 // ---------------------------------------------------------------- Agents
@@ -476,7 +476,7 @@ function feedCard(els, w, rowsLeft, handlers, now) {
 function agentsDock(els, w, capacity, handlers, now) {
   const sessions = sessionsCard(els, handlers, Math.max(3, Math.floor((capacity - 4) * 0.55)), now);
   const left = capacity - sessions.height - CARD_GAP - 3;
-  return stackCards(els, [sessions, feedCard(els, w, left, handlers, now)], capacity);
+  return stackCards(els, [sessions, feedCard(els, w, left, handlers, now)], capacity, handlers.scroll);
 }
 
 // ---------------------------------------------------------------- entry points

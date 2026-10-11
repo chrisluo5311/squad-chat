@@ -431,7 +431,14 @@ function dockView(els, props, handlers) {
     const pending = shareCard(els, handlers, width);
     const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
     const capacity = Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
-    parts.push(...sysDock(els, view, width, capacity, handlers));
+    // The room's own scroll: it starts at the top, and cards taller than the
+    // window are laid out a cell narrower to leave the scrollbar its column.
+    if (state.dockScroll.view !== view) state.dockScroll = { view, offset: 0, max: 0 };
+    const scroll = state.dockScroll;
+    let cards = sysDock(els, view, width, capacity, { ...handlers, scroll });
+    if (scroll.max) cards = sysDock(els, view, width - 1, capacity, { ...handlers, scroll });
+    scroll.offset = Math.min(scroll.offset, scroll.max);
+    parts.push(...cards);
     parts.push(Box({ key: "spacer", flexGrow: 1 }));
     if (pending) parts.push(pending.node);
     if (n) parts.push(n);

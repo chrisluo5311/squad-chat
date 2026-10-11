@@ -1443,13 +1443,16 @@ test('Monitor room: meters for CPU, memory, network and disk; cards without data
   bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...monitorLoaded(), { type: 'fnroom', id: 'monitor', provider: 'sys', data: SYS(), at: Date.now() })
   await settle()
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet', 'monitor'], shown: null })
-  // 30 rows fit CPU, memory and network: the rest is named for a taller pane.
+  // 30 rows don't fit them all: the cards scroll in a window, a scrollbar at its side.
   let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
   await settle()
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet', 'monitor'], shown: 'monitor' })
-  expect(await ui.find({ type: 'Text', text: '+ DISK  (a taller pane shows them)' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /taller pane/ })).toBeUndefined()
+  expect(await ui.find({ key: 'scrollbar' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'CPU' })).toBeDefined()   // the window starts at the top
   await ui.unmount()
   ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } } })
+  expect(await ui.find({ key: 'scrollbar' })).toBeUndefined()   // 60 rows fit them all
   const missing = []
   for (const text of ['CPU', '12 cores · 56°C · 1.9 W', '42%', 'load 4.90', '▃▅▂', 'MEMORY', '85%', 'Pressure', 'Swap', 'NETWORK', '↓ 367 KB/s', '↑ 4.2 KB/s', 'DISK', '189 GB free', '80%']) {
     if (!(await ui.find({ type: 'Text', text }))) missing.push(text)

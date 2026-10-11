@@ -649,6 +649,21 @@ export function register(on, options) {
     });
   });
 
+  // The wheel or the scroll keys over a room's cards move them in their
+  // window. The chat and a room that fits leave the pane to the engine.
+  on("ui.scroll", { component: "Pane" }, ($, e, next) => {
+    const scroll = state.dockScroll;
+    if (e.requestId !== PANE_ID || activeView() === "chat" || scroll.view !== activeView() || !scroll.max) return next(e);
+    // A card at a time, or as many as the rows asked for pass (a page key).
+    let offset = scroll.offset;
+    const at = scroll.starts[offset] ?? 0;
+    do offset += Math.sign(e.by);
+    while (offset > 0 && offset < scroll.max && Math.abs((scroll.starts[offset] ?? 0) - at) < Math.abs(e.by));
+    offset = Math.min(scroll.max, Math.max(0, offset));
+    if (offset !== scroll.offset) { scroll.offset = offset; $.ui.invalidate("ui.render"); }
+    return {};
+  });
+
   // While the pane can't be seen (too narrow to place, or closed), a one-line
   // band above the prompt keeps the room in view. It yields to surveys.
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {

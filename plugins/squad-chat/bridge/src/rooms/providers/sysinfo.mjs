@@ -297,7 +297,9 @@ export default {
       disk: d ? { pct: pctOf(d.used, d.total), usedText: `${bytes(d.used, 0)} / ${bytes(d.total, 0)}`, freeText: `${bytes(d.free, 0)} free` } : null,
       battery: b ? { pct: b.pct, state: b.state, detail: [b.state, b.timeText, b.power].filter(Boolean).join(" · ") } : null,
       sensorHint: os.sensorHint,
-      band: [`CPU ${cpuPct}%`, memPct != null ? `mem ${memPct}%` : null, rx != null ? `↓${net.rxText} ↑${net.txText}` : null, celsius(sen?.cpuTemp) || null, b ? `${b.state === "on battery" ? "▯" : "⚡"}${b.pct}%` : null].filter(Boolean).join(" · "),
+      // 🌡 and ⚡ carry the emoji selector (U+FE0F): without it the terminal
+      // gives 🌡 one cell, draws it in two, and it covers the space after it.
+      band: [`CPU ${cpuPct}%`, memPct != null ? `mem ${memPct}%` : null, rx != null ? `🛜 ↓${net.rxText} ↑${net.txText}` : null, Number.isFinite(sen?.cpuTemp) ? `🌡\uFE0F ${celsius(sen.cpuTemp)}` : null, b ? `${b.state === "on battery" ? "▯" : "⚡\uFE0F"} ${b.pct}%` : null].filter(Boolean).join(" · "),
       alerts,
     };
   },
