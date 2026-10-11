@@ -6,6 +6,8 @@
 import { state } from "./state.mjs";
 import { theme, palette } from "./theme.mjs";
 import { rowsFor, meter, tiles, line, card, stackCards } from "./widgets.mjs";
+import * as K from "./bandkit.mjs";
+import { capsule, draw, label as pLabel, value as pValue, sub as pSub, msg as pMsg, tag as pTag } from "./bands.mjs";
 
 export function fnMeta(id) {
   const m = state.fn.get(id)?.manifest;
@@ -236,6 +238,89 @@ export function fnBandPieces(id) {
   if (!loaded) return [{ text: "loading…", color: theme.muted }];
   const l = room.manifest.layout;
   return [{ text: fill(l.band ?? l.cards[0].meta ?? room.manifest.name, data), color: theme.muted }];
+}
+
+// ---------------------------------------------------------------- the desktop band
+
+// A template for a pill: holes with nothing behind them come out empty, and
+// a text left with nothing but punctuation and spaces is dropped.
+function pillText(template, scope) {
+  if (template == null) return "";
+  const out = String(template).replace(/\{([A-Za-z0-9_.]+)\}/g, (_, p) => {
+    const v = lookup(scope, p);
+    return v == null || typeof v === "object" ? "" : show(v);
+  }).trim();
+  return /[\p{L}\p{N}]/u.test(out) ? out : "";
+}
+
+const num = (v) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : null);
+const nums = (v) => (Array.isArray(v) ? v.map(Number).filter(Number.isFinite) : []);
+
+// A pill's drawing, from the plugin's own set: the manifest picks one and
+// says where its number comes from.
+function pillDrawing(d, scope, c, alt) {
+  if (!d) return null;
+  const v = d.value ? lookup(scope, d.value) : undefined;
+  const flag = d.flag ? !!lookup(scope, d.flag) : false;
+  switch (d.type) {
+    case "area": return nums(v).length >= 2 ? draw(K.area(nums(v), c, { w: 32 }), alt) : null;
+    case "bars": return nums(v).length ? draw(K.bars(nums(v), c, { all: true, w: 3, gap: 1.5 }), alt) : null;
+    case "orbit": return num(v) != null ? draw(K.orbit(num(v), c), alt) : null;
+    case "drop": return num(v) != null ? draw(K.drop(num(v), c), alt) : null;
+    case "battery": return num(v) != null ? draw(K.battery(num(v), c, flag), alt) : null;
+    case "thermometer": return num(v) != null ? draw(K.thermometer(num(v), c), alt) : null;
+    case "progress": return num(v) != null ? draw(K.progress(num(v), c), alt) : null;
+    case "equalizer": return draw(K.equalizer(c, flag), alt);
+    case "weather": return typeof v === "string" && v ? draw(K.weather(v, c), alt) : null;
+    case "icon": return draw(K.icon(d.icon, c), alt);
+    case "dot": return draw({ source: K.svg(10, 10, `<circle cx="5" cy="5" r="4" fill="${c}"/>`), width: 10, height: 10 }, alt);
+    default: return null;
+  }
+}
+
+const SIGNAL = new Set(["amber", "red", "rose", "leaf"]);
+
+function pillSection(p, scope, key, fallbackColor) {
+  if (p.when && !lookup(scope, p.when)) return null;
+  const tone = p.colorFrom ? lookup(scope, p.colorFrom) : null;
+  const c = palette[tone] ?? palette[p.color] ?? fallbackColor;
+  const tip = (p.tip ?? []).map((t) => pillText(t, scope)).filter(Boolean);
+  const words = { label: pillText(p.label, scope), value: pillText(p.value, scope), sub: pillText(p.sub, scope), msg: pillText(p.msg, scope), tag: pillText(p.tag, scope) };
+  const parts = [
+    pillDrawing(p.draw, scope, c, tip[0] || words.value || words.label || words.msg || "drawing"),
+    words.label ? pLabel(words.label, words.value ? undefined : theme.muted) : null,
+    // A value takes its pill's color when the data says it should stand out:
+    // up or down, warm or alarming.
+    words.value ? pValue(words.value, SIGNAL.has(tone) ? c : undefined) : null,
+    words.msg ? pMsg(words.msg) : null,
+    words.tag ? pTag(words.tag, c) : null,
+    words.sub ? pSub(words.sub) : null,
+  ].filter(Boolean);
+  if (!parts.length) return null;
+  return { key, color: c, parts, tip, grow: !!words.msg };
+}
+
+// The band on the desktop: the manifest's pills, or, for a room without
+// any, its band line in one section. Null while there is nothing to show.
+export function fnBandDesktop(id, els, { onOpen }) {
+  const { room, data, loaded, error } = roomState(id);
+  if (!room) return null;
+  const meta = fnMeta(id);
+  const l = room.manifest.layout;
+  let sections = [];
+  if (error && !loaded) sections = [{ key: "err", color: theme.warn, parts: [pMsg(`⚠ ${error}`)], grow: true }];
+  else if (!loaded) sections = [{ key: "wait", color: meta.color, parts: [pSub("loading…")] }];
+  else if (Array.isArray(l.pills)) {
+    l.pills.forEach((p, i) => {
+      if (p.each) {
+        const items = lookup(data, p.each);
+        (Array.isArray(items) ? items : []).slice(0, p.max ?? 4).forEach((it, j) => sections.push(pillSection(p, { ...data, it }, `p${i}-${j}`, meta.color)));
+      } else sections.push(pillSection(p, data, `p${i}`, meta.color));
+    });
+  }
+  sections = sections.filter(Boolean);
+  if (!sections.length) sections = [{ key: "line", color: meta.color, parts: [pMsg(fill(l.band ?? l.cards[0].meta ?? room.manifest.name, data))], grow: true }];
+  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen });
 }
 
 export function fnHint(id) {

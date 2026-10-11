@@ -67,6 +67,20 @@ export function recordTurnContext(u) {
   return true;
 }
 
+// What the band needs back after a reload (the module starts over, the
+// session does not): the tokens so far and the context after each turn.
+export function usageSnapshot(u, at) {
+  return { at, tokens: { ...u.tokens }, ctxHistory: [...u.ctxHistory] };
+}
+
+export function restoreUsage(u, saved) {
+  if (!saved || typeof saved !== "object") return false;
+  const t = saved.tokens ?? {};
+  for (const k of ["input", "output", "cacheRead", "cacheWrite"]) if (Number.isFinite(t[k])) u.tokens[k] = Math.max(u.tokens[k], t[k]);
+  if (Array.isArray(saved.ctxHistory) && !u.ctxHistory.length) u.ctxHistory = saved.ctxHistory.filter(Number.isFinite).slice(-CTX_HISTORY);
+  return true;
+}
+
 // What one turn used (turn.complete's `usage`), the main loop's or a subagent's.
 export function applyTurnUsage(u, usage) {
   if (!usage) return false;

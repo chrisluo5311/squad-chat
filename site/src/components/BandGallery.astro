@@ -1,0 +1,210 @@
+---
+// Every room's band as the desktop app draws it, in the dark theme. The
+// drawings come from the plugin's own bandkit.mjs at build time, so the page
+// shows what the app shows, and the moving parts (typing dots, breathing
+// agents, the equalizer) move here too. The figures are made up.
+import * as K from "../../../plugins/squad-chat/hooks/bandkit.mjs";
+import { theme, palette, nameColor } from "../../../plugins/squad-chat/hooks/theme.mjs";
+
+const T = theme;
+const P = palette;
+type Part = { svg?: { source: string }; text?: string; kind?: string; color?: string; bg?: string };
+type Sec = { color: string; parts: Part[]; grow?: boolean };
+type Band = { room: string; color: string; sections: Sec[]; note?: string };
+
+const d = (svg: { source: string }): Part => ({ svg });
+const v = (text: string, color?: string): Part => ({ text, kind: "value", color });
+const l = (text: string): Part => ({ text, kind: "label" });
+const s = (text: string): Part => ({ text, kind: "sub" });
+const m = (text: string, color?: string): Part => ({ text, kind: "msg", color });
+const chip = (text: string, bg: string, color: string): Part => ({ text, kind: "chip", bg, color });
+const tag = (text: string, color: string): Part => ({ text, kind: "tag", color });
+const dot = (c: string) => d({ source: K.svg(10, 10, `<circle cx="5" cy="5" r="4" fill="${c}"/>`) });
+
+const ppl = [{ initial: "S", color: nameColor("sam") }, { initial: "A", color: nameColor("ana") }, { initial: "K", color: nameColor("kai") }];
+const ctxHist = [3200, 1800, 5200, 2600, 900, 4100, 2300, 5300];
+const cpu = [22, 30, 28, 45, 38, 52, 41, 36, 48, 61, 44, 38];
+const up = [100, 101, 100.5, 102, 103, 102.6, 104, 105.2];
+const down = [50, 49.6, 49.8, 48.9, 48.2, 48.5, 47.6, 47.1];
+
+const rooms: { title: string; what: string; bands: Band[] }[] = [
+  { title: "◔ Usage", what: "the context as weather with a bar per prompt, the 5-hour and 7-day windows as orbits with a moon for the time gone, spend, cache, subagents", bands: [
+    { room: "◔ Usage", color: T.usage, sections: [
+      { color: T.amber, parts: [d(K.weather("☀", T.amber)), v("48k"), s("│"), d(K.bars(ctxHist, T.amber))] },
+      { color: T.git, parts: [d(K.orbit(31, T.git, { elapsed: 48 })), l("5h"), v("31%")] },
+      { color: T.agents, parts: [d(K.orbit(58, T.agents, { elapsed: 40, warm: T.amber })), l("7d"), v("58%")] },
+      { color: T.amber, parts: [v("$4.21")] },
+      { color: P.teal, parts: [d(K.cells(98, P.teal)), v("98%"), s("cache")] },
+      { color: T.agents, parts: [d(K.dots(["live", "live", "done"], T.agents)), v("2"), s("running")] },
+    ] },
+    { room: "◔ Usage", color: T.usage, note: "past the moon, the arc turns warm: using faster than time passes", sections: [
+      { color: T.error, parts: [d(K.weather("↯", T.error)), v("812k"), s("│"), d(K.bars(ctxHist.slice(2), T.error)), s("▲ +38k")] },
+      { color: T.git, parts: [d(K.orbit(86, T.git, { elapsed: 55, warm: T.error })), l("5h"), v("86%", T.error)] },
+      { color: T.agents, parts: [d(K.orbit(91, T.agents, { elapsed: 70, warm: T.error })), l("7d"), v("91%", T.error)] },
+      { color: T.amber, parts: [v("$142"), s("$12.80/h")] },
+    ] },
+  ] },
+  { title: "◆ Chat", what: "who's online, what's new, the latest message, or who's typing", bands: [
+    { room: "◆ #squad", color: T.accent, sections: [
+      { color: T.online, parts: [d(K.faces(ppl)), v("3"), s("online")] },
+      { color: T.accent, parts: [chip("2 new", T.accent, T.onAccent), s("+5 elsewhere")] },
+      { color: nameColor("sam"), grow: true, parts: [v("sam", nameColor("sam")), m("are you around? the PR is green now")] },
+    ] },
+    { room: "◆ #design", color: T.accent, sections: [
+      { color: T.online, parts: [d(K.faces(ppl.slice(1))), v("2"), s("online")] },
+      { color: "#999", grow: true, parts: [d(K.typing("#9a958f")), m("ana is typing…", "#9a958f")] },
+    ] },
+  ] },
+  { title: "⎇ Git", what: "the branch, ahead and behind, changes, and the PR's checks as a ring", bands: [
+    { room: "⎇ Git", color: T.git, sections: [
+      { color: T.git, parts: [d(K.icon("branch", T.git)), v("usage-band")] },
+      { color: T.sky, parts: [v("↑2", T.sky), v("↓0", "#9a958f")] },
+      { color: T.amber, parts: [dot(T.amber), v("3"), s("changed")] },
+      { color: T.online, parts: [d(K.icon("pr", T.git)), l("#27"), d(K.segments([{ n: 9, color: T.online }])), v("9/9", T.online), s("checks")] },
+    ] },
+    { room: "⎇ Git", color: T.git, note: "the ring: green passed, amber running, red failed", sections: [
+      { color: T.git, parts: [d(K.icon("branch", T.git)), v("main")] },
+      { color: T.online, parts: [dot(T.online), s("clean")] },
+      { color: T.error, parts: [d(K.icon("pr", T.git)), l("#26"), d(K.segments([{ n: 5, color: T.online }, { n: 2, color: T.amber }, { n: 3, color: T.error }])), v("3 failing", T.error)] },
+      { color: T.amber, parts: [v("1", T.amber), s("review for you")] },
+    ] },
+  ] },
+  { title: "⟡ Agents", what: "a dot per Claude session on this computer, busy ones breathing, and one per subagent", bands: [
+    { room: "⟡ Agents", color: T.agents, sections: [
+      { color: T.agents, parts: [d(K.dots(["live", "idle", "idle"], T.agents)), v("3"), s("sessions")] },
+      { color: T.agents, parts: [d(K.dots(["live", "live", "done", "failed"], T.agents)), v("2"), s("running")] },
+      { color: nameColor("s1"), parts: [v("squad-chat", nameColor("s1")), s("Bash · 12s")] },
+    ] },
+  ] },
+  { title: "▦ Monitor", what: "CPU and its trend, memory, network, temperature, battery, each turning amber or red when it needs you", bands: [
+    { room: "▦ Monitor", color: P.teal, sections: [
+      { color: P.teal, parts: [d(K.icon("chip", P.teal)), v("38%")] },
+      { color: P.teal, parts: [d(K.area(cpu, P.teal, { w: 32 }))] },
+      { color: P.teal, parts: [d(K.orbit(64, P.teal)), l("mem"), v("64%")] },
+      { color: P.sky, parts: [d(K.icon("net", P.sky)), v("↓1.2 MB/s"), s("↑84 KB/s")] },
+      { color: T.amber, parts: [d(K.thermometer(58, T.amber)), v("58°C")] },
+      { color: T.online, parts: [d(K.battery(82, T.online, true)), v("82%")] },
+    ] },
+    { room: "▦ Monitor", color: P.teal, sections: [
+      { color: T.error, parts: [d(K.icon("chip", T.error)), v("94%", T.error)] },
+      { color: T.error, parts: [d(K.area([60, 72, 80, 88, 91, 94], T.error, { w: 32 }))] },
+      { color: T.amber, parts: [d(K.orbit(91, T.amber)), l("mem"), v("91%", T.amber)] },
+      { color: T.error, parts: [d(K.thermometer(92, T.error)), v("92°C", T.error)] },
+      { color: T.error, parts: [d(K.battery(8, T.error, false)), v("8%", T.error)] },
+    ] },
+  ] },
+  { title: "☀ Weather", what: "the sky and temperature, a drop filled with the chance of rain, the next hours, the air", bands: [
+    { room: "☀ Weather", color: T.usage, sections: [
+      { color: T.amber, parts: [d(K.weather("☀", T.amber)), l("Taipei"), v("29°"), s("TW")] },
+      { color: T.usage, parts: [d(K.drop(20, T.usage)), v("20%")] },
+      { color: T.usage, parts: [d(K.bars([0, 0, 5, 10, 20, 35, 20, 10], T.usage, { all: true, w: 3, gap: 1.5 }))] },
+      { color: T.online, parts: [dot(T.online), l("AQI"), v("38", T.online)] },
+    ] },
+    { room: "☀ Weather", color: T.usage, sections: [
+      { color: T.amber, parts: [d(K.weather("☂", T.amber)), l("Tokyo"), v("18°"), s("JP")] },
+      { color: T.usage, parts: [d(K.drop(85, T.usage)), v("85%")] },
+      { color: T.usage, parts: [d(K.bars([40, 60, 85, 80, 70, 50, 30, 20], T.usage, { all: true, w: 3, gap: 1.5 }))] },
+      { color: T.amber, parts: [dot(T.amber), l("AQI"), v("72", T.amber)] },
+    ] },
+  ] },
+  { title: "$ Stocks", what: "whether the market is open, and each symbol with its day's line", bands: [
+    { room: "$ Stocks", color: P.rose, sections: [
+      { color: T.online, parts: [dot(T.online), s("open")] },
+      { color: P.leaf, parts: [d(K.area(up, P.leaf, { w: 32 })), l("2330"), v("▲1.8%", P.leaf)] },
+      { color: P.rose, parts: [d(K.area(down, P.rose, { w: 32 })), l("NVDA"), v("▼2.1%", P.rose)] },
+      { color: P.leaf, parts: [d(K.area(up.slice(2), P.leaf, { w: 32 })), l("AAPL"), v("▲0.4%", P.leaf)] },
+    ] },
+  ] },
+  { title: "✦ Tech News", what: "the top story and its score", bands: [
+    { room: "✦ Tech News", color: P.lilac, sections: [
+      { color: P.coral, parts: [d(K.icon("flame", P.coral)), v("812")] },
+      { color: P.lilac, grow: true, parts: [m("Show HN: A group chat beside your coding agent")] },
+      { color: P.sand, parts: [s("214 comments · 3h")] },
+    ] },
+  ] },
+  { title: "⌘ Snippets", what: "how many, and the latest saved", bands: [
+    { room: "⌘ Snippets", color: P.amber, sections: [
+      { color: P.amber, parts: [d(K.icon("stack", P.amber)), v("12"), s("saved")] },
+      { color: P.amber, parts: [v("deploy-check"), tag("bash", P.amber)] },
+    ] },
+  ] },
+  { title: "♫ Lo-fi", what: "an equalizer that dances while it plays and rests when paused, the title, where it is", bands: [
+    { room: "♫ Lo-fi", color: P.coral, sections: [
+      { color: P.coral, grow: true, parts: [d(K.equalizer(P.coral, true)), m("lofi hip hop radio · beats to relax/study to")] },
+      { color: P.sand, parts: [l("vol"), v("60")] },
+    ] },
+    { room: "♫ Lo-fi", color: P.coral, sections: [
+      { color: P.coral, grow: true, parts: [d(K.equalizer(P.coral, false)), m("Nujabes · Aruarian Dance", "#9a958f")] },
+      { color: P.coral, parts: [d(K.progress(42, P.coral)), s("1:42 / 4:05")] },
+      { color: P.sand, parts: [l("vol"), v("60")] },
+    ] },
+  ] },
+];
+
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const style = (c?: string) => (c ? ` style="color:${c}"` : "");
+function partHtml(p: Part): string {
+  if (p.svg) return `<span class="svg">${p.svg.source}</span>`;
+  const t = esc(p.text ?? "");
+  if (p.kind === "chip") return `<b class="chip" style="background:${p.bg};color:${p.color}">${t}</b>`;
+  if (p.kind === "tag") return `<span class="tag" style="color:${p.color};border-color:${p.color}">${t}</span>`;
+  if (p.kind === "value") return `<b${style(p.color)}>${t}</b>`;
+  if (p.kind === "msg") return `<span class="msg"${style(p.color)}>${t}</span>`;
+  return `<em>${t}</em>`;
+}
+const secHtml = (sec: Sec) => sec.parts.map(partHtml).join("");
+---
+
+<div class="band-gallery not-content">
+  {rooms.map((r) => (
+    <section>
+      <h4>{r.title} <span>{r.what}</span></h4>
+      {r.bands.map((b) => (
+        <>
+        <div class="row">
+          <div class="cap" style={`border-color:${K.tint(b.color, 0.4)};background:${K.tint(b.color, 0.08)}`}>
+            <span class="room" style={`color:${b.color}`}>{b.room}</span>
+            {b.sections.map((sec) => (
+              <>
+                <i>│</i>
+                <span class:list={["sec", { grow: sec.grow }]} style={`--c:${sec.color}`} set:html={secHtml(sec)} />
+              </>
+            ))}
+          </div>
+        </div>
+        {b.note && <p class="note">{b.note}</p>}
+        </>
+      ))}
+    </section>
+  ))}
+</div>
+
+<style>
+  .band-gallery {
+    background: #1f1e1d;
+    color: #ece7e1;
+    border: 1px solid #3a3836;
+    border-radius: 0.75rem;
+    padding: 1rem 1.1rem 0.6rem;
+    margin: 1.5rem 0;
+    font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    overflow-x: auto;
+  }
+  section { margin-bottom: 0.9rem; }
+  h4 { margin: 0 0 0.35rem; font-size: 13px; font-weight: 700; color: #ece7e1; }
+  h4 span { font-weight: 400; color: #8f8a84; margin-left: 0.4rem; }
+  .row { display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0; min-width: max-content; }
+  .cap { display: flex; align-items: center; border: 1px solid; border-radius: 10px; padding: 3px 4px; white-space: nowrap; }
+  .room { font-weight: 700; padding: 0 6px; }
+  i { color: #6a6560; font-style: normal; }
+  .sec { display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px; border-radius: 6px; transition: background 0.15s; }
+  .sec:hover { background: color-mix(in srgb, var(--c) 18%, transparent); }
+  .sec :global(.svg) { display: inline-flex; }
+  .sec :global(svg) { display: block; }
+  .sec :global(b) { font-weight: 700; }
+  .sec :global(em) { font-style: normal; color: #8f8a84; }
+  .sec :global(.msg) { max-width: 330px; overflow: hidden; text-overflow: ellipsis; }
+  .sec :global(.chip) { padding: 0 6px; border-radius: 5px; }
+  .sec :global(.tag) { font-size: 11px; padding: 0 5px; border: 1px solid; border-radius: 4px; }
+  .note { margin: 0 0 0.4rem 0.4rem; color: #8f8a84; font-size: 12px; }
+</style>

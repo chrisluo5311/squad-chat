@@ -245,6 +245,23 @@ describe("manifests", () => {
     for (const want of [/cards\[0\].when: not a path/, /cards\[0\].body: 1-6 widgets/, /inline\[0\]: unknown widget "nope"/]) assert.match(errors, want);
   });
 
+  it("takes desktop pills built from the plugin's own drawings, bound by paths, and nothing that runs", () => {
+    const cards = [{ title: "X", body: { type: "text", text: "a" } }];
+    const m = { ...SNIPPET, layout: { cards, pills: [
+      { draw: { type: "icon", icon: "stack" }, color: "amber", value: "{list.count}", sub: "saved", tip: ["{list.count} saved"] },
+      { each: "list.items", max: 3, when: "list.items", draw: { type: "area", value: "it.line" }, colorFrom: "it.color", label: "{it.name}" },
+    ] } };
+    assert.deepEqual(checkManifest(m, PROVIDERS), []);
+    const bad = { ...SNIPPET, layout: { cards, pills: [
+      { draw: { type: "script", value: "x" } },
+      { draw: { type: "area" }, color: "pink", onClick: "x" },
+      { draw: { type: "icon", icon: "rocket" }, max: 9 },
+      { when: "list.count" },
+    ] } };
+    const errors = checkManifest(bad, PROVIDERS).join("\n");
+    for (const want of [/pills\[0\].draw.type: one of/, /pills\[1\].draw.value: a path/, /pills\[1\].color: one of/, /pills\[1\].onClick: not a field of a pill/, /pills\[2\].draw.icon: one of/, /pills\[2\].max: 1-6/, /pills\[3\]: shows nothing/]) assert.match(errors, want);
+  });
+
   it("holds buttons, a row's action and keys to actions the provider has", () => {
     const ok = { ...SNIPPET, layout: { cards: [{ title: "X", body: [{ type: "buttons", buttons: [{ label: "✕", action: "delete", args: { name: "x" } }] }, { type: "list", items: "list.items", title: "name", act: { label: "▶", action: "rename", field: "id" } }] }], keys: { d: "delete" } } };
     assert.deepEqual(checkManifest(ok, PROVIDERS), []);

@@ -92,6 +92,8 @@ async function city(name, units, ctx) {
     wind: `${round(c.wind_speed_10m)} ${imperial ? "mph" : "km/h"}`,
     aqi,
     aqiText: aqi == null ? "" : `AQI ${aqi}`,
+    aqiTone: aqi == null ? null : aqi <= 50 ? "leaf" : aqi <= 100 ? "amber" : "red",
+    rainNext: rainHours.slice(0, 8),
     rainLine: rainHours.length ? `☂ ${spark(rainHours)}  ${peak ? `peak ${peak}% at ${peakTime}` : "no rain"}` : "",
     days,
   };

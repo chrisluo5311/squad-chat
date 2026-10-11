@@ -22836,7 +22836,7 @@ import { cpus, loadavg, homedir } from "node:os";
 
 // src/rooms/manifest.mjs
 var SCHEMA = 1;
-var COLORS = ["sky", "leaf", "lilac", "amber", "coral", "rose", "teal", "sand"];
+var COLORS = ["sky", "leaf", "lilac", "amber", "coral", "rose", "teal", "sand", "red"];
 var RESERVED = /* @__PURE__ */ new Set(["chat", "usage", "git", "agents", "all", "none"]);
 var ID2 = /^[a-z][a-z0-9-]{1,23}$/;
 var PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
@@ -22852,6 +22852,35 @@ var WIDGETS = {
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" }
 };
+var DRAWS = ["area", "bars", "orbit", "drop", "battery", "thermometer", "equalizer", "progress", "weather", "icon", "dot"];
+var PILL_ICONS = ["branch", "pr", "stack", "flame", "chip", "net", "spark", "clock"];
+var NEEDS_VALUE = /* @__PURE__ */ new Set(["area", "bars", "orbit", "drop", "battery", "thermometer", "progress", "weather"]);
+var PILL_TEXT = ["label", "value", "sub", "msg", "tag"];
+function checkPills(pills, errors) {
+  if (pills == null) return;
+  if (!Array.isArray(pills) || !pills.length || pills.length > 6) return errors.push("layout.pills: 1-6 pills");
+  pills.forEach((p, i) => {
+    const where = `layout.pills[${i}]`;
+    if (!p || typeof p !== "object") return errors.push(`${where}: not an object`);
+    for (const k of ["when", "each", "colorFrom"]) if (p[k] != null && !(typeof p[k] === "string" && PATH.test(p[k]))) errors.push(`${where}.${k}: not a path`);
+    if (p.max != null && !(Number.isInteger(p.max) && p.max > 0 && p.max <= 6)) errors.push(`${where}.max: 1-6`);
+    if (p.color != null && !COLORS.includes(p.color)) errors.push(`${where}.color: one of ${COLORS.join(", ")}`);
+    for (const k of PILL_TEXT) if (p[k] != null && !str(p[k], 200)) errors.push(`${where}.${k}: 1-200 characters`);
+    if (p.tip != null && !(Array.isArray(p.tip) && p.tip.length && p.tip.length <= 6 && p.tip.every((t) => str(t, 200)))) errors.push(`${where}.tip: 1-6 lines of 1-200 characters`);
+    const d = p.draw;
+    if (d != null) {
+      if (!DRAWS.includes(d?.type)) errors.push(`${where}.draw.type: one of ${DRAWS.join(", ")}`);
+      else {
+        if (NEEDS_VALUE.has(d.type) && !(typeof d.value === "string" && PATH.test(d.value))) errors.push(`${where}.draw.value: a path`);
+        if (d.flag != null && !(typeof d.flag === "string" && PATH.test(d.flag))) errors.push(`${where}.draw.flag: not a path`);
+        if (d.type === "icon" && !PILL_ICONS.includes(d.icon)) errors.push(`${where}.draw.icon: one of ${PILL_ICONS.join(", ")}`);
+      }
+      for (const k of Object.keys(d ?? {})) if (!["type", "value", "flag", "icon"].includes(k)) errors.push(`${where}.draw.${k}: not a field of a drawing`);
+    }
+    if (!PILL_TEXT.some((k) => p[k] != null) && d == null) errors.push(`${where}: shows nothing (a drawing or some text)`);
+    for (const k of Object.keys(p)) if (![...PILL_TEXT, "when", "each", "max", "color", "colorFrom", "tip", "draw"].includes(k)) errors.push(`${where}.${k}: not a field of a pill`);
+  });
+}
 var SETTING_TYPES = ["list", "enum", "string", "bool", "int"];
 var SETTING_KEY = /^[a-z][a-z0-9_]{0,19}$/;
 function checkSettings(settings, hosts, errors) {
@@ -23107,6 +23136,7 @@ function checkManifest(m, providers) {
     });
     if (l.inline != null) checkBody(l.inline, "layout.inline", errors, actionsUsed);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
+    checkPills(l.pills, errors);
     if (l.keys != null) {
       const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;
       if (!keys || keys.length > 10) errors.push("layout.keys: up to 10 keys");
@@ -23347,7 +23377,8 @@ var local_list_default = {
   hosts: [],
   async fetch(params, ctx) {
     const items = load(ctx.dataDir).sort(byName);
-    return { items, count: items.length };
+    const latest = items.reduce((a, x) => !a || String(x.at ?? "") > String(a.at ?? "") ? x : a, null);
+    return { items, count: items.length, latest: latest ? { name: latest.name, lang: latest.lang ?? "", at: latest.at ?? "" } : null };
   },
   actions: {
     add: (params, args, ctx) => locked2(ctx.dataDir, () => {
@@ -23462,6 +23493,8 @@ async function city(name, units, ctx) {
     wind: `${round(c.wind_speed_10m)} ${imperial ? "mph" : "km/h"}`,
     aqi,
     aqiText: aqi == null ? "" : `AQI ${aqi}`,
+    aqiTone: aqi == null ? null : aqi <= 50 ? "leaf" : aqi <= 100 ? "amber" : "red",
+    rainNext: rainHours.slice(0, 8),
     rainLine: rainHours.length ? `\u2602 ${spark(rainHours)}  ${peak ? `peak ${peak}% at ${peakTime}` : "no rain"}` : "",
     days
   };
@@ -23533,6 +23566,9 @@ var hn_default = {
         title: s.title,
         url,
         source: host(s.url) ?? "HN",
+        score: s.score ?? 0,
+        comments: s.descendants ?? 0,
+        age: ago(s.time, now),
         meta: `\u25B2 ${s.score ?? 0} \xB7 ${s.descendants ?? 0} comments \xB7 ${ago(s.time, now)}`,
         share: `${s.title}
 ${url}${url === discuss ? "" : `
@@ -23630,6 +23666,9 @@ var watts = (w) => Number.isFinite(w) ? `${w.toFixed(w >= 10 ? 0 : 1)} W` : "";
 var celsius = (c) => Number.isFinite(c) ? `${Math.round(c)}\xB0C` : "";
 function spark2(values, max = Math.max(...values, 0)) {
   return values.map((v) => max > 0 && v > 0 ? SPARKS2[Math.min(7, Math.max(0, Math.round(v / max * 7)))] : SPARKS2[0]).join("");
+}
+function tone(v, warn, alarm, calm = "teal") {
+  return v >= alarm ? "red" : v >= warn ? "amber" : calm;
 }
 function push(list, v) {
   list.push(Number.isFinite(v) ? v : 0);
@@ -23852,6 +23891,10 @@ var sysinfo_default = {
     return {
       cpu: {
         pct: cpuPct,
+        hist: [...s.hist.cpu],
+        tone: tone(cpuPct, 70, 90),
+        temp: Number.isFinite(sen?.cpuTemp) ? Math.round(sen.cpuTemp) : null,
+        tempTone: Number.isFinite(sen?.cpuTemp) ? tone(sen.cpuTemp, 80, 90) : null,
         cores: t.cores,
         load: load2.length ? `load ${load2[0].toFixed(2)}` : "",
         spark: spark2(s.hist.cpu, 100),
@@ -23861,6 +23904,7 @@ var sysinfo_default = {
       },
       mem: m ? {
         pct: memPct,
+        tone: tone(memPct, 80, 90),
         usedText: `${bytes(m.used)} / ${bytes(m.total, 0)}`,
         swapPct: m.swapTotal > 0 ? pctOf(m.swapUsed, m.swapTotal) : 0,
         swapText: m.swapTotal > 0 ? `${bytes(m.swapUsed)} / ${bytes(m.swapTotal, 0)}` : "no swap",
@@ -23872,7 +23916,7 @@ var sysinfo_default = {
       fans: (sen?.fans ?? []).length ? sen.fans.map((r, i) => `fan ${i + 1} ${Math.round(r)} rpm`).join(" \xB7 ") : "",
       net: { ...net, rxSpark: spark2(s.hist.rx, netMax), txSpark: spark2(s.hist.tx, netMax) },
       disk: d ? { pct: pctOf(d.used, d.total), usedText: `${bytes(d.used, 0)} / ${bytes(d.total, 0)}`, freeText: `${bytes(d.free, 0)} free` } : null,
-      battery: b ? { pct: b.pct, state: b.state, detail: [b.state, b.timeText, b.power].filter(Boolean).join(" \xB7 ") } : null,
+      battery: b ? { pct: b.pct, state: b.state, charging: b.state !== "on battery", tone: b.state === "on battery" ? tone(100 - b.pct, 80, 90, "leaf") : "leaf", detail: [b.state, b.timeText, b.power].filter(Boolean).join(" \xB7 ") } : null,
       sensorHint: os.sensorHint,
       // 🌡 and ⚡ carry the emoji selector (U+FE0F): without it the terminal
       // gives 🌡 one cell, draws it in two, and it covers the space after it.
@@ -23896,6 +23940,12 @@ function classify(entry) {
   if (m) return { symbol: m[1].toUpperCase(), tw: m[1].toUpperCase(), market: m[2]?.toUpperCase() === "TWO" ? "otc" : m[2] ? "tse" : null, yahoo: `${m[1].toUpperCase()}.${m[2]?.toUpperCase() === "TWO" ? "TWO" : "TW"}` };
   if (!SYMBOL.test(s)) return null;
   return { symbol: s.toUpperCase(), yahoo: s.toUpperCase() };
+}
+function thin(values) {
+  const v = values.filter(Number.isFinite);
+  if (v.length < 2) return [];
+  const step2 = Math.max(1, Math.ceil(v.length / 24));
+  return v.filter((_, i) => i % step2 === 0 || i === v.length - 1);
 }
 function spark3(values) {
   const v = values.filter(Number.isFinite);
@@ -24013,6 +24063,7 @@ var quotes_default = {
         arrow: dir > 0 ? "\u25B2" : dir < 0 ? "\u25BC" : "\u2013",
         color: dir > 0 ? upColor : dir < 0 ? downColor : "sand",
         spark: spark3(y?.line ?? []),
+        line: thin(y?.line ?? []),
         volText: volume(t ? t.volume : y.volume, isTw),
         market: isTw ? "TW" : "",
         open,
@@ -24037,6 +24088,8 @@ var quotes_default = {
       markets,
       anyOpen,
       opensAt,
+      statusText: anyOpen ? "open" : opensAt ? `closed \xB7 opens ${new Date(opensAt).toTimeString().slice(0, 5)}` : "closed",
+      statusTone: anyOpen ? "leaf" : "sand",
       updated: new Date(now).toTimeString().slice(0, 5),
       band: quotes.filter((q) => q.price != null).slice(0, 4).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(" \xB7 ") || "no quotes",
       note: "Prices may be delayed. Not investment advice.",
@@ -24364,6 +24417,7 @@ var player_default = {
     const conflict = now.state === "playing" && await pixelPlaying(ctx) ? "Pixel Play is playing too." : "";
     return {
       available: !!t.mpv,
+      playing: now.state === "playing",
       ytdlp: !!t.ytdlp,
       now,
       entries: list.map((e) => ({ id: e.id, name: e.name, tag: TAG[e.kind] + (e.kind !== "file" && e.kind !== "stream" && !t.ytdlp ? " (needs yt-dlp)" : ""), on: mine(ctx) && e.id === mpv.entryId && now.state !== "stopped" ? "\u266B" : "" })),

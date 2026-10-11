@@ -36,6 +36,7 @@ export const palette = {
   rose: "#E58FA8",
   teal: "#6FC2B5",
   sand: "#D9A877",
+  red: "#E06C75",
 };
 
 // Green, amber or red for how full something is (a percent, 0-100).

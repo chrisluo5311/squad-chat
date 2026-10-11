@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "news",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Tech News",
   "icon": "✦",
   "color": "lilac",
@@ -36,6 +36,11 @@
       }
     ],
     "inline": { "type": "list", "items": "hn.items", "title": "title", "copy": "url", "share": "share", "max": 4, "empty": "Hacker News is off: /set hn top" },
+    "pills": [
+      {"when": "hn.items.0", "draw": {"type": "icon", "icon": "flame"}, "color": "coral", "value": "{hn.items.0.score}", "tip": ["▲ {hn.items.0.score} on Hacker News ({hn.list})"]},
+      {"when": "hn.items.0", "color": "lilac", "msg": "{hn.items.0.title}", "tip": ["{hn.items.0.title}", "{hn.items.0.source}"]},
+      {"when": "hn.items.0", "color": "sand", "sub": "{hn.items.0.comments} comments · {hn.items.0.age}"}
+    ],
     "band": "▲ {hn.items.0.title}",
     "hint": "⧉ copies the link · ⇪ shares it · r refreshes",
     "placeholder": "/set hn best · /set feeds +https://… · r · /help"

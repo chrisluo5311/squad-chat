@@ -13,8 +13,11 @@ import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText,
 import { theme, nameColor, glyph } from "./theme.mjs";
 import { snippetTitle, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
-import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge } from "./sysviews.mjs";
-import { fnHint, fnPlaceholder } from "./fnviews.mjs";
+import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge, sysBandDesktop } from "./sysviews.mjs";
+import { fnHint, fnPlaceholder, fnBandDesktop, fnMeta } from "./fnviews.mjs";
+import * as K from "./bandkit.mjs";
+import { capsule, draw, value as pValue, sub as pSub, msg as pMsg, chip as pChip } from "./bands.mjs";
+import { usageBandDesktop } from "./usageband.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
 
@@ -613,11 +616,58 @@ function inlineView(els, props, handlers) {
 
 // ---------------------------------------------------------------- the band
 
+// The chat room on the desktop: faces of who's online, what's new, and the
+// latest message (or who's typing).
+function chatBandDesktop(els, { onOpen }) {
+  const room = currentRoom();
+  const others = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id);
+  const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
+  const unreadHere = room.unread ?? 0;
+  const unreadElsewhere = totalUnread() - unreadHere;
+  const sections = [];
+  if (!live) sections.push({ key: "live", color: theme.warn, parts: [pValue("○ reconnecting", theme.warn)] });
+  else {
+    const faces = others.map((u) => ({ initial: String(u.name ?? "?").trim().charAt(0).toUpperCase() || "?", color: nameColor(u.user_id) }));
+    sections.push({ key: "online", color: theme.online, parts: [
+      faces.length ? draw(K.faces(faces), `${faces.length} online`) : null,
+      pValue(String(others.length)),
+      pSub("online"),
+    ], tip: others.length ? [`${others.length} online in #${room.slug}`, ...others.slice(0, 6).map((u) => u.name)] : [`Nobody else in #${room.slug} right now`] });
+  }
+  if (isQuiet()) {
+    const n = unreadHere + unreadElsewhere;
+    sections.push({ key: "quiet", color: theme.muted, parts: [pSub(`${glyph.quiet} ${n ? `${n} new · ` : ""}do not disturb`)] });
+  } else {
+    if (unreadHere || unreadElsewhere) {
+      sections.push({ key: "new", color: theme.accent, parts: [
+        unreadHere ? pChip(`${unreadHere} new`, theme.accent, theme.onAccent) : null,
+        unreadElsewhere ? pSub(`+${unreadElsewhere} elsewhere`) : null,
+      ] });
+    }
+    const typing = typingText(room.id);
+    const last = lastMessage();
+    if (typing) sections.push({ key: "msg", color: theme.muted, grow: true, parts: [draw(K.typing(theme.muted), typing), pMsg(typing, { dim: true })] });
+    else if (last) {
+      const who = last.mine ? theme.you : nameColor(last.user_id);
+      sections.push({ key: "msg", color: who, grow: true, parts: [pValue(displayName(last), who), pMsg(oneLine(last))] });
+    }
+  }
+  return capsule(els, { room: `${glyph.brand} #${room.slug}`, color: theme.accent, sections, onOpen });
+}
+
 // One line above the prompt while the pane can't be seen (terminal too
 // narrow, or the pane closed): room, who's online, unread, the latest message.
+// The desktop draws it as a capsule of small drawings (bands.mjs).
 export function bandView(els, props, { onOpen }) {
   const { Box, Text, Button } = els;
   const view = activeView();
+  if (props.surface === "desktop" && els.Svg) {
+    const desk = view === "chat" ? chatBandDesktop(els, { onOpen })
+      : view === "usage" ? usageBandDesktop(els, props, { onOpen })
+        : fnMeta(view) ? fnBandDesktop(view, els, { onOpen })
+          : sysBandDesktop(view, els, { onOpen });
+    if (desk) return desk;
+  }
   if (view !== "chat") {
     const meta = roomMeta(view);
     return Box({ flexDirection: "row", children: [

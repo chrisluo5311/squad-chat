@@ -227,6 +227,51 @@ test('band: stays out of the way while the pane is shown', SLOW, async ($, on) =
   await ui.unmount()
 })
 
+test('band: on the desktop, Usage is a capsule of drawings with a card per figure', SLOW, async ($, on) => {
+  recordUi(on)
+  on('session.id', () => ({ value: 'sess-band' }))
+  on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
+  on('turn.complete', () => ({ text: '', usage: { input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' } }))
+  const store: Record<string, unknown> = { view: 'usage' }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const resetsAt = new Date(Date.now() + 2.5 * 3_600_000).toISOString()   // half the 5-hour window gone
+  const measure = (tokens: number) => $.session.measure({ context: { tokens, window: 200_000, percent: (tokens / 200_000) * 100 }, rateLimits: [{ kind: 'five_hour', percentUsed: 70, resetsAt }], cost: { usd: 4.21 }, changed: ['context', 'rateLimits', 'cost'] })
+  await measure(71_700)
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  await settle()
+  await measure(77_000)
+  await $.turn.complete({ turnId: 't2', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  await settle()
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◔ Usage' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '77k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '▲ +5k' })).toBeDefined()           // what the last prompt added
+  const alts = (await ui.findAll({ type: 'Svg' })).map((x: any) => x.props.alt)
+  expect(alts.some((a: string) => a.startsWith('☁ Cloudy'))).toBe(true)          // the weather, drawn
+  expect(alts).toContain('Tokens added by the last 1 prompts')                   // a bar per prompt
+  expect(await ui.find({ type: 'Text', text: '70%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '$4.21' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '90%' })).toBeDefined()              // the cache cells
+  expect(await ui.find({ type: 'Text', text: /20 pts ahead of the clock/ })).toBeDefined()   // in the 5h card
+  await ui.press({ key: 'open' })
+  await ui.unmount()
+
+  // Kept for a reload: the tokens (so the cache figure) and the chart.
+  const kept = store['usage:sess-band'] as any
+  expect(kept.tokens.cacheRead).toBe(18_000)
+  expect(kept.ctxHistory).toEqual([71_700, 77_000])
+
+  // The terminal keeps its line of text.
+  const term = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await term.find({ type: 'Svg' })).toBeUndefined()
+  expect(await term.find({ type: 'Text', text: /Cloudy/ })).toBeDefined()
+  await term.unmount()
+})
+
 test('unread shows on the status line and clears when the pane is focused', SLOW, async ($, on) => {
   const seen = recordUi(on)
   const bridge = fakeBridge(on)
@@ -1786,4 +1831,83 @@ test('/chat update lists what is due, asks first when hosts change; /chat uninst
   expect(bridge.calls.at(-1)).toEqual({ path: '/store/uninstall', body: { id: 'us-tech' } })
   expect(logs.at(-1)).toBe('Uninstalled US Tech Stocks.')
   expect(store.sysRooms).toEqual(['usage'])
+})
+
+// ---------------------------------------------------------------- desktop bands
+
+const svgAlts = async (ui: any) => (await ui.findAll({ type: 'Svg' })).map((x: any) => x.props.alt as string)
+
+test('desktop band: the chat room as a capsule, with faces, what is new and the latest message', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(news(1, msg(1, 'bob', 'are you around?')))
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◆ #lobby' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' 1 new ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'are you around?' })).toBeDefined()
+  expect((await svgAlts(ui)).some((a) => /online/.test(a))).toBe(true)   // the faces
+  await ui.press({ key: 'open' })
+  await ui.unmount()
+})
+
+test('desktop band: Git with the branch, changes and the PR checks as a ring', SLOW, async ($, on) => {
+  recordUi(on)
+  on('session.cwd', () => ({ value: '/work/app' }))
+  const bridge = fakeBridge(on, { gh: fakeGh(() => branchPr([check('SUCCESS'), check('FAILURE')])), store: { view: 'git' } })
+  await bridge.start($)
+  signedIn(bridge)
+  await $.command.run({ command: 'chat', args: 'git' })
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '⎇ Git' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'feature' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '1 failing' })).toBeDefined()
+  expect((await svgAlts(ui)).some((a) => a.startsWith('checks: 1 passed'))).toBe(true)
+  await ui.unmount()
+})
+
+test('desktop band: Agents with a dot per session', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'agents' } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '⟡ Agents' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'session' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'no agents running' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('desktop band: a function room draws its pills, and one without any shows its band line', SLOW, async ($, on) => {
+  recordUi(on)
+  const pills = [
+    { draw: { type: 'icon', icon: 'stack' }, color: 'amber', value: '{list.count}', sub: 'saved' },
+    { when: 'list.latest', color: 'amber', value: '{list.latest.name}', tag: '{list.latest.lang}', tip: ['Latest saved: {list.latest.name}'] },
+    { each: 'list.items', max: 1, draw: { type: 'area', value: 'list.spark' }, color: 'red', label: '{it.name}' },
+  ]
+  const withPills = { ...SNIPPET_ROOM, layout: { ...SNIPPET_ROOM.layout, pills } }
+  const bridge = fakeBridge(on, { store: { view: 'snippet' } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'fnrooms', rooms: [withPills], invalid: [] },
+    { type: 'fnroom', id: 'snippet', provider: 'list', data: { items: SNIPS, count: 2, latest: { name: 'jq tidy', lang: '' }, spark: [1, 3, 2] }, at: Date.now() })
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '⌘ Snippets' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'jq tidy' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '[' })).toBeUndefined()            // an empty tag takes no room
+  expect(await ui.find({ type: 'Text', text: 'curl json' })).toBeDefined()      // `each`: the first item's pill
+  expect((await ui.findAll({ type: 'Svg' })).length).toBe(2)                    // the stack and the line
+  await ui.unmount()
+
+  bridge.emit({ type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] })
+  await settle()
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '2 snippets' })).toBeDefined()     // no pills: the band line
+  await ui.unmount()
 })

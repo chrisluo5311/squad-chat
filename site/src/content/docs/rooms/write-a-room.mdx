@@ -3,6 +3,8 @@ title: Write a room
 description: A room is one JSON file. How to write one, try it, and put it in the store.
 ---
 
+import BandGallery from "../../../components/BandGallery.astro";
+
 A room is one file, `room.json`: what it's called, which of squad-chat's providers feed it, the hosts they may reach, its settings, and how its cards look. There's no code in it, and there can't be. That's what lets anyone install a room without trusting whoever wrote it. If what you want needs a provider squad-chat doesn't have, open an issue or a pull request for the provider itself.
 
 ## A first room
@@ -48,12 +50,12 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | `id` | 2-24 lowercase letters, digits or `-`, starting with a letter. Not one squad-chat ships. |
 | `version` | Like `1.0.0`. Raise it with each change, so `/chat update` offers it. |
 | `minSquadChat` | The oldest squad-chat it works with: `0.15.0` or newer, the first with the store. |
-| `name`, `icon`, `color` | Up to 20 characters, one character, and one of `sky`, `leaf`, `lilac`, `amber`, `coral`, `rose`, `teal`, `sand`. |
+| `name`, `icon`, `color` | Up to 20 characters, one character, and one of `sky`, `leaf`, `lilac`, `amber`, `coral`, `rose`, `teal`, `sand`, `red`. |
 | `description`, `author` | What it is, in up to 200 characters, and who wrote it. |
 | `permissions.hosts` | Every host its providers may reach, up to 10. A provider can't reach anything else, and installing shows this list. |
 | `settings` | Up to 8 settings, changed with `/chat set <room> <setting> <value>`: `list` (`"item": "url"` for links, which must stay on the room's hosts, `"add": true` to take what's typed as more of it, and `min` and `max` for how many it holds), `enum` (`values`), `string`, `bool` or `int` (`min`, `max`), each with a `default`. |
 | `providers` | Up to 4: an `id` (used in the layout's paths), a `type`, `params` (a setting as `"$settings.<key>"`), and an `interval` (`visible` while the room is on show, `background` otherwise, at least `1s`). |
-| `layout` | `cards` (1-6), and optionally `inline`, `band`, `snapshot`, `hint`, `placeholder` and `keys`. |
+| `layout` | `cards` (1-6), and optionally `inline`, `band`, `pills`, `snapshot`, `hint`, `placeholder` and `keys`. |
 
 ## Providers
 
@@ -61,12 +63,12 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | --- | --- | --- |
 | `http-json` | `url`, `vars`, `rows`, `fields`, `values` (see [Any JSON API](#any-json-api)) | `rows[]` with each field formatted, the `values`, `count`, `updated` |
 | `rss` | `feeds`: feed URLs on the room's hosts | `items[]` (`title`, `url`, `source`, `meta`, `share`), `count`, `failed` |
-| `hn` | `list` (`top`, `best`, `new`, `off`), `count` | `items[]` as `rss`, `count`, `list` |
-| `open-meteo` | `cities` (each new one looked up first, and refused if there's no such place), `units` (`metric` or `imperial`) | `cities[]` (`name`, `place` (with the country code), `query` (as the setting has it), `icon`, `desc`, `tempText`, `range`, `rainText`, `aqiText`, `days[]`, …), `first`, `days[]`, `updated` |
-| `quotes` | `watchlist`, `colors` (`market`, `red-up`, `green-up`), `move` | `quotes[]` (`symbol`, `name`, `priceText`, `pctText`, `arrow`, `color`, `spark`, `volText`, `when`), `markets`, `band`, `note`, `updated` |
-| `local-list` | `max` | `items[]` (`id`, `name`, `lang`, `body`), `count` |
-| `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu`, `mem`, `gpu`, `net`, `disk`, `battery`, `band`, … (see the Monitor room's manifest) |
-| `player` | `stations` (https, on the room's hosts), `volume` | `now`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
+| `hn` | `list` (`top`, `best`, `new`, `off`), `count` | `items[]` as `rss` with `score`, `comments` and `age`, `count`, `list` |
+| `open-meteo` | `cities` (each new one looked up first, and refused if there's no such place), `units` (`metric` or `imperial`) | `cities[]` (`name`, `place` (with the country code), `query` (as the setting has it), `icon`, `desc`, `tempText`, `range`, `rain`, `rainText`, `rainNext` (the next 8 hours' chances), `aqi`, `aqiText`, `aqiTone`, `days[]`, …), `first`, `days[]`, `updated` |
+| `quotes` | `watchlist`, `colors` (`market`, `red-up`, `green-up`), `move` | `quotes[]` (`symbol`, `name`, `priceText`, `pctText`, `arrow`, `color`, `spark`, `line` (the day's prices), `volText`, `when`), `markets`, `statusText`, `statusTone`, `band`, `note`, `updated` |
+| `local-list` | `max` | `items[]` (`id`, `name`, `lang`, `body`), `count`, `latest` (`name`, `lang`) |
+| `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu` (with `hist`, `tone`, `temp`), `mem` (with `tone`), `gpu`, `net`, `disk`, `battery` (with `charging`, `tone`), `band`, … (see the Monitor room's manifest) |
+| `player` | `stations` (https, on the room's hosts), `volume` | `now`, `playing`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
 
 Each provider can reach only the hosts it knows about, and only where the manifest names them too. `rss` and `http-json` read whatever they're pointed at, so for them the manifest's list alone decides. The rooms squad-chat ships, in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms), are full examples of each.
 
@@ -119,6 +121,29 @@ A card has a `title`, an optional `meta` and `when` (show the card only while th
 A table column is `width` cells wide (12 if unset). The one marked `grow` takes the space left, or else the last column when it has no `width`.
 
 Paths are plain dots into the providers' data, starting with the provider's `id`: `feeds.items`, `wx.first.name`. Templates put paths in braces: `"{feeds.count} posts"`. `keys` maps single keys typed in the room to actions: `{ "p": "pause" }`.
+
+## The band on the desktop
+
+In the terminal the band is the `band` line. In the desktop app it can be a row of pills, each a small drawing with a few words and a card on hover. Here is every room's band as the app draws it (the figures are made up, hover a pill to light it):
+
+<BandGallery />
+
+`pills` lists up to 6:
+
+```json
+"pills": [
+  { "draw": { "type": "icon", "icon": "chip" }, "colorFrom": "sys.cpu.tone", "value": "{sys.cpu.pct}%", "tip": ["CPU {sys.cpu.pct}%", "{sys.cpu.meta}"] },
+  { "each": "q.quotes", "max": 4, "draw": { "type": "area", "value": "it.line" }, "colorFrom": "it.color", "label": "{it.symbol}", "value": "{it.arrow}{it.pctText}" }
+]
+```
+
+* **Words**: `label` (dim, before the value), `value` (bold), `msg` (a long text that gives way when the band is narrow), `tag` and `sub` (dim, after). Each is a template, and one whose holes all came out empty is left out.
+* **`draw`**: one of the drawings squad-chat ships, and where its number comes from (`value`, a path). `area` and `bars` take a list of numbers, `orbit`, `drop` and `progress` a percent, `battery` a percent with `flag` for charging, `thermometer` degrees Celsius, `weather` an icon from `open-meteo`, `equalizer` a `flag` for playing, `icon` one of `branch`, `pr`, `stack`, `flame`, `chip`, `net`, `spark` or `clock`, and `dot` nothing.
+* **Color**: `color`, or `colorFrom`, a path to one of the color names the data picks (the providers give tones for this, such as `sys.cpu.tone`). A value takes the pill's color when that is `amber`, `red`, `rose` or `leaf`.
+* **`when`** shows the pill only while that path has data. **`each`** repeats it for the first `max` items of a list (up to 6), which its paths reach as `it`.
+* **`tip`**: up to 6 lines for the card on hover, the first one in the pill's color.
+
+A room without `pills` shows its `band` line in the desktop's capsule too.
 
 ## Put it in the store
 
