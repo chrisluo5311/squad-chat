@@ -22,16 +22,6 @@ function sky(code, isDay = 1) {
   return ["·", "—"];
 }
 
-function aqiWord(aqi) {
-  if (aqi == null) return "";
-  if (aqi <= 50) return "good";
-  if (aqi <= 100) return "moderate";
-  if (aqi <= 150) return "unhealthy for some";
-  if (aqi <= 200) return "unhealthy";
-  if (aqi <= 300) return "very unhealthy";
-  return "hazardous";
-}
-
 // Chances of rain, 0-100, as blocks: a full block is a sure thing, so a
 // 2% day stays flat.
 function spark(values) {
@@ -99,7 +89,7 @@ async function city(name, units, ctx) {
     humidity: `${round(c.relative_humidity_2m)}%`,
     wind: `${round(c.wind_speed_10m)} ${imperial ? "mph" : "km/h"}`,
     aqi,
-    aqiText: aqi == null ? "" : `AQI ${aqi} ${aqiWord(aqi)}`,
+    aqiText: aqi == null ? "" : `AQI ${aqi}`,
     rainLine: rainHours.length ? `☂ ${spark(rainHours)}  ${peak ? `peak ${peak}% at ${peakTime}` : "no rain"}` : "",
     days,
   };
@@ -108,12 +98,29 @@ async function city(name, units, ctx) {
 export default {
   type: "open-meteo",
   hosts: ["api.open-meteo.com", "geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"],
+  // Cities as they're added: each by the name the place search gives it,
+  // and none that it can't find. A search that fails lets them through.
+  check: {
+    async cities(names, ctx) {
+      const out = [];
+      const missing = [];
+      for (const n of names) {
+        try { out.push((await place(n, ctx)).name); } catch (err) {
+          if (err?.status === 404) missing.push(n);
+          else out.push(n);
+        }
+      }
+      if (missing.length) throw new RoomError(400, `No place called ${missing.join(" or ")}. Check the spelling, or try it in English.`);
+      return out;
+    },
+  },
   async fetch(params, ctx) {
     const names = (Array.isArray(params.cities) ? params.cities : []).slice(0, MAX_CITIES);
     if (!names.length) return { cities: [], first: null, days: [] };
     const settled = await Promise.allSettled(names.map((n) => city(n, params.units, ctx)));
-    const cities = settled.map((r, i) => (r.status === "fulfilled" ? r.value
-      : { name: names[i], icon: "?", tempText: "–", range: "", rainText: "", aqiText: r.reason?.message ?? "failed", days: [] }));
+    // `query` is the city as the setting has it, for the row's ✕.
+    const cities = settled.map((r, i) => (r.status === "fulfilled" ? { ...r.value, query: names[i] }
+      : { name: names[i], query: names[i], icon: "?", tempText: "–", range: "", rainText: "", aqiText: r.reason?.message ?? "failed", days: [] }));
     if (settled.every((r) => r.status === "rejected")) throw settled[0].reason;
     const first = cities.find((c) => c.days?.length) ?? cities[0];
     return { cities, first, days: first.days ?? [], updated: new Date().toTimeString().slice(0, 5) };

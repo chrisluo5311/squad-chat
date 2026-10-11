@@ -51,7 +51,7 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | `name`, `icon`, `color` | Up to 20 characters, one character, and one of `sky`, `leaf`, `lilac`, `amber`, `coral`, `rose`, `teal`, `sand`. |
 | `description`, `author` | What it is, in up to 200 characters, and who wrote it. |
 | `permissions.hosts` | Every host its providers may reach, up to 10. A provider can't reach anything else, and installing shows this list. |
-| `settings` | Up to 8 settings, changed with `/chat set <room> <setting> <value>`: `list` (`"item": "url"` for links, which must stay on the room's hosts), `enum` (`values`), `string`, `bool` or `int` (`min`, `max`), each with a `default`. |
+| `settings` | Up to 8 settings, changed with `/chat set <room> <setting> <value>`: `list` (`"item": "url"` for links, which must stay on the room's hosts, `"add": true` to take what's typed as more of it, and `min` and `max` for how many it holds), `enum` (`values`), `string`, `bool` or `int` (`min`, `max`), each with a `default`. |
 | `providers` | Up to 4: an `id` (used in the layout's paths), a `type`, `params` (a setting as `"$settings.<key>"`), and an `interval` (`visible` while the room is on show, `background` otherwise, at least `1s`). |
 | `layout` | `cards` (1-6), and optionally `inline`, `band`, `snapshot`, `hint`, `placeholder` and `keys`. |
 
@@ -110,11 +110,13 @@ A card has a `title`, an optional `meta` and `when` (show the card only while th
 | Widget | Fields |
 | --- | --- |
 | `list` | `items` (a path to a list), `title`, and optionally `mark` (a short field shown before the title, as Lo-fi's ♫), `tag`, `preview`, `copy` (⧉), `share` (⇪), `act` (a button on each row: `label`, `action`, `field`), `max`, `empty` |
-| `table` | `items`, `columns` (each a `field`, and optionally `label`, `width`, `right`, `color` or `colorFrom`), `max`, `empty` |
+| `table` | `items`, `columns` (each a `field`, and optionally `label`, `width`, `grow`, `right`, `color` or `colorFrom`), `drop` (a ✕ on each row that takes it out of a list setting: `setting`, `field`), `pick` (a row pressed is kept in a string `setting` by its `field`, and shown at the path `as`, as Weather's cities pick `wx.first`), `max`, `empty` |
 | `tiles` | `tiles`: up to 6, each a `value` and `sub` template |
 | `meter` | `label`, `value` (a path to a percent), `right`, `color` |
 | `text` | `text`, a template. A line whose holes all came out empty is left out. |
 | `buttons` | `buttons`: up to 8, each a `label` and one of its provider's `action`s |
+
+A table column is `width` cells wide (12 if unset). The one marked `grow` takes the space left, or else the last column when it has no `width`.
 
 Paths are plain dots into the providers' data, starting with the provider's `id`: `feeds.items`, `wx.first.name`. Templates put paths in braces: `"{feeds.count} posts"`. `keys` maps single keys typed in the room to actions: `{ "p": "pause" }`.
 

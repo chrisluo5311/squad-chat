@@ -223,6 +223,19 @@ async function roomAction($, room, { provider, action, args }) {
   }
 }
 
+// A room's setting changed from its cards: a row's ✕ ("-Tokyo") or a row
+// picked, as "/set <key> <value>" would.
+async function setRoomSetting($, room, key, value) {
+  try {
+    const r = await callBridge($, "/fnroom/settings", { room, key, value });
+    const fn = state.fn.get(room);
+    if (fn && r?.values) fn.settings = r.values;
+  } catch (err) {
+    state.notice = err?.message ?? String(err);
+  }
+  $.ui.invalidate("ui.render");
+}
+
 // A function room's ⇪: held for a look, like any snippet.
 function shareItemFromPane($, item) {
   const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
@@ -642,6 +655,7 @@ export function register(on, options) {
       onCopy: (text, surface) => { void copySnippet($, text, surface); },
       onShareItem: (item) => shareItemFromPane($, item),
       onAction: (room, act) => { void roomAction($, room, act); },
+      onSetSetting: (room, key, value) => { void setRoomSetting($, room, key, value); },
       onRefresh: () => { void refreshGit($); },
       onToggleBreakdown: () => toggleBreakdown($),
       onToggleSession: (id) => { if (!state.collapsed.delete(id)) state.collapsed.add(id); $.ui.invalidate("ui.render"); },

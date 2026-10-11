@@ -49,18 +49,21 @@ function runCommand(argv, { timeoutMs = 3_000, maxBytes = 4 * 1024 * 1024 } = {}
 }
 
 // "Taipei, Tokyo" for a list, "on" for a bool: what's typed, as the
-// setting's kind. A list also takes "+Osaka" or "-Tokyo" to add or drop.
+// setting's kind. A list also takes "+Osaka" or "-Tokyo" to add or drop,
+// and one with `add` adds what has no sign. One it holds already stays put.
 export function parseSetting(st, raw, current) {
   const text = String(raw ?? "").trim();
   switch (st.type) {
     case "list": {
       const parts = text.split(",").map((x) => x.trim()).filter(Boolean);
-      if (parts.length && parts.every((x) => /^[+-]/.test(x))) {
+      if (parts.length && (st.add || parts.every((x) => /^[+-]/.test(x)))) {
         let list = [...(current ?? [])];
         for (const x of parts) {
-          const v = x.slice(1).trim();
-          list = list.filter((y) => y.toLowerCase() !== v.toLowerCase());
-          if (x[0] === "+") list.push(v);
+          const signed = /^[+-]/.test(x);
+          const v = signed ? x.slice(1).trim() : x;
+          const same = (y) => y.toLowerCase() === v.toLowerCase();
+          if (signed && x[0] === "-") list = list.filter((y) => !same(y));
+          else if (v && !list.some(same)) list.push(v);
         }
         return list;
       }
@@ -300,13 +303,30 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       const settings = new Map(Object.entries(m.settings ?? {}));
       if (!settings.has(String(k))) throw new RoomError(404, `${m.name} has no setting ${k}${settings.size ? `. It has ${[...settings.keys()].join(", ")}` : ""}.`);
       const st = settings.get(String(k));
+      // What's added to a list goes past the providers that read it and can
+      // check it (Weather's cities: is there such a place?), outside the
+      // lock, since that may go online. A room without a tab stays offline.
+      const named = new Map();
+      if (st.type === "list" && enabled.has(id) && !/^default$/i.test(String(value ?? "").trim())) {
+        const before = settingsOf(id)[k] ?? [];
+        const added = parseSetting(st, value, before).filter((x) => !before.some((y) => y.toLowerCase() === x.toLowerCase()));
+        for (const p of added.length ? m.providers : []) {
+          const param = Object.entries(p.params ?? {}).find(([, v]) => v === `$settings.${k}`)?.[0];
+          const check = param ? providers[p.type].check?.[param] : null;
+          if (!check) continue;
+          const names = await check(added, ctxFor(m, p));
+          added.forEach((x, i) => named.set(x.toLowerCase(), names[i] ?? x));
+        }
+      }
       // Every session's bridge shares the file: read, change and write it
       // holding its lock, so two changes at once both land.
       await locked(join(dataDir, id), "settings", () => {
         const saved = savedSettings(id);
         if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
         else {
-          const v = parseSetting(st, value, settingsOf(id)[k]);
+          let v = parseSetting(st, value, settingsOf(id)[k]);
+          // Each as its check named it, once.
+          if (named.size) v = v.map((x) => named.get(x.toLowerCase()) ?? x).filter((x, i, all) => all.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
           const bad = settingError(st, v, hostsOf(m));
           if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
           // Only what differs from the default is kept, so a room's new
@@ -320,7 +340,10 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
         savedCache.delete(id);
       });
       emitSettings(id);
-      if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
+      // Only the providers that read this setting run again: a row picked
+      // changes what's shown, not what's fetched.
+      const reads = m.providers.filter((p) => JSON.stringify(p).includes(`"$settings.${k}"`));
+      if (enabled.has(id)) await Promise.all(reads.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };
     },
     // The rooms' folders read again (a room installed, updated or removed):

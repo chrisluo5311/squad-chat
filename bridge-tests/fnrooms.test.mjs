@@ -105,17 +105,20 @@ describe("function rooms in the bridge", () => {
 
   it("reports each room's settings, changes them as typed, and refuses what doesn't fit", async () => {
     const values = (id) => b.events.filter((e) => e.type === "fnsettings" && e.id === id).at(-1)?.values;
-    assert.deepEqual(values("weather"), { cities: ["Taipei"], units: "metric" });
+    assert.deepEqual(values("weather"), { cities: ["Taipei"], units: "metric", city: "Taipei" });
     assert.equal(values("snippet"), undefined);   // no settings, no event
 
     // Weather has no tab here, so nothing goes online: only the setting changes.
-    let r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "Taipei, Tokyo , New York" });
-    assert.deepEqual(r.values.cities, ["Taipei", "Tokyo", "New York"]);
-    r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "+Osaka, -tokyo" });
+    // Cities typed are added below the ones there, and one there already stays put.
+    let r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "Tokyo" });
+    assert.deepEqual(r.values.cities, ["Taipei", "Tokyo"]);
+    r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "taipei, Seoul , New York" });
+    assert.deepEqual(r.values.cities, ["Taipei", "Tokyo", "Seoul", "New York"]);
+    r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "+Osaka, -tokyo, -seoul" });
     assert.deepEqual(r.values.cities, ["Taipei", "New York", "Osaka"]);
     r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "units", value: "Imperial" });
     assert.equal(r.values.units, "imperial");
-    assert.deepEqual(values("weather"), { cities: ["Taipei", "New York", "Osaka"], units: "imperial" });
+    assert.deepEqual(values("weather"), { cities: ["Taipei", "New York", "Osaka"], units: "imperial", city: "Taipei" });
     const file = join(b.configDir, "room-data", "weather", "settings.json");
     assert.equal(statSync(file).mode & 0o777, 0o600);
     assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { cities: ["Taipei", "New York", "Osaka"], units: "imperial" });
@@ -126,14 +129,15 @@ describe("function rooms in the bridge", () => {
       assert.match(res.body.error, want[1]);
     };
     await bad({ room: "weather", key: "units", value: "kelvin" }, [400, /Units: one of metric, imperial/]);
-    await bad({ room: "weather", key: "cities", value: "a,b,c,d,e,f,g" }, [400, /at most 6/]);
+    await bad({ room: "weather", key: "cities", value: "a,b,c,d" }, [400, /at most 6/]);
+    await bad({ room: "weather", key: "cities", value: "-Taipei, -New York, -Osaka" }, [400, /Cities: at least 1/]);
     await bad({ room: "weather", key: "colour", value: "x" }, [404, /no setting colour\. It has cities, units/]);
     await bad({ room: "news", key: "feeds", value: "+https://evil.example/rss" }, [400, /evil\.example isn't one of this room's hosts/]);
     await bad({ room: "news", key: "feeds", value: "+http://techcrunch.com/feed/" }, [400, /not https/]);
     await bad({ room: "snippet", key: "x", value: "y" }, [404, /Snippets has no setting x/]);
 
     r = await b.ok("POST", "/fnroom/settings", { room: "weather", key: "cities", value: "default" });
-    assert.deepEqual(r.values, { cities: ["Taipei"], units: "imperial" });
+    assert.deepEqual(r.values, { cities: ["Taipei"], units: "imperial", city: "Taipei" });
     // Setting a default by hand keeps nothing, so a later default still reaches you.
     await b.ok("POST", "/fnroom/settings", { room: "weather", key: "units", value: "metric" });
     assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {});
@@ -150,7 +154,7 @@ describe("function rooms in the bridge", () => {
         other.ok("POST", "/fnroom/settings", { room: "news", key: "feeds", value: "-https://techcrunch.com/feed/" }),
       ]);
       const read = (id) => JSON.parse(readFileSync(join(b.configDir, "room-data", id, "settings.json"), "utf8"));
-      assert.deepEqual(read("weather"), { cities: ["Kyoto"], units: "imperial" });
+      assert.deepEqual(read("weather"), { cities: ["Taipei", "Kyoto"], units: "imperial" });
       assert.equal(read("news").hn, "best");
       assert.equal(read("news").feeds.length, 3);
     } finally {
@@ -247,6 +251,16 @@ describe("manifests", () => {
     const bad = { ...SNIPPET, layout: { cards: [{ title: "X", body: [{ type: "buttons", buttons: [{ label: "go", action: "launch" }, { label: "way too long a label", action: "Bad Name" }] }, { type: "list", items: "list.items", title: "name", act: { label: "▶", action: "run", field: "id" } }] }], keys: { r: "delete", xx: "add", q: "fly" } } };
     const errors = checkManifest(bad, PROVIDERS).join("\n");
     for (const want of [/buttons\[0\]: local-list has no action launch/, /buttons\[1\].label: 1-8/, /buttons\[1\].action: an action's name/, /act: local-list has no action run/, /keys.r: one letter or digit, not r/, /keys.xx/, /keys.q: local-list has no action fly/]) assert.match(errors, want);
+  });
+
+  it("takes a table row's ✕ only for a list setting, a row picked only for a string one, and a list's add and min", () => {
+    const settings = { names: { type: "list", default: ["a"], add: true, min: 1 }, mode: { type: "enum", values: ["x"], default: "x" }, one: { type: "string", default: "a" } };
+    const table = (drop, pick) => ({ type: "table", items: "list.items", columns: [{ field: "name", grow: true }], drop, pick });
+    const ok = { ...SNIPPET, settings, layout: { cards: [{ title: "X", body: table({ setting: "names", field: "name" }, { setting: "one", field: "name", as: "list.first" }) }] } };
+    assert.deepEqual(checkManifest(ok, PROVIDERS), []);
+    const bad = { ...SNIPPET, settings: { ...settings, names: { type: "list", default: [], add: "yes", min: 9, max: 4 } }, layout: { cards: [{ title: "X", body: [table({ setting: "mode", field: "name" }), table({ setting: "nope", field: "a b" }, { setting: "names", field: "name", as: "a b" })] }] } };
+    const errors = checkManifest(bad, PROVIDERS).join("\n");
+    for (const want of [/settings.names.add: true or false/, /settings.names.min: 0 to its max/, /body\[0\].drop.setting: no list setting mode/, /body\[1\].drop.setting: no list setting nope/, /body\[1\].drop.field: not a path/, /body\[1\].pick.setting: no string setting names/, /body\[1\].pick.as: not a path/]) assert.match(errors, want);
   });
 
   it("holds the player's stations to the room's hosts", () => {

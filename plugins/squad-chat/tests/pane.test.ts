@@ -1308,13 +1308,13 @@ test('a function room shows what went wrong, and keeps its last data marked stal
 })
 
 // rooms/weather/room.json and rooms/news/room.json, as the bridge reports them.
-const WEATHER_ROOM = {"schema": 1, "id": "weather", "version": "1.0.0", "name": "Weather", "icon": "☀", "color": "sky", "description": "Now, the next 24 hours and the week, for the cities you pick. From Open-Meteo, no key needed.", "author": "squad-chat", "permissions": {"hosts": ["api.open-meteo.com", "geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"]}, "settings": {"cities": {"type": "list", "label": "Cities", "default": ["Taipei"], "max": 6}, "units": {"type": "enum", "label": "Units", "values": ["metric", "imperial"], "default": "metric"}}, "providers": [{"id": "wx", "type": "open-meteo", "params": {"cities": "$settings.cities", "units": "$settings.units"}, "interval": {"visible": "10m", "background": "30m"}}], "layout": {"cards": [{"title": "NOW", "meta": "updated {wx.updated}", "body": {"type": "table", "items": "wx.cities", "columns": [{"field": "icon", "width": 2, "color": "amber"}, {"field": "name", "width": 13}, {"field": "tempText", "width": 5, "right": true}, {"field": "range", "width": 12, "right": true}, {"field": "rainText", "width": 7, "right": true, "color": "sky"}, {"field": "aqiText"}], "empty": "No cities yet: /set cities Taipei, Tokyo"}}, {"title": "NEXT 24 HOURS", "meta": "{wx.first.name}", "body": {"type": "text", "text": "{wx.first.icon} {wx.first.desc}, {wx.first.feels} · humidity {wx.first.humidity} · wind {wx.first.wind}\n{wx.first.rainLine}"}}, {"title": "THIS WEEK", "meta": "{wx.first.name}", "body": {"type": "table", "items": "wx.days", "columns": [{"field": "day", "width": 6}, {"field": "icon", "width": 2, "color": "amber"}, {"field": "range", "width": 12, "right": true}, {"field": "rain", "right": true, "color": "sky"}]}}], "inline": {"type": "table", "items": "wx.cities", "columns": [{"field": "icon", "width": 2, "color": "amber"}, {"field": "name", "width": 13}, {"field": "tempText", "width": 5, "right": true}, {"field": "rainText", "width": 7, "right": true, "color": "sky"}, {"field": "desc"}], "max": 4, "empty": "No cities yet: /set cities Taipei"}, "band": "{wx.first.icon} {wx.first.name} {wx.first.tempText} · {wx.first.rainText}", "hint": "/set cities Taipei, Tokyo · /set units imperial · r refreshes", "placeholder": "/set cities +Osaka · /set units metric · r · /help"}}
+const WEATHER_ROOM = {"schema": 1, "id": "weather", "version": "1.0.0", "name": "Weather", "icon": "☀", "color": "sky", "description": "Now, the next 24 hours and the week, for the cities you pick. From Open-Meteo, no key needed.", "author": "squad-chat", "permissions": {"hosts": ["api.open-meteo.com", "geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"]}, "settings": {"cities": {"type": "list", "label": "Cities", "default": ["Taipei"], "add": true, "min": 1, "max": 6}, "units": {"type": "enum", "label": "Units", "values": ["metric", "imperial"], "default": "metric"}, "city": {"type": "string", "label": "Showing", "default": "Taipei"}}, "providers": [{"id": "wx", "type": "open-meteo", "params": {"cities": "$settings.cities", "units": "$settings.units"}, "interval": {"visible": "10m", "background": "30m"}}], "layout": {"cards": [{"title": "NOW", "meta": "updated {wx.updated}", "body": {"type": "table", "items": "wx.cities", "columns": [{"field": "icon", "width": 2, "color": "amber"}, {"field": "name", "grow": true}, {"field": "tempText", "width": 5, "right": true}, {"field": "aqiText", "width": 7, "right": true}], "drop": {"setting": "cities", "field": "query"}, "pick": {"setting": "city", "field": "query", "as": "wx.first"}, "empty": "No cities yet: /set cities Taipei, Tokyo"}}, {"title": "NEXT 24 HOURS", "meta": "{wx.first.name}", "body": {"type": "text", "text": "{wx.first.icon} {wx.first.desc}, {wx.first.feels} · humidity {wx.first.humidity} · wind {wx.first.wind}\n{wx.first.rainLine}"}}, {"title": "THIS WEEK", "meta": "{wx.first.name}", "body": {"type": "table", "items": "wx.first.days", "columns": [{"field": "day", "width": 6}, {"field": "icon", "width": 2, "color": "amber"}, {"field": "range", "width": 12, "right": true}, {"field": "rain", "right": true, "color": "sky"}]}}], "inline": {"type": "table", "items": "wx.cities", "columns": [{"field": "icon", "width": 2, "color": "amber"}, {"field": "name", "width": 13}, {"field": "tempText", "width": 5, "right": true}, {"field": "rainText", "width": 7, "right": true, "color": "sky"}, {"field": "desc"}], "max": 4, "empty": "No cities yet: /set cities Taipei"}, "band": "{wx.first.icon} {wx.first.name} {wx.first.tempText} · {wx.first.rainText}", "hint": "/set cities Taipei, Tokyo · /set units imperial · r refreshes", "placeholder": "/set cities +Osaka · /set units metric · r · /help"}}
 const NEWS_ROOM = {"schema": 1, "id": "news", "version": "1.0.0", "name": "Tech News", "icon": "✦", "color": "lilac", "description": "Hacker News and the tech feeds you pick, newest first, with links one click away.", "author": "squad-chat", "permissions": {"hosts": ["hacker-news.firebaseio.com", "www.ithome.com.tw", "www.theverge.com", "feeds.arstechnica.com", "techcrunch.com"]}, "settings": {"hn": {"type": "enum", "label": "Hacker News", "values": ["top", "best", "new", "off"], "default": "top"}, "feeds": {"type": "list", "label": "Feeds", "item": "url", "max": 8, "default": ["https://www.ithome.com.tw/rss", "https://www.theverge.com/rss/index.xml", "https://feeds.arstechnica.com/arstechnica/index", "https://techcrunch.com/feed/"]}}, "providers": [{"id": "hn", "type": "hn", "params": {"list": "$settings.hn", "count": 12}, "interval": {"visible": "15m", "background": "30m"}}, {"id": "feeds", "type": "rss", "params": {"feeds": "$settings.feeds"}, "interval": {"visible": "15m", "background": "30m"}}], "layout": {"cards": [{"title": "HACKER NEWS", "meta": "{hn.list}", "body": {"type": "list", "items": "hn.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "max": 8, "empty": "Hacker News is off. /set hn top brings it back."}}, {"title": "FEEDS", "meta": "{feeds.count} stories", "body": {"type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share", "empty": "No feeds. /set feeds https://techcrunch.com/feed/ adds one."}}], "inline": {"type": "list", "items": "hn.items", "title": "title", "copy": "url", "share": "share", "max": 4, "empty": "Hacker News is off: /set hn top"}, "band": "▲ {hn.items.0.title}", "hint": "⧉ copies the link · ⇪ shares it · r refreshes", "placeholder": "/set hn best · /set feeds +https://… · r · /help"}}
 const WX = {
   updated: '23:40',
   cities: [
-    { name: 'Taipei', icon: '☂', desc: 'Rain', tempText: '23°', feels: 'feels 27°', range: '28° / 21°', rainText: '☂ 80%', aqiText: 'AQI 57 moderate', humidity: '85%', wind: '4 km/h', rainLine: '☂ ▂▂▇▂  peak 80% at 15:00', days: [] },
-    { name: 'Tokyo', icon: '☁', desc: 'Overcast', tempText: '17°', range: '20° / 15°', rainText: '☂ 10%', aqiText: 'AQI 87 moderate', days: [] },
+    { name: 'Taipei', query: 'Taipei', icon: '☂', desc: 'Rain', tempText: '23°', feels: 'feels 27°', range: '28° / 21°', rainText: '☂ 80%', aqiText: 'AQI 57', humidity: '85%', wind: '4 km/h', rainLine: '☂ ▂▂▇▂  peak 80% at 15:00', days: [{ day: 'Today', icon: '☂', range: '28° / 21°', rain: '☂ 80%' }, { day: 'Sat', icon: '☁', range: '28° / 23°', rain: '☂ 20%' }] },
+    { name: 'Tokyo', query: 'tokyo', icon: '☁', desc: 'Overcast', tempText: '17°', feels: 'feels 15°', humidity: '70%', wind: '12 km/h', rainLine: '', range: '20° / 15°', rainText: '☂ 10%', aqiText: 'AQI 87', days: [{ day: 'Today', icon: '☁', range: '20° / 15°', rain: '☂ 10%' }, { day: 'Mon', icon: '☀', range: '22° / 14°', rain: '☂ 0%' }] },
   ],
   days: [{ day: 'Today', icon: '☂', range: '28° / 21°', rain: '☂ 80%' }, { day: 'Sat', icon: '☁', range: '28° / 23°', rain: '☂ 20%' }],
 }
@@ -1324,6 +1324,42 @@ const loadedRooms = () => [
   { type: 'fnsettings', id: 'weather', values: { cities: ['Taipei', 'Tokyo'], units: 'metric' } },
   { type: 'fnsettings', id: 'news', values: { hn: 'top', feeds: NEWS_ROOM.settings.feeds.default } },
 ]
+
+test("Weather: a city's ✕ drops it, and with one city left there's none", SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'weather', sysRooms: ['usage', 'weather'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...loadedRooms(), { type: 'fnroom', id: 'weather', provider: 'wx', data: WX, at: Date.now() })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ key: 'drop-c0-0' })).toBeDefined()
+  await ui.press({ key: 'drop-c0-1' })
+  await settle()
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/settings').at(-1)?.body).toEqual({ room: 'weather', key: 'cities', value: '-tokyo' })
+  bridge.emit({ type: 'fnsettings', id: 'weather', values: { cities: ['Taipei'], units: 'metric' } })
+  await settle()
+  expect(await ui.find({ key: 'drop-c0-0' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Weather: pressing a city shows its next 24 hours and week, and keeps it', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'weather', sysRooms: ['usage', 'weather'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...loadedRooms(), { type: 'fnroom', id: 'weather', provider: 'wx', data: WX, at: Date.now() })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /^☂ Rain, feels 27°/ })).toBeDefined()
+  await ui.press({ key: 'pick-c0-1' })
+  await settle()
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/settings').at(-1)?.body).toEqual({ room: 'weather', key: 'city', value: 'tokyo' })
+  bridge.emit({ type: 'fnsettings', id: 'weather', values: { cities: ['Taipei', 'Tokyo'], units: 'metric', city: 'tokyo' } })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: /^☁ Overcast, feels 15° · humidity 70% · wind 12 km\/h$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Mon' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Sat' })).toBeUndefined()
+  await ui.unmount()
+})
 
 test('Weather and Tech News stay off until asked for, and say where they reach', SLOW, async ($, on) => {
   const logs = recordLogs(on)
@@ -1348,7 +1384,7 @@ test('Weather room: cities now, the next 24 hours and the week; the band', SLOW,
   bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...loadedRooms(), { type: 'fnroom', id: 'weather', provider: 'wx', data: WX, at: Date.now() })
   await settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
-  for (const text of ['NOW', 'updated 23:40', 'Taipei', '23°', '28° / 21°', '☂ 80%', 'AQI 57 moderate', 'Tokyo', 'NEXT 24 HOURS', 'THIS WEEK', 'Sat']) {
+  for (const text of ['NOW', 'updated 23:40', 'Taipei', '23°', '28° / 21°', '☂ 80%', 'AQI 57', 'AQI 87', 'Tokyo', 'NEXT 24 HOURS', 'THIS WEEK', 'Sat']) {
     expect(await ui.find({ type: 'Text', text })).toBeDefined()
   }
   expect(await ui.find({ type: 'Text', text: /^☂ Rain, feels 27° · humidity 85% · wind 4 km\/h\n☂ ▂▂▇▂  peak 80% at 15:00$/ })).toBeDefined()
@@ -1367,14 +1403,14 @@ test('/chat set and the pane\'s /set change a room\'s settings', SLOW, async ($,
   bridge.replies['/fnroom/settings'] = (b) => [200, { ok: true, values: { cities: b.value.split(',').map((x: string) => x.trim()), units: 'metric' } }]
 
   await $.command.run({ command: 'chat', args: 'set weather' })
-  expect(logs.slice(-4)).toEqual(['Weather settings:', '  cities: Taipei, Tokyo', '  units: metric', 'Change one with /chat set weather <setting> <value>.'])
+  expect(logs.slice(-5)).toEqual(['Weather settings:', '  cities: Taipei, Tokyo', '  units: metric', '  city: Taipei', 'Change one with /chat set weather <setting> <value>.'])
   await $.command.run({ command: 'chat', args: 'set weather units' })
   expect(logs.at(-1)).toBe('Units: metric. Set it with /chat set weather units <metric, imperial>, or /chat set weather units default.')
   await $.command.run({ command: 'chat', args: 'set weather cities Kyoto, Osaka' })
   expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/settings', body: { room: 'weather', key: 'cities', value: 'Kyoto, Osaka' } })
   expect(logs.at(-1)).toBe('Cities: Kyoto, Osaka.')
   await $.command.run({ command: 'chat', args: 'set weather colour red' })
-  expect(logs.at(-1)).toBe('Weather has no setting colour. It has cities, units.')
+  expect(logs.at(-1)).toBe('Weather has no setting colour. It has cities, units, city.')
   await $.command.run({ command: 'chat', args: 'set' })
   expect(logs.at(-1)).toBe('Which room? These have settings: weather, news. /chat set <room> <setting> <value>')
 

@@ -22847,7 +22847,7 @@ var ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 var WIDGETS = {
   list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
   buttons: { buttons: "buttons!" },
-  table: { items: "path!", columns: "columns!", max: "int", empty: "text" },
+  table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" }
@@ -22871,6 +22871,8 @@ function checkSettings(settings, hosts, errors) {
     if (st.type === "enum" && !(Array.isArray(st.values) && st.values.length && st.values.length <= 10 && st.values.every((v) => str(v, 30)))) errors.push(`${where}.values: 1-10 choices`);
     if (st.type === "list" && st.item != null && !["string", "url"].includes(st.item)) errors.push(`${where}.item: string or url`);
     if (st.type === "list" && st.max != null && !(Number.isInteger(st.max) && st.max > 0 && st.max <= 20)) errors.push(`${where}.max: 1-20`);
+    if (st.type === "list" && st.add != null && typeof st.add !== "boolean") errors.push(`${where}.add: true or false`);
+    if (st.type === "list" && st.min != null && !(Number.isInteger(st.min) && st.min >= 0 && st.min <= (st.max ?? 10))) errors.push(`${where}.min: 0 to its max`);
     if (st.type === "int" && [st.min, st.max].some((v) => v != null && !Number.isInteger(v))) errors.push(`${where}: min and max are whole numbers`);
     const bad = settingError(st, st.default, hosts);
     if (bad) errors.push(`${where}.default: ${bad}`);
@@ -22881,6 +22883,7 @@ function settingError(st, value, hosts = []) {
     case "list": {
       if (!Array.isArray(value)) return "a list";
       if (value.length > (st.max ?? 10)) return `at most ${st.max ?? 10}`;
+      if (value.length < (st.min ?? 0)) return `at least ${st.min}`;
       for (const v of value) {
         if (!str(v, st.item === "url" ? 300 : 100)) return `each one 1-${st.item === "url" ? 300 : 100} characters`;
         if (st.item === "url") {
@@ -22951,6 +22954,7 @@ function checkWidget(body, where, errors, uses) {
         if (!(typeof c?.field === "string" && PATH.test(c.field))) errors.push(`${where}.columns[${i}].field: not a path`);
         if (c.label != null && !str(c.label, 20)) errors.push(`${where}.columns[${i}].label: 1-20 characters`);
         if (c.width != null && !(Number.isInteger(c.width) && c.width > 0 && c.width <= 40)) errors.push(`${where}.columns[${i}].width: 1-40`);
+        if (c.grow != null && typeof c.grow !== "boolean") errors.push(`${where}.columns[${i}].grow: true or false`);
         if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
       });
@@ -22960,6 +22964,17 @@ function checkWidget(body, where, errors, uses) {
       if (!(typeof v?.action === "string" && ACTION.test(v.action))) errors.push(`${where}.act.action: an action's name`);
       else uses.push({ where: `${where}.act`, provider: v.provider, action: v.action });
       if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.act.field: not a path`);
+    }
+    if (k === "drop") {
+      if (!(typeof v?.setting === "string" && SETTING_KEY.test(v.setting))) errors.push(`${where}.drop.setting: a setting's key`);
+      else uses.push({ where: `${where}.drop`, setting: v.setting, settingType: "list" });
+      if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.drop.field: not a path`);
+    }
+    if (k === "pick") {
+      if (!(typeof v?.setting === "string" && SETTING_KEY.test(v.setting))) errors.push(`${where}.pick.setting: a setting's key`);
+      else uses.push({ where: `${where}.pick`, setting: v.setting, settingType: "string" });
+      if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.pick.field: not a path`);
+      if (!(typeof v?.as === "string" && PATH.test(v.as))) errors.push(`${where}.pick.as: not a path`);
     }
     if (k === "buttons") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
@@ -23103,6 +23118,10 @@ function checkManifest(m, providers) {
     }
   }
   for (const use of actionsUsed) {
+    if (use.setting) {
+      if (m.settings?.[use.setting]?.type !== use.settingType) errors.push(`${use.where}.setting: no ${use.settingType} setting ${use.setting}`);
+      continue;
+    }
     const p = Array.isArray(m.providers) ? use.provider ? m.providers.find((x) => x?.id === use.provider) : m.providers[0] : null;
     const def = p ? providers[p.type] : null;
     if (!def) {
@@ -23380,15 +23399,6 @@ function sky(code, isDay = 1) {
   if (code >= 95) return ["\u2607", "Thunderstorm"];
   return ["\xB7", "\u2014"];
 }
-function aqiWord(aqi) {
-  if (aqi == null) return "";
-  if (aqi <= 50) return "good";
-  if (aqi <= 100) return "moderate";
-  if (aqi <= 150) return "unhealthy for some";
-  if (aqi <= 200) return "unhealthy";
-  if (aqi <= 300) return "very unhealthy";
-  return "hazardous";
-}
 function spark(values) {
   return values.map((v) => v > 0 ? SPARKS[Math.min(7, Math.max(0, Math.round(v / 100 * 7)))] : SPARKS[0]).join("");
 }
@@ -23449,7 +23459,7 @@ async function city(name, units, ctx) {
     humidity: `${round(c.relative_humidity_2m)}%`,
     wind: `${round(c.wind_speed_10m)} ${imperial ? "mph" : "km/h"}`,
     aqi,
-    aqiText: aqi == null ? "" : `AQI ${aqi} ${aqiWord(aqi)}`,
+    aqiText: aqi == null ? "" : `AQI ${aqi}`,
     rainLine: rainHours.length ? `\u2602 ${spark(rainHours)}  ${peak ? `peak ${peak}% at ${peakTime}` : "no rain"}` : "",
     days
   };
@@ -23457,11 +23467,29 @@ async function city(name, units, ctx) {
 var open_meteo_default = {
   type: "open-meteo",
   hosts: ["api.open-meteo.com", "geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"],
+  // Cities as they're added: each by the name the place search gives it,
+  // and none that it can't find. A search that fails lets them through.
+  check: {
+    async cities(names, ctx) {
+      const out = [];
+      const missing = [];
+      for (const n of names) {
+        try {
+          out.push((await place(n, ctx)).name);
+        } catch (err) {
+          if (err?.status === 404) missing.push(n);
+          else out.push(n);
+        }
+      }
+      if (missing.length) throw new RoomError(400, `No place called ${missing.join(" or ")}. Check the spelling, or try it in English.`);
+      return out;
+    }
+  },
   async fetch(params, ctx) {
     const names = (Array.isArray(params.cities) ? params.cities : []).slice(0, MAX_CITIES);
     if (!names.length) return { cities: [], first: null, days: [] };
     const settled = await Promise.allSettled(names.map((n) => city(n, params.units, ctx)));
-    const cities = settled.map((r, i) => r.status === "fulfilled" ? r.value : { name: names[i], icon: "?", tempText: "\u2013", range: "", rainText: "", aqiText: r.reason?.message ?? "failed", days: [] });
+    const cities = settled.map((r, i) => r.status === "fulfilled" ? { ...r.value, query: names[i] } : { name: names[i], query: names[i], icon: "?", tempText: "\u2013", range: "", rainText: "", aqiText: r.reason?.message ?? "failed", days: [] });
     if (settled.every((r) => r.status === "rejected")) throw settled[0].reason;
     const first = cities.find((c) => c.days?.length) ?? cities[0];
     return { cities, first, days: first.days ?? [], updated: (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5) };
@@ -24543,12 +24571,14 @@ function parseSetting(st, raw, current) {
   switch (st.type) {
     case "list": {
       const parts = text.split(",").map((x) => x.trim()).filter(Boolean);
-      if (parts.length && parts.every((x) => /^[+-]/.test(x))) {
+      if (parts.length && (st.add || parts.every((x) => /^[+-]/.test(x)))) {
         let list = [...current ?? []];
         for (const x of parts) {
-          const v = x.slice(1).trim();
-          list = list.filter((y) => y.toLowerCase() !== v.toLowerCase());
-          if (x[0] === "+") list.push(v);
+          const signed = /^[+-]/.test(x);
+          const v = signed ? x.slice(1).trim() : x;
+          const same2 = (y) => y.toLowerCase() === v.toLowerCase();
+          if (signed && x[0] === "-") list = list.filter((y) => !same2(y));
+          else if (v && !list.some(same2)) list.push(v);
         }
         return list;
       }
@@ -24781,11 +24811,24 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       const settings = new Map(Object.entries(m.settings ?? {}));
       if (!settings.has(String(k))) throw new RoomError(404, `${m.name} has no setting ${k}${settings.size ? `. It has ${[...settings.keys()].join(", ")}` : ""}.`);
       const st = settings.get(String(k));
+      const named = /* @__PURE__ */ new Map();
+      if (st.type === "list" && enabled.has(id) && !/^default$/i.test(String(value ?? "").trim())) {
+        const before = settingsOf(id)[k] ?? [];
+        const added = parseSetting(st, value, before).filter((x) => !before.some((y) => y.toLowerCase() === x.toLowerCase()));
+        for (const p of added.length ? m.providers : []) {
+          const param = Object.entries(p.params ?? {}).find(([, v]) => v === `$settings.${k}`)?.[0];
+          const check = param ? providers[p.type].check?.[param] : null;
+          if (!check) continue;
+          const names = await check(added, ctxFor(m, p));
+          added.forEach((x, i) => named.set(x.toLowerCase(), names[i] ?? x));
+        }
+      }
       await locked(join6(dataDir, id), "settings", () => {
         const saved = savedSettings(id);
         if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
         else {
-          const v = parseSetting(st, value, settingsOf(id)[k]);
+          let v = parseSetting(st, value, settingsOf(id)[k]);
+          if (named.size) v = v.map((x) => named.get(x.toLowerCase()) ?? x).filter((x, i, all) => all.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
           const bad = settingError(st, v, hostsOf(m));
           if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
           if (JSON.stringify(v) === JSON.stringify(st.default)) delete saved[k];
@@ -24797,7 +24840,8 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
         savedCache.delete(id);
       });
       emitSettings(id);
-      if (enabled.has(id)) await Promise.all(m.providers.map((p) => run(id, p.id)));
+      const reads = m.providers.filter((p) => JSON.stringify(p).includes(`"$settings.${k}"`));
+      if (enabled.has(id)) await Promise.all(reads.map((p) => run(id, p.id)));
       return { ok: true, values: settingsOf(id) };
     },
     // The rooms' folders read again (a room installed, updated or removed):
