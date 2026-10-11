@@ -302,7 +302,7 @@ function pillSection(p, scope, key, fallbackColor) {
 
 // The band on the desktop: the manifest's pills, or, for a room without
 // any, its band line in one section. Null while there is nothing to show.
-export function fnBandDesktop(id, els, { onOpen }) {
+export function fnBandDesktop(id, els, { onOpen, columns = 0 }) {
   const { room, data, loaded, error } = roomState(id);
   if (!room) return null;
   const meta = fnMeta(id);
@@ -320,7 +320,7 @@ export function fnBandDesktop(id, els, { onOpen }) {
   }
   sections = sections.filter(Boolean);
   if (!sections.length) sections = [{ key: "line", color: meta.color, parts: [pMsg(fill(l.band ?? l.cards[0].meta ?? room.manifest.name, data))], grow: true }];
-  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen });
+  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen, columns });
 }
 
 export function fnHint(id) {

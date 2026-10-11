@@ -1905,6 +1905,14 @@ test('desktop band: a function room draws its pills, and one without any shows i
   expect((await ui.findAll({ type: 'Svg' })).length).toBe(2)                    // the stack and the line
   await ui.unmount()
 
+  // A narrow band leaves out the pills that don't fit, from the end, rather
+  // than run them under the Open button; the first stays.
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 40 } })
+  expect(await ui.find({ type: 'Text', text: '2' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'curl json' })).toBeUndefined()
+  expect(await ui.find({ key: 'open' })).toBeDefined()
+  await ui.unmount()
+
   bridge.emit({ type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] })
   await settle()
   ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })

@@ -5,6 +5,7 @@
 
 import { theme } from "./theme.mjs";
 import { tint } from "./bandkit.mjs";
+import { cells } from "./widgets.mjs";
 
 // The parts a section is made of.
 export const draw = (d, alt) => (d ? { svg: d, alt } : null);
@@ -68,11 +69,43 @@ function section(els, s) {
   });
 }
 
-// The band: the capsule, then the Open button at the far right.
-export function capsule(els, { room, color, sections, onOpen }) {
+// About how many cells a section takes on the desktop: its words, its
+// drawings at some 8 px a cell, the gaps between them, its padding and the
+// rule before it. A message gives way, so it counts for a short one.
+const PX_PER_CELL = 8;
+const MSG_MIN = 16;
+function sectionCells(s) {
+  const parts = s.parts.filter(Boolean);
+  const each = parts.map((p) => (p.svg ? Math.ceil(p.svg.width / PX_PER_CELL)
+    : p.kind === "msg" ? Math.min(cells(p.text), MSG_MIN)
+      : cells(p.text) + (p.kind === "chip" ? 2 : p.kind === "tag" ? 2 : 0)));
+  return each.reduce((n, c) => n + c, 0) + Math.max(0, parts.length - 1) + 2 + 1;
+}
+
+// The sections that fit in `columns` beside the room's name and the Open
+// button, the first always: the ones at the end go first, as a drawing
+// would otherwise run under the button.
+const OPEN_CELLS = 10;
+export function fitSections(sections, room, columns) {
+  const list = sections.filter(Boolean);
+  if (!columns) return list;
+  let room_left = Math.floor(columns * 0.92) - OPEN_CELLS - (cells(room) + 2) - 2;
+  const out = [];
+  for (const s of list) {
+    const need = sectionCells(s);
+    if (out.length && need > room_left) break;
+    out.push(s);
+    room_left -= need;
+  }
+  return out;
+}
+
+// The band: the capsule, then the Open button at the far right. With
+// `columns`, the sections that don't fit are left out.
+export function capsule(els, { room, color, sections, onOpen, columns = 0 }) {
   const { Box, Text, Button } = els;
   const children = [Box({ key: "bs-room", flexShrink: 0, paddingX: 1, children: [Text({ key: "t", bold: true, color, children: room })] })];
-  for (const s of sections.filter(Boolean)) {
+  for (const s of fitSections(sections, room, columns)) {
     children.push(Box({ key: `bs-sep-${s.key}`, flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: "│" })] }));
     children.push(section(els, s));
   }
