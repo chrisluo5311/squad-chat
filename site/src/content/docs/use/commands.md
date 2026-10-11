@@ -40,7 +40,8 @@ description: Every squad-chat slash command, what it does, and examples.
 
 | Command | What it does |
 | --- | --- |
-| `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the [Snippets room](/squad-chat/use/built-in-rooms/#-snippets) |
+| `/snippet add <text>` | Save the text as a snippet. Snippets are numbered 1, 2, 3 and on |
+| `/snippet add` | Save the text you selected, or else the last code block in Claude's reply, to the [Snippets room](/squad-chat/use/built-in-rooms/#-snippets) |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
 

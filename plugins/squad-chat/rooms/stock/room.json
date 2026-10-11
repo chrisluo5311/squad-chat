@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "stock",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Stocks",
   "icon": "$",
   "color": "rose",
@@ -11,7 +11,8 @@
   "settings": {
     "watchlist": { "type": "list", "label": "Watchlist", "default": ["TAIEX", "2330", "0050", "^GSPC", "AAPL", "NVDA"], "max": 12 },
     "colors": { "type": "enum", "label": "Up colors", "values": ["market", "red-up", "green-up"], "default": "market" },
-    "move": { "type": "int", "label": "Alert at % move", "default": 5, "min": 0, "max": 20 }
+    "move": { "type": "int", "label": "Alert at % move", "default": 5, "min": 0, "max": 20 },
+    "pin": { "type": "string", "label": "Pinned in the band", "default": "TAIEX" }
   },
   "providers": [
     { "id": "q", "type": "quotes", "params": { "watchlist": "$settings.watchlist", "colors": "$settings.colors", "move": "$settings.move" }, "interval": { "visible": "1m", "background": "5m" } }
@@ -36,6 +37,10 @@
             "empty": "Nothing to watch: /set watchlist 2330, AAPL"
           },
           { "type": "text", "text": "{q.note}" }
+        ],
+        "desktop": [
+          { "type": "grid", "items": "q.quotes", "title": "symbol", "sub": "name", "value": "priceText", "change": "pctText", "colorFrom": "color", "line": "line", "pick": { "setting": "pin", "field": "symbol", "as": "q.pinned" }, "drop": { "setting": "watchlist", "field": "entry" }, "empty": "Nothing to watch: /set watchlist 2330, AAPL" },
+          { "type": "text", "text": "{q.note}" }
         ]
       }
     ],
@@ -54,10 +59,11 @@
     },
     "pills": [
       {"draw": {"type": "dot"}, "colorFrom": "q.statusTone", "sub": "{q.statusText}", "tip": ["{q.markets}", "updated {q.updated}", "{q.note}"]},
-      {"each": "q.quotes", "max": 4, "draw": {"type": "area", "value": "it.line"}, "colorFrom": "it.color", "label": "{it.symbol}", "sub": "{it.priceText}", "value": "{it.arrow}{it.pctText}", "tip": ["{it.symbol} {it.name}", "{it.priceText} ({it.changeText}, {it.pctText})", "volume {it.volText}"]}
+      {"when": "q.pinned", "draw": {"type": "area", "value": "q.pinned.line"}, "colorFrom": "q.pinned.color", "label": "{q.pinned.symbol}", "sub": "{q.pinned.priceText}", "value": "{q.pinned.arrow}{q.pinned.pctText}", "tip": ["{q.pinned.symbol} {q.pinned.name}", "{q.pinned.priceText} ({q.pinned.changeText}, {q.pinned.pctText})", "volume {q.pinned.volText}", "⚲ on a tile pins another"]}
     ],
     "band": "{q.band}",
-    "hint": "/set watchlist +2454 · /set colors green-up · /set move 3 · r",
-    "placeholder": "/set watchlist +TSLA · /set move 0 · r · /help"
+    "add": "watchlist",
+    "hint": "⚲ pins one to the band · ✕ takes one out · /set move 3 · r",
+    "placeholder": "Type a symbol (TSLA, 2330), then add · /set move 3 · /help"
   }
 }

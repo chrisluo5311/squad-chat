@@ -9,12 +9,12 @@
 // Inline (above the prompt): one header line, the last few messages, input.
 // Band (pane not up): one line with an Open button.
 
-import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView, enabledRooms } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView, enabledRooms, roomIds } from "./state.mjs";
 import { theme, nameColor, glyph } from "./theme.mjs";
 import { snippetTitle, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
-import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge, sysBandDesktop } from "./sysviews.mjs";
-import { fnHint, fnPlaceholder, fnBandDesktop, fnMeta } from "./fnviews.mjs";
+import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge, sysBandDesktop, textW } from "./sysviews.mjs";
+import { fnHint, fnPlaceholder, fnBandDesktop, fnMeta, fnAdds } from "./fnviews.mjs";
 import * as K from "./bandkit.mjs";
 import { capsule, draw, value as pValue, sub as pSub, msg as pMsg, chip as pChip } from "./bands.mjs";
 import { usageBandDesktop } from "./usageband.mjs";
@@ -99,6 +99,21 @@ function messageRows(list, width, dividerAt) {
     prev = m;
   }
   return rows;
+}
+
+// The desktop's phone layout: the time goes small under the last message of
+// each group instead of beside the name, so each group gets a row after it.
+function withGroupTimes(rows) {
+  const out = [];
+  rows.forEach((r, i) => {
+    // A bubble right under another of the same group sits a little below it.
+    const prev = rows[i - 1];
+    out.push(r.kind === "body" && (prev?.kind === "body" || prev?.kind === "snippet") ? { ...r, gapAbove: true } : r);
+    const next = rows[i + 1];
+    const ends = (r.kind === "body" || r.kind === "snippet") && (!next || next.kind === "head" || next.kind === "day" || next.kind === "new");
+    if (ends) out.push({ kind: "time", key: `t${r.m.id}`, m: r.m, height: 1 });
+  });
+  return out;
 }
 
 // A snippet shows its first lines, one terminal row each (never wrapped, so
@@ -186,7 +201,18 @@ function drawRow(els, row, width, onCopy) {
         Text({ key: "t", color: theme.accent, bold: true, children: "new " }),
         Text({ key: "r", color: theme.accent, children: glyph.rule.repeat(Math.max(4, width - 4)) }),
       ] });
+    case "time":
+      return Box({ key: row.key, flexShrink: 0, flexDirection: "row", justifyContent: row.m.mine ? "flex-end" : "flex-start", paddingX: 1, children: [
+        Text({ key: "t", color: theme.muted, children: formatTime(row.m.at) }),
+      ] });
     case "head":
+      // The desktop, like a phone: their name over their bubbles, nothing
+      // over yours (they're at the right, in your color), the time under.
+      if (els.Svg) {
+        return Box({ key: row.key, flexShrink: 0, flexDirection: "row", marginTop: 1, paddingX: 1, children: row.m.mine ? [] : [
+          Text({ key: "n", bold: true, color: nameColor(row.m.user_id), wrap: "truncate-end", children: displayName(row.m) }),
+        ] });
+      }
       // Theirs: "name 12:04" on the left. Yours: "12:04 you" on the right.
       return Box({ key: row.key, flexShrink: 0, flexDirection: "row", gap: 1, marginTop: 1,
         justifyContent: row.m.mine ? "flex-end" : "flex-start", children: row.m.mine ? [
@@ -199,12 +225,20 @@ function drawRow(els, row, width, onCopy) {
     default: {
       // A bubble: yours on the right in the accent, theirs on the left in grey.
       const mine = row.m.mine;
-      return Box({ key: row.key, flexShrink: 0, flexDirection: "row", justifyContent: mine ? "flex-end" : "flex-start", children: [
-        Box({ key: "bubble", flexDirection: "column", width: row.bubble, paddingX: 1,
-          backgroundColor: mine ? theme.mineBubble : theme.theirBubble, children: [
+      const fill = mine ? theme.mineBubble : theme.theirBubble;
+      // The desktop rounds each bubble with an outline in its own fill, which
+      // also keeps two bubbles in a row apart. Its font is proportional, so
+      // the bubble takes its words' width there, not a count of cells.
+      const round = els.Svg ? { borderStyle: "round", borderColor: fill } : { width: row.bubble };
+      // A gap of a few pixels (a Box is rows tall, so it's an empty drawing).
+      const gap = row.gapAbove && els.Svg ? els.Svg({ key: "gap", source: K.svg(1, 6, ""), alt: "gap", width: 1, height: 6 }) : null;
+      const line = Box({ key: gap ? "line" : row.key, flexShrink: 0, flexDirection: "row", justifyContent: mine ? "flex-end" : "flex-start", children: [
+        Box({ key: "bubble", flexDirection: "column", ...round, flexShrink: 1, paddingX: 1,
+          backgroundColor: fill, children: [
             Text({ key: "b", wrap: "wrap", color: mine ? theme.mineText : theme.theirText, children: row.m.body }),
           ] }),
       ] });
+      return gap ? Box({ key: row.key, flexShrink: 0, flexDirection: "column", children: [gap, line] }) : line;
     }
   }
 }
@@ -286,6 +320,118 @@ function roomTabs(els, handlers, width) {
 
 // How many rows the tabs take at `width`: they wrap like words. `compact`
 // as roomTabs decides it, unless given.
+// The desktop's header: the ◆ and the built-in rooms as icons on one line
+// (the one shown with its name), a "+" after them that lists the rooms
+// without a tab to add, and live at the end; the chat rooms on a line of
+// their own under it, with "＋ join".
+function headerDesk(els, handlers) {
+  const { Box, Text, Button } = els;
+  const view = activeView();
+  const conn = connection();
+  const lines = [];
+  // A pill: rounded, filled, its words set in it. A Text's ground is square
+  // on the desktop, so the tab shown and the badges are drawings (they're
+  // not pressed: the tab shown is already shown, a badge rides its tab).
+  const pill = (key, text, fill, ink, { bold = true, h = 22 } = {}) => {
+    const t = String(text).replace(/[<&>"]/g, "");
+    const tw = Math.ceil(textW(t) * (13 / 11.5)) + [...t].filter((ch) => cells(ch) === 1 && !/[\x20-\x7e]/.test(ch)).length * 4;
+    const W = tw + 16;
+    return els.Svg({ key, alt: t, width: W, height: h, source: `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" font-family="-apple-system, system-ui, sans-serif">`
+      + `<rect width="${W}" height="${h}" rx="${h / 2.6}" fill="${fill}"/>`
+      + `<text x="8" y="${h / 2 + 4.5}" font-size="13" font-weight="${bold ? 600 : 400}" fill="${ink}" textLength="${tw}" lengthAdjust="spacingAndGlyphs">${t}</text></svg>` });
+  };
+  const hex = (c, fallback) => (/^#[0-9a-f]{6}$/i.test(c ?? "") ? c : fallback);
+  const tabs = enabledRooms().map((id) => {
+    const meta = roomMeta(id);
+    if (view === id) return pill(`sys-${id}`, `${meta.icon} ${meta.label}`, hex(meta.color, theme.accent), theme.onAccent);
+    const badge = sysBadge(id);
+    const tab = Button({ key: `sys-${id}`, plain: true, label: ` ${meta.icon}`, dimColor: !badge, onPress: () => handlers.onSelectView?.(id) });
+    return badge ? Box({ key: `sysbox-${id}`, flexDirection: "row", alignItems: "center", columnGap: 1, children: [tab, pill("badge", badge.text, hex(badge.color, theme.amber), theme.onAccent, { h: 18 })] }) : tab;
+  });
+  lines.push(Box({ key: "titlebar", flexDirection: "row", alignItems: "center", columnGap: 1, children: [
+    Text({ key: "logo", color: theme.accent, bold: true, children: glyph.brand }),
+    Box({ key: "tabs", flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 1, flexShrink: 1, minWidth: 0, children: [
+      ...tabs,
+      Button({ key: "add-room", plain: true, dimColor: !state.addingRoom, label: " +", onPress: () => handlers.onToggleAddRoom?.() }),
+    ] }),
+    Box({ key: "push", flexGrow: 1, minWidth: 1 }),
+    Text({ key: "conn", color: conn.color, children: conn.text }),
+  ] }));
+  // A few pixels between the lines (a Box is rows tall: an empty drawing).
+  const gap = (key) => els.Svg({ key, source: K.svg(1, 6, ""), alt: "gap", width: 1, height: 6 });
+  if (state.addingRoom) {
+    // The rooms without a tab: one press gives each its tab, as
+    // /chat rooms +name does (a room that reaches the web says where).
+    const hidden = roomIds().filter((id) => !enabledRooms().includes(id));
+    lines.push(gap("gap-add"));
+    lines.push(Box({ key: "add-rooms", flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 2, children: [
+      Text({ key: "l", color: theme.muted, children: hidden.length ? "add a room" : "Every room has a tab. More come from /chat store." }),
+      ...hidden.map((id) => {
+        const meta = roomMeta(id);
+        return Button({ key: `add-${id}`, plain: true, label: `+ ${meta.icon} ${meta.label}`, onPress: () => handlers.onAddRoom?.(id) });
+      }),
+      Button({ key: "add-close", plain: true, dimColor: true, label: "✕", onPress: () => handlers.onToggleAddRoom?.() }),
+    ] }));
+  }
+  // Each chat room a chip: the desktop's own button, rounded and a line
+  // tall (an outlined Box takes a row above and below), its unread count in
+  // the accent beside the name. The one shown is a drawn pill, outlined in
+  // the accent; "＋ join" a dim button.
+  const outlined = (key, text) => {
+    const t = String(text).replace(/[<&>"]/g, "");
+    const tw = Math.ceil(textW(t) * (13 / 11.5));
+    const W = tw + 20, h = 24;
+    return els.Svg({ key, alt: t, width: W, height: h, source: `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" font-family="-apple-system, system-ui, sans-serif">`
+      + `<rect x="0.75" y="0.75" width="${W - 1.5}" height="${h - 1.5}" rx="7" fill="none" stroke="${theme.accent}" stroke-width="1.5"/>`
+      + `<text x="10" y="16.5" font-size="13" font-weight="600" fill="${theme.accent}" textLength="${tw}" lengthAdjust="spacingAndGlyphs">${t}</text></svg>` });
+  };
+  const chats = [];
+  if (state.auth === "signed_in") {
+    for (const r of state.rooms) {
+      if (r.id === state.current && view === "chat") { chats.push(outlined(`tab-${r.id}`, `#${r.slug}`)); continue; }
+      // A Button holds only its label (older releases refuse Text inside it):
+      // the unread count is a pill beside the chip.
+      const chipBtn = Button({ key: `tab-${r.id}`, label: `#${r.slug}`, onPress: () => handlers.onSelectRoom(r.id) });
+      chats.push(r.unread
+        ? Box({ key: `chipbox-${r.id}`, flexDirection: "row", alignItems: "center", columnGap: 1, children: [chipBtn, pill("badge", String(r.unread), theme.accent, theme.onAccent, { h: 18 })] })
+        : chipBtn);
+    }
+    // "＋ join" opens one field at a time to its right: the room's name, then
+    // (Enter, or next) its passcode with the name as a chip before it.
+    // It stays where it is and opens the fields to its right; pressed
+    // again it folds them. A button a press takes away took the pane's focus
+    // with it (the next click only gave it back), so the buttons here stay:
+    // a plain one (the desktop's own chip lost clicks to a redraw), and one
+    // "next →" that turns into "Join" under the same key.
+    const j = state.join;
+    chats.push(Button({ key: "join-room", plain: true, dimColor: !j, label: "＋ join", onPress: () => (j ? handlers.onJoinCancel?.() : handlers.onJoinStart?.()) }));
+    if (j) {
+      if (j.step === "pass") chats.push(Button({ key: "join-back", label: `#${j.name}`, onPress: () => handlers.onJoinBack?.() }));
+      // The field's own submit button shows only while it has the focus, so
+      // a click elsewhere hid it and moved what came after it: the button
+      // here is drawn always, and reads what was typed (onInput).
+      chats.push(j.step === "name"
+        ? els.Input({ key: "join-name", placeholder: "room name", ...(j.name ? { value: j.name } : {}), onInput: (v) => handlers.onJoinTyping?.(v), onSubmit: (v) => handlers.onJoinName?.(v) })
+        : els.Input({ key: "join-pass", placeholder: "passcode", onInput: (v) => handlers.onJoinTyping?.(v), onSubmit: (v) => handlers.onJoinPass?.(v) }));
+      chats.push(Button({ key: "join-go", plain: true, label: j.step === "name" ? "next →" : "Join", onPress: () => (state.join?.step === "name"
+        ? handlers.onJoinName?.(state.join?.draft ?? state.join?.name ?? "")
+        : handlers.onJoinPass?.(state.join?.draft ?? "")) }));
+      chats.push(Button({ key: "join-cancel", plain: true, dimColor: true, label: "✕", onPress: () => handlers.onJoinCancel?.() }));
+    }
+  } else {
+    chats.push(view === "chat"
+      ? outlined("tab-chat", "# chat")
+      : Button({ key: "tab-chat", dimColor: true, label: "# chat", onPress: () => handlers.onSelectView?.("chat") }));
+  }
+  lines.push(gap("gap-chats"));
+  lines.push(Box({ key: "chats", flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 1, children: [
+    Text({ key: "l", color: theme.muted, children: "chats" }),
+    ...chats,
+  ] }));
+  if (state.join?.error) lines.push(Text({ key: "join-error", color: theme.error, wrap: "wrap", children: `✗ ${state.join.error}` }));
+  return lines;
+}
+
 function tabRows(width, compact = tabRows(width, false) > 1) {
   const view = activeView();
   const widths = enabledRooms().map((id) => {
@@ -314,8 +460,29 @@ function friendsCard(els, width) {
     Text({ key: "dot", color: f.busy ? theme.amber : f.online ? theme.online : theme.muted, children: `${f.busy ? glyph.busy : f.online ? glyph.on : glyph.off} ` }),
     Text({ key: "name", color: f.online ? undefined : theme.muted, children: f.busy ? `${f.name} (busy)` : f.name }),
   ] }));
+  // The desktop: each friend a chip, a round initial in their color (grey
+  // while away), the name, and a dot: green online, amber busy, grey away.
+  // One drawing, so it's a slim pill: a bordered Box takes a row above and
+  // below. The drawing can't measure words, so the name is set to the width
+  // guessed for it (textLength), at 13 px from the 11.5 px guess.
+  const deskChip = (f) => {
+    const c = f.online ? nameColor(f.user_id) : "#5A5955";
+    const dot = f.busy ? theme.amber : f.online ? theme.online : "#5A5955";
+    const esc = (t) => String(t).replace(/[<&>"]/g, "");
+    const initial = esc((String(f.name).match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase());
+    const name = esc(f.busy ? `${f.name} (busy)` : f.name);
+    const nw = Math.ceil(textW(name) * (13 / 11.5));
+    const W = 3 + 20 + 7 + nw + 8 + 8 + 10, H = 26;
+    const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system, system-ui, sans-serif">`
+      + `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="${(H - 1) / 2}" fill="#262624" stroke="#3A3936"/>`
+      + `<circle cx="13" cy="13" r="10" fill="${c}"/>`
+      + `<text x="13" y="17" text-anchor="middle" font-size="11" font-weight="700" fill="#1F1E1D">${initial}</text>`
+      + `<text x="30" y="17.5" font-size="13" fill="${f.online ? "#E8E6E1" : "#8F8D87"}" textLength="${nw}" lengthAdjust="spacingAndGlyphs">${name}</text>`
+      + `<circle cx="${W - 14}" cy="13" r="4" fill="${dot}"/></svg>`;
+    return els.Svg({ key: f.user_id, source, alt: `${name} ${f.busy ? "busy" : f.online ? "online" : "away"}`, width: W, height: H });
+  };
   const body = friends.length
-    ? Box({ key: "list", flexDirection: "row", flexWrap: "wrap", columnGap: 2, children: chips })
+    ? Box({ key: "list", flexDirection: "row", flexWrap: "wrap", columnGap: els.Svg ? 1 : 2, rowGap: 0, children: els.Svg ? friends.map(deskChip) : chips })
     : Text({ key: "none", color: theme.muted, children: "Share a room's name and passcode to add friends." });
   const textLen = friends.reduce((n, f) => n + f.name.length + (f.busy ? 7 : 0) + 4, 0);
   const height = 3 + (friends.length ? rowsFor("x".repeat(textLen), width - 4) : rowsFor("Share a room's name and passcode to add friends.", width - 4));
@@ -325,16 +492,20 @@ function friendsCard(els, width) {
 // The terminal lights the frame while the pane holds the keyboard. The
 // desktop's field draws its own focus, and a tree that changed with focus
 // there made the box blink as focus moved, so it stays one color and the
-// field waits for a click instead of taking the focus on every draw.
+// field waits for a click instead of taking the focus on every draw. The
+// desktop draws its field at a width of its own, so the room the frame has
+// past it says where help is.
 function inputBox(els, mode, { onSubmit, onInput }, focused, surface) {
   const { Box, Text, Input } = els;
   const terminal = surface !== "desktop";
-  return Box({ key: "compose-box", flexDirection: "row", marginTop: 1, flexShrink: 0, borderStyle: "round", borderColor: terminal && !focused ? theme.border : theme.accent, paddingX: 1, children: [
+  return Box({ key: "compose-box", flexDirection: "row", alignItems: "center", marginTop: 1, flexShrink: 0, borderStyle: "round", borderColor: terminal && !focused ? theme.border : theme.accent, paddingX: 1, children: [
     Text({ key: "prompt", color: theme.accent, bold: true, children: `${glyph.prompt} ` }),
-    Box({ key: "field", flexGrow: 1, minWidth: 0, children: [
+    Box({ key: "field", flexGrow: terminal ? 1 : 0, minWidth: 0, children: [
       Input({ key: "compose", placeholder: mode.placeholder, submitLabel: mode.label, value: state.draft ?? "", ...(terminal ? { autoFocus: true } : {}), onInput, onSubmit }),
     ] }),
-  ] });
+    terminal ? null : Box({ key: "push", flexGrow: 1, minWidth: 1 }),
+    terminal ? null : Text({ key: "help", color: theme.muted, children: "/help" }),
+  ].filter(Boolean) });
 }
 
 function hints(els, text) {
@@ -361,6 +532,7 @@ const SYS_INPUT = {
 };
 function inputMode() {
   const view = activeView();
+  if (view === "snippet" || fnAdds(view)) return { placeholder: fnPlaceholder(view), label: "add" };   // what's typed there is saved
   if (view !== "chat") return SYS_INPUT[view] ?? { placeholder: fnPlaceholder(view), label: "run" };
   if (state.bridge !== "ready") return null;
   if (state.auth === "signed_out") return { placeholder: "you@example.com, or a name", label: "continue" };
@@ -421,19 +593,33 @@ function dockView(els, props, handlers) {
   const room = currentRoom();
   const mode = inputMode();
   const view = activeView();
-  const parts = [titleBar(els)];
-  let used = 1;
+  const desk = props.surface === "desktop" && els.Svg;
+  const parts = desk ? headerDesk(els, handlers) : [titleBar(els)];
+  let used = desk ? parts.length : 1;
 
-  if (enabledRooms().length || (state.auth === "signed_in" && state.rooms.length)) {
+  if (desk) {
+    // A room's first card sits half a row below the header (a Box is rows
+    // tall, so the gap is an empty drawing); the chat's first card keeps its margin.
+    if (view !== "chat") parts.push(els.Svg({ key: "gap-tabs", source: K.svg(1, 10, ""), alt: "gap", width: 1, height: 10 }));
+  } else if (enabledRooms().length || (state.auth === "signed_in" && state.rooms.length)) {
     parts.push(roomTabs(els, handlers, width));
     used += tabRows(width);
+    // The desktop sets a room's first card half a row below its tabs. A Box
+    // is rows tall, so the gap is an empty drawing, sized in pixels; the
+    // chat's first card keeps its own margin.
+    if (props.surface === "desktop" && els.Svg && view !== "chat") {
+      parts.push(els.Svg({ key: "gap-tabs", source: K.svg(1, 10, ""), alt: "gap", width: 1, height: 10 }));
+    }
   }
 
   if (view !== "chat") {
     const n = notice(els);
     const pending = shareCard(els, handlers, width);
     const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
-    const capacity = Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
+    // The desktop scrolls the pane itself (its own bar, the wheel and the
+    // trackpad), so there every card is drawn whole and nothing is windowed;
+    // the terminal keeps the cards in a window that fits, with its own bar.
+    const capacity = props.surface === "desktop" ? 1000 : Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
     // The room's own scroll: it starts at the top, and cards taller than the
     // window are laid out a cell narrower to leave the scrollbar its column.
     if (state.dockScroll.view !== view) state.dockScroll = { view, offset: 0, max: 0 };
@@ -459,7 +645,8 @@ function dockView(els, props, handlers) {
     const capacity = Math.max(3, bodyRows - used - tail - 1 - 3 - 1);
     const here = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
     const list = roomMessages();
-    const rows = fitRows(messageRows(list, width - 4, state.dividerAt?.get(room.id) ?? 0), capacity);
+    const fitted = fitRows(messageRows(list, width - 4, state.dividerAt?.get(room.id) ?? 0), capacity);
+    const rows = els.Svg ? withGroupTimes(fitted) : fitted;
     const body = list.length
       ? rows.map((r) => drawRow(els, r, width - 4, handlers.onCopy))   // inside the card's border and padding
       : [Text({ key: "empty", color: theme.muted, children: "No messages yet. Say hi!" })];
@@ -499,7 +686,7 @@ function sysHints(els, view, handlers) {
     Box({ key: "share", flexShrink: 0, children: [
       Button({ key: "share-snapshot", plain: true, label: "⇪ Share", onPress: () => handlers.onShare?.(view) }),
     ] }),
-    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `· ${SYS_HINTS[view] ?? fnHint(view)}` }),
+    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `· ${(els.Svg && view === "git" ? "↻ or r refreshes · ↗ opens a link" : SYS_HINTS[view]) ?? fnHint(view)}` }),
   ] });
 }
 

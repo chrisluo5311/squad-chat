@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "monitor",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Monitor",
   "icon": "▦",
   "color": "teal",
@@ -24,16 +24,25 @@
         "body": [
           { "type": "meter", "label": "CPU", "value": "sys.cpu.pct", "right": "{sys.cpu.load}" },
           { "type": "text", "text": "{sys.cpu.spark}", "color": "teal" }
+        ],
+        "desktop": [
+          { "type": "stat", "value": "sys.cpu.pct", "right": "{sys.cpu.load}" },
+          { "type": "chart", "values": "sys.cpu.hist", "max": 100, "color": "teal", "caption": "last 2 min" }
         ]
       },
       {
         "title": "MEMORY",
         "when": "sys.mem",
-        "meta": "{sys.mem.usedText}",
+        "meta": "{sys.mem.freeText}",
         "body": [
           { "type": "meter", "label": "Memory", "value": "sys.mem.pct", "right": "{sys.mem.usedText}" },
           { "type": "meter", "label": "Pressure", "value": "sys.mem.pressure" },
           { "type": "meter", "label": "Swap", "value": "sys.mem.swapPct", "right": "{sys.mem.swapText}" }
+        ],
+        "desktop": [
+          { "type": "stat", "value": "sys.mem.pct", "right": "{sys.mem.usedOf}" },
+          { "type": "bar", "value": "sys.mem.pct" },
+          { "type": "tiles", "tiles": [{ "value": "{sys.mem.pressure}%", "sub": "pressure", "tone": "sys.mem.pressureTone" }, { "value": "{sys.mem.swapPct}%", "sub": "swap · {sys.mem.swapText}", "tone": "sys.mem.swapTone" }] }
         ]
       },
       {
@@ -43,6 +52,10 @@
         "body": [
           { "type": "meter", "label": "GPU", "value": "sys.gpu.pct", "right": "{sys.gpu.power}" },
           { "type": "text", "text": "{sys.power}\n{sys.fans}\n{sys.sensorHint}" }
+        ],
+        "desktop": [
+          { "type": "tiles", "tiles": [{ "value": "{sys.gpu.pct}%", "sub": "GPU", "tone": "sys.gpu.tone" }, { "value": "{sys.powerParts.cpu}", "sub": "CPU" }, { "value": "{sys.powerParts.gpu}", "sub": "GPU" }, { "value": "{sys.powerParts.all}", "sub": "all" }] },
+          { "type": "text", "text": "{sys.fansText}\n{sys.sensorHint}" }
         ]
       },
       {
@@ -50,6 +63,10 @@
         "body": [
           { "type": "tiles", "tiles": [{ "value": "↓ {sys.net.rxText}", "sub": "in", "color": "teal" }, { "value": "↑ {sys.net.txText}", "sub": "out", "color": "sky" }] },
           { "type": "text", "text": "↓ {sys.net.rxSpark}\n↑ {sys.net.txSpark}" }
+        ],
+        "desktop": [
+          { "type": "tiles", "tiles": [{ "value": "↓ {sys.net.rxText}", "color": "teal" }, { "value": "↑ {sys.net.txText}", "color": "sky" }] },
+          { "type": "chart", "values": "sys.net.rxHist", "values2": "sys.net.txHist", "color": "teal", "color2": "sky", "caption": "last 2 min · ↓ in · ↑ out" }
         ]
       },
       {

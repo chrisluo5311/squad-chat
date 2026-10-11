@@ -51,7 +51,7 @@ async function city(name, units, ctx) {
   const imperial = units === "imperial";
   const q = `latitude=${p.lat}&longitude=${p.lon}&timezone=auto`;
   const [fr, ar] = await Promise.all([
-    ctx.fetch(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,is_day&hourly=precipitation_probability&forecast_hours=24&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=7${imperial ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : ""}`),
+    ctx.fetch(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,is_day&hourly=precipitation_probability,temperature_2m&forecast_hours=24&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max&forecast_days=7${imperial ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : ""}`),
     ctx.fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${q}&current=us_aqi`).catch(() => null),
   ]);
   if (!fr.ok) throw new RoomError(502, `Open-Meteo answered ${fr.status} for ${p.name}`);
@@ -67,13 +67,65 @@ async function city(name, units, ctx) {
   const deg = "°";
   const days = (d.time ?? []).map((t, i) => {
     const [di] = sky(d.weather_code?.[i]);
+    const hi = round(d.temperature_2m_max?.[i]);
+    const lo = round(d.temperature_2m_min?.[i]);
+    const rain = round(d.precipitation_probability_max?.[i]) ?? 0;
     return {
       day: i === 0 ? "Today" : DAY(t),
       icon: di,
-      range: `${round(d.temperature_2m_max?.[i])}${deg} / ${round(d.temperature_2m_min?.[i])}${deg}`,
-      rain: `☂ ${round(d.precipitation_probability_max?.[i]) ?? 0}%`,
+      range: `${hi}${deg} / ${lo}${deg}`,
+      rain: `☂ ${rain}%`,
+      // For the desktop's columns: each part on its own, today marked.
+      hiText: `${hi}${deg}`,
+      loText: `${lo}${deg}`,
+      rainPct: `${rain}%`,
+      today: i === 0 || null,
     };
   });
+  // The next 24 hours for the desktop's chart: temperatures and chances of
+  // rain, and a time every 6 hours to read them by.
+  const hourTimes = f.hourly?.time ?? [];
+  const tempHours = (f.hourly?.temperature_2m ?? []).map((v) => round(v));
+  const at = (i) => (i === 0 ? "Now" : hourTimes[i]?.slice(11, 16) ?? "");
+  const hourMarks = [0, 6, 12, 18].filter((i) => i < hourTimes.length).map(at);
+  const known = tempHours.filter((v) => v != null);
+  const hiAt = tempHours.indexOf(Math.max(...known));
+  const loAt = tempHours.indexOf(Math.min(...known));
+  // The high and low are marked on the chart; the line under it adds their
+  // times and the rain.
+  const hourLine = known.length
+    ? [`high at ${at(hiAt)}`, `low at ${at(loAt)}`, peak ? `☂ ${peak}% at ${peakTime}` : "no rain"].join(" · ")
+    : "";
+  // The sun today: when it rises and sets, how far through the day it is
+  // now (0-100, none at night), and the UV.
+  const rise = d.sunrise?.[0] ?? "";
+  const set = d.sunset?.[0] ?? "";
+  const nowLocal = c.time ?? "";
+  const mins = (iso) => (iso ? Number(iso.slice(11, 13)) * 60 + Number(iso.slice(14, 16)) : NaN);
+  const [r0, s0, n0] = [mins(rise), mins(set), mins(nowLocal)];
+  const daylight = s0 - r0;
+  const sunPct = Number.isFinite(daylight) && daylight > 0 && n0 >= r0 && n0 <= s0 ? Math.round(((n0 - r0) / daylight) * 100) : null;
+  const uv = round(d.uv_index_max?.[0]);
+  const uvWord = uv == null ? "" : uv <= 2 ? "low" : uv <= 5 ? "moderate" : uv <= 7 ? "high" : uv <= 10 ? "very high" : "extreme";
+  // What comes next: the sunset in the day, else the sunrise (tomorrow's
+  // once the sun has set).
+  const span = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+  const riseNext = mins(d.sunrise?.[1] ?? "");
+  let next = "";
+  if (Number.isFinite(n0) && Number.isFinite(r0) && Number.isFinite(s0)) {
+    if (n0 < r0) next = `sunrise in ${span(r0 - n0)}`;
+    else if (n0 <= s0) next = `sunset in ${span(s0 - n0)}`;
+    else if (Number.isFinite(riseNext)) next = `sunrise in ${span(24 * 60 - n0 + riseNext)}`;
+  }
+  const sun = rise && set ? {
+    next,
+    rise: rise.slice(11, 16),
+    set: set.slice(11, 16),
+    pct: sunPct,
+    length: Number.isFinite(daylight) && daylight > 0 ? `${Math.floor(daylight / 60)}h ${daylight % 60}m of daylight` : "",
+    uvText: uv == null ? "" : `UV ${uv} ${uvWord}`,
+    uvTone: uv == null ? null : uv <= 2 ? "leaf" : uv <= 5 ? "amber" : uv <= 7 ? "coral" : "red",
+  } : null;
   const temp = round(c.temperature_2m);
   return {
     name: p.name,
@@ -88,6 +140,7 @@ async function city(name, units, ctx) {
     range: days[0]?.range ?? "",
     rain: round(d.precipitation_probability_max?.[0]) ?? 0,
     rainText: `☂ ${round(d.precipitation_probability_max?.[0]) ?? 0}%`,
+    rangeRain: days[0] ? `${days[0].range} · ☂ ${round(d.precipitation_probability_max?.[0]) ?? 0}%` : "",
     humidity: `${round(c.relative_humidity_2m)}%`,
     wind: `${round(c.wind_speed_10m)} ${imperial ? "mph" : "km/h"}`,
     aqi,
@@ -95,6 +148,12 @@ async function city(name, units, ctx) {
     aqiTone: aqi == null ? null : aqi <= 50 ? "leaf" : aqi <= 100 ? "amber" : "red",
     rainNext: rainHours.slice(0, 8),
     rainLine: rainHours.length ? `☂ ${spark(rainHours)}  ${peak ? `peak ${peak}% at ${peakTime}` : "no rain"}` : "",
+    rainHours,
+    tempHours,
+    hourMarks,
+    hourLine,
+    sun,
+    sunLine: sun ? `☀ ${sun.rise} → ${sun.set}${sun.length ? ` · ${sun.length}` : ""}${sun.uvText ? ` · ${sun.uvText}` : ""}` : "",
     days,
   };
 }

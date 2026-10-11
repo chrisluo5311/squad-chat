@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "lofi",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Lo-fi",
   "icon": "♫",
   "color": "coral",
@@ -38,7 +38,19 @@
           { "type": "meter", "label": "Volume", "value": "p.now.volume", "color": "coral" },
           { "type": "buttons", "buttons": [
             { "label": "⏮", "action": "prev" },
-            { "label": "⏯", "action": "pause" },
+            { "label": "▶", "alt": "⏸", "altWhen": "p.playing", "action": "pause" },
+            { "label": "⏹", "action": "stop" },
+            { "label": "⏭", "action": "next" },
+            { "label": "−", "action": "down" },
+            { "label": "+", "action": "up" }
+          ] },
+          { "type": "text", "text": "{p.hint}\n{p.conflict}", "color": "amber" }
+        ],
+        "desktop": [
+          { "type": "media", "title": "{p.now.title}", "sub": "{p.now.source}", "progress": "p.now.pct", "elapsed": "{p.now.posText}", "total": "{p.now.durText}", "live": "p.now.live", "playing": "p.playing", "empty": "Not playing. Press ▶ on a station below." },
+          { "type": "buttons", "split": 4, "level": "p.now.volume", "buttons": [
+            { "label": "⏮", "action": "prev" },
+            { "label": "▶", "alt": "⏸", "altWhen": "p.playing", "action": "pause" },
             { "label": "⏹", "action": "stop" },
             { "label": "⏭", "action": "next" },
             { "label": "−", "action": "down" },
@@ -50,14 +62,15 @@
       {
         "title": "STATIONS & TRACKS",
         "meta": "{p.count}",
-        "body": { "type": "list", "items": "p.entries", "title": "name", "mark": "on", "tag": "tag", "act": { "label": "▶", "action": "play", "field": "id" }, "empty": "Nothing yet: /lofi add <url or path>" }
+        "body": { "type": "list", "items": "p.entries", "title": "name", "mark": "on", "tag": "tag", "act": { "label": "▶", "action": "play", "field": "id" }, "empty": "Nothing yet: paste a URL or path below, then add" },
+        "desktop": { "type": "list", "items": "p.entries", "title": "name", "lit": "on", "tag": "tag", "act": { "label": "▶", "action": "play", "field": "id" }, "pause": "pause", "remove": { "label": "✕", "action": "remove", "field": "id" }, "empty": "Nothing yet: paste a URL or path below, then add" }
       }
     ],
     "inline": [
       { "type": "text", "text": "{p.band}" },
       { "type": "buttons", "buttons": [
         { "label": "⏮", "action": "prev" },
-        { "label": "⏯", "action": "pause" },
+        { "label": "▶", "alt": "⏸", "altWhen": "p.playing", "action": "pause" },
         { "label": "⏭", "action": "next" },
         { "label": "−", "action": "down" },
         { "label": "+", "action": "up" }
@@ -71,7 +84,8 @@
     "band": "{p.band}",
     "snapshot": "{p.share}",
     "keys": { "p": "pause", "n": "next", "b": "prev", "s": "stop", "u": "up", "d": "down" },
-    "hint": "p plays/pauses · n next · b back · u/d volume · /lofi add <url or path>",
-    "placeholder": "p · n · b · u · d · /lofi add … · /lofi import · /help"
+    "add": { "action": "add", "field": "target" },
+    "hint": "p plays/pauses · n next · b back · u/d volume · a URL or path, then add",
+    "placeholder": "Paste a URL or path, then add · p · n · b · u · d · /help"
   }
 }

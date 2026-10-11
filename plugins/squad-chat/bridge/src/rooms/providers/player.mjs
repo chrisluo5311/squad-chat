@@ -68,6 +68,23 @@ function loadList(dir) {
   }
 }
 
+// The manifest's stations taken off the list (their URLs): they come back
+// with /lofi restore.
+function loadHidden(dir) {
+  try {
+    const data = JSON.parse(readFileSync(join(dir, "hidden.json"), "utf8"));
+    return Array.isArray(data.targets) ? data.targets.map(String) : [];
+  } catch { return []; }
+}
+
+function saveHidden(dir, targets) {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const file = join(dir, "hidden.json");
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ v: 1, targets }, null, 1), { mode: 0o600 });
+  renameSync(tmp, file);
+}
+
 function saveList(dir, items) {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
@@ -89,9 +106,10 @@ function entries(params, ctx) {
   const stations = (Array.isArray(params.stations) ? params.stations : []).filter((s) => s?.url && s.name)
     .map((s, i) => ({ id: `s${i + 1}`, name: String(s.name), target: String(s.url), kind: kindOf(s.url) }))
     .filter((s) => hosts.includes(stationHost(s.target)));
+  const hidden = new Set(ctx.dataDir ? loadHidden(ctx.dataDir) : []);
   let own = [];
   try { own = loadList(ctx.dataDir); } catch { /* shown as an error by fetch */ }
-  return [...stations, ...own.map((x) => ({ ...x, kind: kindOf(x.target) }))];
+  return [...stations.filter((s) => !hidden.has(s.target)), ...own.map((x) => ({ ...x, kind: kindOf(x.target) }))];
 }
 
 // ---------------------------------------------------------------- tools
@@ -294,7 +312,7 @@ export default {
     const list = entries(params, ctx);
     let listError = "";
     try { loadList(ctx.dataDir); } catch (err) { listError = err.message; }
-    const now = { state: "stopped", title: "", source: "", timeText: "", pct: null, volume: params.volume ?? 60, mark: "■" };
+    const now = { state: "stopped", title: "", source: "", timeText: "", pct: null, volume: params.volume ?? 60, mark: "■", live: false, posText: "", durText: "" };
     if (mine(ctx)) {
       const [title, meta, pos, dur, paused, vol, idle] = await Promise.all(["media-title", "metadata", "time-pos", "duration", "pause", "volume", "idle-active"].map(get));
       const entry = list.find((e) => e.id === mpv?.entryId);
@@ -307,6 +325,9 @@ export default {
         // A YouTube live stream's position is hours into its broadcast: "live" says more.
         now.timeText = entry?.kind === "channel" ? "live" : live ? `${clock(pos)} · live` : `${clock(pos)} / ${clock(dur)}`;
         now.pct = live ? null : Math.round((pos / dur) * 100);
+        now.live = live;
+        now.posText = clock(pos);
+        now.durText = live ? "" : clock(dur);
       }
       if (Number.isFinite(vol)) now.volume = Math.round(vol);
     }
@@ -376,10 +397,21 @@ export default {
       const items = loadList(ctx.dataDir);
       const want = String(args.name ?? "").trim().toLowerCase();
       const i = items.findIndex((x) => x.name.toLowerCase() === want || x.id === args.id);
-      if (i < 0) throw new RoomError(404, `Nothing called "${args.name}" on your list. Stations can't be removed.`);
+      if (i < 0) {
+        // One of the room's own stations: hidden, not lost (/lofi restore).
+        const st = entries(params, ctx).find((x) => /^s\d+$/.test(x.id) && (x.name.toLowerCase() === want || x.id === args.id));
+        if (!st) throw new RoomError(404, `Nothing called "${args.name ?? args.id}" on the list.`);
+        saveHidden(ctx.dataDir, [...new Set([...loadHidden(ctx.dataDir), st.target])]);
+        return { ok: true, removed: st.name, hidden: true };
+      }
       const [gone] = items.splice(i, 1);
       saveList(ctx.dataDir, items);
       return { ok: true, removed: gone.name };
+    }),
+    restore: (params, args, ctx) => locked(ctx.dataDir, "list", () => {
+      const n = loadHidden(ctx.dataDir).length;
+      saveHidden(ctx.dataDir, []);
+      return { ok: true, restored: n };
     }),
     // Pixel Play's playlist, ~/.claude/pixel-play/playlist.txt, added in.
     import: (params, args, ctx) => locked(ctx.dataDir, "list", async () => {

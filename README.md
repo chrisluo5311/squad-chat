@@ -275,7 +275,7 @@ Every Claude Code session on this computer, in one place:
 
 Code you reach for again and again, kept on this computer and one click from your clipboard:
 
-* **Save** what you selected, or else the last code block in Claude's reply, with `/snippet add <name>`. Its language comes along when Claude's block names one.
+* **Save** text you type with `/snippet add <text>`, or what you selected (or else the last code block in Claude's reply) with `/snippet add`. In the Snippets room, text typed in the box and added is saved too. Snippets are numbered #1, #2, #3 and on, and a language comes along when Claude's block names one.
 * **⧉** copies a snippet, and **⇪** shares it to a chat room, with the same preview as `/chat-share`.
 * **Tidy up** with `/snippet rename <old> -> <new>` and `/snippet delete <name>`. `/snippet copy <name>` and `/snippet share <name> [#room]` work from the prompt too.
 
@@ -301,8 +301,11 @@ Now, the next 24 hours and the week, for the cities you pick, from [Open-Meteo](
 * **Now.** Each city with its country code, its sky, temperature right now and the air quality (US AQI). Today's high, low and chance of rain are in This week.
 * **The next 24 hours** for the city you pressed in Now (the first one to start): what it feels like, humidity, wind, and the chance of rain hour by hour.
 * **This week** for that city: each day's sky, high and low, and chance of rain.
+* **Sunrise & sunset** for that city: when the sun rises and sets, how much daylight that makes, how long until the next sunrise or sunset, and today's UV with its level (low, moderate, high, very high, extreme).
 
-Add a city with `/chat set weather cities Tokyo` (or several, `Osaka, Seoul`). It goes below the ones you have. ✕ at the end of a city's row drops it, as does `-Tokyo`, and once one city is left the ✕ goes, so there's always one. A name the place search can't find is refused, and the country code after each name shows when a slip landed on another real place. Units are `/chat set weather units imperial`, and `/chat set weather city Tokyo` picks the city shown below, as pressing it does. Inside the room, `/set cities …` does the same. It refreshes every 10 minutes while you look at it and every 30 otherwise.
+On the desktop app, Now shows each city as a tile (press its name to show it below), the next 24 hours as a temperature line over the chance of rain, the week as a column per day, and the sun as an arc across the card with the sun where it is now (a moon at night).
+
+Add a city by typing its name in the room's box and pressing add (or several, `Osaka, Seoul`), or from anywhere with `/chat set weather cities Tokyo`. It goes below the ones you have. ✕ at the end of a city's row drops it, as does `-Tokyo`, and once one city is left the ✕ goes, so there's always one. A name the place search can't find is refused, and the country code after each name shows when a slip landed on another real place. Units are `/chat set weather units imperial`, and `/chat set weather city Tokyo` picks the city shown below, as pressing it does. Inside the room, `/set cities …` does the same. It refreshes every 10 minutes while you look at it and every 30 otherwise.
 
 #### ✦ Tech News
 
@@ -323,7 +326,7 @@ A market counts as open only when its quotes are from today and the clock is ins
 Music in the background while you work, played the way [Pixel Play](https://github.com/chrisluo5311/Pixel-Play) plays it: through [mpv](https://mpv.io), with YouTube through [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`).
 
 * **Stations** to start: Lofi Girl's YouTube live streams (looked up each time, as their links change) and SomaFM's Groove Salad, Fluid, Lush and Drone Zone.
-* **Your own**: `/lofi add <url>` for a stream or a YouTube link, `/lofi add ~/Music/focus` for a file or a whole folder, and `/lofi import` for Pixel Play's playlist. `/lofi remove <name>` takes one off.
+* **Your own**: paste a stream or YouTube link, or a path like `~/Music/focus` (a file or a whole folder), into the room's box and press add. `/lofi add <url or path>` does the same from anywhere. `/lofi import` brings in Pixel Play's playlist. `/lofi remove <name>` (or ✕ on its row) takes one off. A built-in station taken off is only hidden: `/lofi restore` brings them back.
 * **Play** with ▶ on a row, the ⏮ ⏯ ⏹ ⏭ − + buttons, or single keys typed in the room: `p` plays or pauses, `n` next, `b` back, `s` stop, `u` and `d` volume. `/lofi play <name>`, `pause`, `next` and `vol 40` work from the prompt.
 
 Nothing plays or reaches the network until you press play. mpv stops when the session ends, however it ends. If Pixel Play is playing too, the room says so. `/chat-share lofi` tells a chat room what you're listening to.
@@ -361,7 +364,8 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/chat store [words]` | The rooms in the [room store](https://chrisluo5311.github.io/squad-chat/rooms/store/), and which you have |
 | `/chat install <id>` / `update [id]` / `uninstall <id>` | Install a room from the store (a look first, then again to install), bring installed ones up to date, or remove one |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. Some lists, as Weather's cities, add what's typed instead of replacing the list. |
-| `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the Snippets room |
+| `/snippet add <text>` | Save the text as a snippet. Snippets are numbered 1, 2, 3 and on |
+| `/snippet add` | Save the text you selected, or else the last code block in Claude's reply, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |
 | `/lofi play [name]` / `pause` / `next` / `prev` / `stop` / `vol <0-100>` | Drive the Lo-fi room's player from the prompt |

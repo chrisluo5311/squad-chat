@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "snippet",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Snippets",
   "icon": "⌘",
   "color": "amber",
@@ -24,17 +24,29 @@
           "preview": "body",
           "copy": "body",
           "share": "body",
-          "empty": "Nothing saved yet. Select some code, or let Claude write some, then /snippet add <name>."
+          "empty": "Nothing saved yet. /snippet add <text>, or select some code (or let Claude write some), then /snippet add."
+        },
+        "desktop": {
+          "type": "list",
+          "items": "list.items",
+          "title": "name",
+          "tag": "lang",
+          "preview": "body",
+          "copy": "body",
+          "share": "body",
+          "act": { "label": "Delete", "action": "delete", "field": "name" },
+          "code": true,
+          "empty": "Nothing saved yet. /snippet add <text>, or select some code (or let Claude write some), then /snippet add."
         }
       }
     ],
-    "inline": { "type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "share": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <name>" },
+    "inline": { "type": "list", "items": "list.items", "title": "name", "tag": "lang", "copy": "body", "share": "body", "max": 4, "empty": "Nothing saved yet: /snippet add <text>" },
     "pills": [
       {"draw": {"type": "icon", "icon": "stack"}, "color": "amber", "value": "{list.count}", "sub": "saved"},
       {"when": "list.latest", "color": "amber", "value": "{list.latest.name}", "tag": "{list.latest.lang}", "tip": ["Latest saved: {list.latest.name}"]}
     ],
     "band": "{list.count} snippets",
     "hint": "⧉ copies · ⇪ shares · /snippet add|rename|delete",
-    "placeholder": "/snippet add <name> · /snippet delete <name> · /help"
+    "placeholder": "Type or paste text, then add · /snippet delete #2 · /help"
   }
 }

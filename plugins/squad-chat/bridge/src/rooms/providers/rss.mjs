@@ -80,6 +80,7 @@ export default {
         url: x.link,
         source: x.source,
         meta: `${x.source}${x.at ? ` · ${ago(x.at / 1000, now)}` : ""}`,
+        age: x.at ? ago(x.at / 1000, now) : "",
         share: `${x.title}\n${x.link}`,
       }));
     return { items, count: items.length, failed: failed.join(", ") };

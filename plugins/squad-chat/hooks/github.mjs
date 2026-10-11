@@ -21,6 +21,7 @@ export function emptyGit() {
     runs: [],             // recent Actions runs
     issues: [],           // open issues assigned to me
     alerts: null,         // Dependabot alerts, or null when not readable
+    log: [],              // the newest commits of every branch, laid out as a graph (layoutGraph)
   };
 }
 
@@ -136,6 +137,45 @@ export function parseAlerts(list) {
   }));
 }
 
+// `git log` over every branch and remote, one record a commit (fields split
+// by \x1f, records by \x1e): hash, parents, refs, subject, commit time.
+export const LOG_FORMAT = "%H%x1f%P%x1f%D%x1f%s%x1f%ct%x1e";
+export function parseLog(out) {
+  return String(out ?? "").split("\x1e").map((r) => r.replace(/^\n/, "")).filter((r) => r.includes("\x1f")).map((r) => {
+    const [hash, parents, refs, subject, ct] = r.split("\x1f");
+    let head = null;
+    const names = String(refs ?? "").split(",").map((x) => x.trim()).filter(Boolean).flatMap((x) => {
+      if (x.startsWith("HEAD -> ")) { head = x.slice(8); return [head]; }
+      if (x === "HEAD" || x.endsWith("/HEAD") || x.startsWith("tag: ")) return x.startsWith("tag: ") ? [x.slice(5)] : [];
+      return [x];
+    });
+    return { hash, parents: String(parents ?? "").split(" ").filter(Boolean), refs: names, head, subject: subject ?? "", at: Number(ct) * 1000 || 0 };
+  });
+}
+
+// Lanes for a graph of `commits` (newest first): each row's commit column,
+// the lanes coming in at its top and going out at its bottom (a lane holds
+// the hash it waits for), so a drawing can run a line from each lane above
+// to where that hash is below. Lanes past `maxLanes` are dropped.
+export function layoutGraph(commits, maxLanes = 6) {
+  let lanes = [];
+  return commits.map((c) => {
+    const before = lanes.slice();
+    let col = lanes.indexOf(c.hash);
+    if (col < 0) { col = lanes.indexOf(null); if (col < 0) col = lanes.length; }
+    const after = lanes.map((h) => (h === c.hash ? null : h));
+    after[col] = c.parents[0] ?? null;
+    for (const p of c.parents.slice(1)) {
+      if (after.includes(p)) continue;
+      const free = after.indexOf(null);
+      if (free >= 0) after[free] = p; else after.push(p);
+    }
+    while (after.length && after.at(-1) == null) after.pop();
+    lanes = after.slice(0, maxLanes);
+    return { ...c, col: Math.min(col, maxLanes - 1), before: before.slice(0, maxLanes), after: lanes.slice() };
+  });
+}
+
 // ---------------------------------------------------------------- fetching
 
 const NO_AUTH = /gh auth login|not logged in|authentication|HTTP 401/i;
@@ -162,6 +202,11 @@ export async function fetchGit(run, prev = emptyGit()) {
       : { ...prev, status: "error", error: firstLine(status.stderr) || "git status failed", stale: prev.status === "ok" };
   }
   next.local = parseGitStatus(status.stdout);
+  // The newest commits of every branch and remote, for the desktop's graph.
+  try {
+    const log = await run(["git", "log", "--branches", "--remotes", "--tags", "--date-order", "-n", "10", `--format=${LOG_FORMAT}`]);
+    next.log = log.exitCode === 0 ? layoutGraph(parseLog(log.stdout)) : prev.log ?? [];
+  } catch { next.log = prev.log ?? []; }
   // A branch that was never pushed has nothing to be ahead of: count its
   // commits past the main branch instead.
   if (!next.local.upstream && next.local.branch && next.local.branch !== "detached") {
@@ -173,10 +218,10 @@ export async function fetchGit(run, prev = emptyGit()) {
     gh(["repo", "view", "--json", "nameWithOwner,url"]),
     prev.me ? Promise.resolve(null) : gh(["api", "user", "--jq", ".login"]),
   ]);
-  if (repo.thrown) return { ...emptyGit(), local: next.local, status: "no-gh" };
+  if (repo.thrown) return { ...emptyGit(), local: next.local, log: next.log, status: "no-gh" };
   if (repo.exitCode !== 0) {
-    if (NO_AUTH.test(repo.stderr)) return { ...emptyGit(), local: next.local, status: "no-auth" };
-    if (NO_REMOTE.test(repo.stderr)) return { ...emptyGit(), local: next.local, status: "ok", fetchedAt: Date.now(), error: "no GitHub remote" };
+    if (NO_AUTH.test(repo.stderr)) return { ...emptyGit(), local: next.local, log: next.log, status: "no-auth" };
+    if (NO_REMOTE.test(repo.stderr)) return { ...emptyGit(), local: next.local, log: next.log, status: "ok", fetchedAt: Date.now(), error: "no GitHub remote" };
     return { ...prev, local: next.local, status: "error", error: firstLine(repo.stderr) || "gh failed", stale: prev.status === "ok" };
   }
   const r = json(repo.stdout);

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "weather",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Weather",
   "icon": "☀",
   "color": "sky",
@@ -33,12 +33,17 @@
           "drop": { "setting": "cities", "field": "query" },
           "pick": { "setting": "city", "field": "query", "as": "wx.first" },
           "empty": "No cities yet: /set cities Taipei, Tokyo"
-        }
+        },
+        "desktop": { "type": "grid", "items": "wx.cities", "title": "name", "icon": "icon", "value": "tempText", "sub": "desc", "note": "rangeRain", "across": 3, "pickTitle": true, "hint": "Press a city's name to show its next 24 hours, week and sun below.", "pick": { "setting": "city", "field": "query", "as": "wx.first" }, "drop": { "setting": "cities", "field": "query" }, "empty": "No cities yet: type one below, then add" }
       },
       {
         "title": "NEXT 24 HOURS",
         "meta": "{wx.first.name}",
-        "body": { "type": "text", "text": "{wx.first.icon} {wx.first.desc}, {wx.first.feels} · humidity {wx.first.humidity} · wind {wx.first.wind}\n{wx.first.rainLine}" }
+        "body": { "type": "text", "text": "{wx.first.icon} {wx.first.desc}, {wx.first.feels} · humidity {wx.first.humidity} · wind {wx.first.wind}\n{wx.first.rainLine}" },
+        "desktop": [
+          { "type": "text", "text": "{wx.first.desc}, {wx.first.feels} · humidity {wx.first.humidity} · wind {wx.first.wind}" },
+          { "type": "forecast", "values": "wx.first.tempHours", "bars": "wx.first.rainHours", "marks": "wx.first.hourMarks", "caption": "{wx.first.hourLine}", "color": "amber", "color2": "sky" }
+        ]
       },
       {
         "title": "THIS WEEK",
@@ -52,7 +57,17 @@
             { "field": "range", "width": 12, "right": true },
             { "field": "rain", "right": true, "color": "sky" }
           ]
-        }
+        },
+        "desktop": { "type": "strip", "items": "wx.first.days", "title": "day", "icon": "icon", "value": "hiText", "sub": "loText", "note": "rainPct", "lit": "today" }
+      },
+      {
+        "title": "SUNRISE & SUNSET",
+        "meta": "{wx.first.name}",
+        "badge": "{wx.first.sun.uvText}",
+        "badgeTone": "wx.first.sun.uvTone",
+        "when": "wx.first.sun",
+        "body": { "type": "text", "text": "{wx.first.sunLine}" },
+        "desktop": { "type": "sun", "rise": "{wx.first.sun.rise}", "set": "{wx.first.sun.set}", "value": "wx.first.sun.pct", "sub": "{wx.first.sun.length}", "note": "{wx.first.sun.next}" }
       }
     ],
     "inline": {
@@ -75,7 +90,8 @@
       {"when": "wx.first.aqi", "draw": {"type": "dot"}, "colorFrom": "wx.first.aqiTone", "label": "AQI", "value": "{wx.first.aqi}", "tip": ["Air quality (US AQI) {wx.first.aqi}"]}
     ],
     "band": "{wx.first.icon} {wx.first.name} {wx.first.tempText} · {wx.first.rainText}",
-    "hint": "/set cities Tokyo adds a city · ✕ drops one · /set units imperial · r refreshes",
-    "placeholder": "/set cities Osaka · /set units metric · r · /help"
+    "add": "cities",
+    "hint": "type a city, then add · ✕ drops one · /set units imperial · r refreshes",
+    "placeholder": "Type a city (Osaka, New York), then add · /set units imperial · /help"
   }
 }

@@ -53,6 +53,8 @@ export const state = {
   sessions: [],           // other sessions' heartbeats, from the bridge
   feedFilter: "all",      // the Agents room's feed: all | here | errors
   collapsed: new Set(),   // sessions whose agent trees are folded in the Agents room
+  addingRoom: false,      // the desktop header's "+" is open: the rooms without a tab
+  join: null,             // the desktop header's "＋ join": { step: "name" | "pass", name, error }
   dockScroll: { view: null, offset: 0, max: 0 },   // the docked room's cards, scrolled past `offset` rows
   ended: false,
 };

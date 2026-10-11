@@ -402,11 +402,16 @@ export function shareItem(item, say, { inPane = false, target = null } = {}) {
 
 // ---------------------------------------------------------------- the Snippet room
 
-const SNIPPET_HELP = "Use /snippet add <name>, /snippet rename <old> -> <new>, /snippet delete <name>, /snippet copy <name> or /snippet share <name> [#room].";
+const SNIPPET_HELP = "Use /snippet add <text> (or /snippet add alone for the selection or Claude's last code block), /snippet rename <old> -> <new>, /snippet delete <name>, /snippet copy <name> or /snippet share <name> [#room].";
 
-// "/snippet add <name>" saves what's selected, or else the last code block
-// in Claude's reply. The list stays on this computer, in the Snippet room.
+// "/snippet add <text>" saves the text, "/snippet add" what's selected or
+// else the last code block in Claude's reply. The list stays on this
+// computer, in the Snippet room.
 // `copy(text)` puts text on the clipboard, `setView(id)` shows a room.
+// A snippet's name as said back: "#2" for a numbered one, "deploy" in quotes.
+const unhash = (name) => String(name).replace(/^#(?=\d+$)/, "");
+const label = (name) => (/^\d+$/.test(name) ? `#${name}` : `"${name}"`);
+
 export async function snippet(call, args, say, { sources, copy, setView, inPane = false } = {}) {
   const [verb = "", ...rest] = String(args ?? "").trim().split(/\s+/).filter(Boolean);
   const name = rest.filter((w) => !(verb.toLowerCase() === "share" && w.startsWith("#"))).join(" ");
@@ -416,7 +421,8 @@ export async function snippet(call, args, say, { sources, copy, setView, inPane 
     if (!n) return null;
     let items = state.fn.get("snippet")?.data.list?.items;
     if (!items) items = (await call("/fnroom/refresh", { room: "snippet" })).data?.list?.items ?? [];
-    return items.find((x) => x.name.toLowerCase() === n.toLowerCase()) ?? null;
+    const want = n.replace(/^#(?=\d+$)/, "").toLowerCase();   // "#2" is snippet 2
+    return items.find((x) => x.name.toLowerCase() === want) ?? null;
   };
   switch (verb.toLowerCase()) {
     case "": {
@@ -424,24 +430,31 @@ export async function snippet(call, args, say, { sources, copy, setView, inPane 
       return setView?.("snippet");
     }
     case "add": case "save": {
-      if (!name) return say("Name it: /snippet add <name>");
-      const selected = String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
-      const block = selected.trim() ? { body: selected, lang: null } : lastCodeBlock(await sources.messages());
-      if (!block?.body?.trim()) return say("Select some text first, or ask Claude for some code.");
-      const r = await act("add", { name, body: block.body, lang: block.lang ?? null });
+      // "/snippet add <text>" saves the text typed after "add", its lines
+      // kept; "/snippet add" alone, what's selected or else Claude's last
+      // code block. Snippets are numbered: the next is one past the highest.
+      const typed = String(args ?? "").trim().replace(/^\S+\s*/, "").trimEnd();
+      const selected = typed ? "" : String(await sources.selection() ?? "").replace(/^(\s*\n)+/, "").trimEnd();
+      const block = typed ? { body: typed, lang: null }
+        : selected.trim() ? { body: selected, lang: null } : lastCodeBlock(await sources.messages());
+      if (!block?.body?.trim()) return say("Type it after the command (/snippet add <text>), select some text, or ask Claude for some code.");
+      let items = state.fn.get("snippet")?.data.list?.items;
+      if (!items) items = (await call("/fnroom/refresh", { room: "snippet" })).data?.list?.items ?? [];
+      const named = String(1 + Math.max(0, ...items.map((x) => (/^\d+$/.test(x.name) ? Number(x.name) : 0))));
+      const r = await act("add", { name: named, body: block.body, lang: block.lang ?? null });
       const lines = r.item.body.split("\n").length;
       const secret = findSecret(r.item.body);
-      return say(`Saved "${r.item.name}"${r.item.lang ? ` (${r.item.lang})` : ""}, ${lines} line${lines === 1 ? "" : "s"}.${secret ? ` ⚠ It looks like it has ${secret}. It stays on this computer, but check it before you share it.` : ""}`);
+      return say(`Saved ${label(r.item.name)}${r.item.lang ? ` (${r.item.lang})` : ""}, ${lines} line${lines === 1 ? "" : "s"}.${secret ? ` ⚠ It looks like it has ${secret}. It stays on this computer, but check it before you share it.` : ""}`);
     }
     case "delete": case "remove": case "rm": {
-      if (!name) return say("Which one? /snippet delete <name>");
-      const r = await act("delete", { name });
-      return say(`Deleted "${r.item.name}".`);
+      if (!name) return say("Which one? /snippet delete <name or #number>");
+      const r = await act("delete", { name: unhash(name) });
+      return say(`Deleted ${label(r.item.name)}.`);
     }
     case "rename": case "mv": {
       const m = /^(.+?)\s*(?:->|→)\s*(.+)$/.exec(name) ?? (rest.length === 2 ? [null, rest[0], rest[1]] : null);
       if (!m) return say("Use /snippet rename <old name> -> <new name>");
-      const r = await act("rename", { name: m[1].trim(), to: m[2].trim() });
+      const r = await act("rename", { name: unhash(m[1].trim()), to: m[2].trim() });
       return say(`Renamed it "${r.item.name}".`);
     }
     case "copy": case "cp": {
@@ -461,7 +474,7 @@ export async function snippet(call, args, say, { sources, copy, setView, inPane 
 
 // ---------------------------------------------------------------- the Lo-fi room
 
-const LOFI_HELP = "Use /lofi play [name], pause, next, prev, stop, vol <0-100>, add <url, file or folder> [# name], remove <name> or import (Pixel Play's playlist).";
+const LOFI_HELP = "Use /lofi play [name], pause, next, prev, stop, vol <0-100>, add <url, file or folder> [# name], remove <name>, restore (the stations you removed) or import (Pixel Play's playlist).";
 
 // "/lofi add <url or path>", "/lofi play Groove Salad", "/lofi vol 40": the
 // Lo-fi room's player, from the prompt or the pane.
@@ -497,7 +510,11 @@ export async function lofi(call, args, say, { setView } = {}) {
     case "remove": case "rm": {
       if (!arg) return say("Which one? /lofi remove <name>");
       const r = await act("remove", { name: arg });
-      return say(`Removed "${r.removed}".`);
+      return say(`Removed "${r.removed}".${r.hidden ? " /lofi restore brings it back." : ""}`);
+    }
+    case "restore": {
+      const r = await act("restore", {});
+      return say(r.restored ? `Brought back ${r.restored} station${r.restored === 1 ? "" : "s"}.` : "No stations were removed.");
     }
     case "import": {
       const r = await act("import");
@@ -580,6 +597,16 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
   // A room's own keys: "p" in Lo-fi plays or pauses.
   const key = isFnRoom(view) && text.length === 1 ? state.fn.get(view).manifest.layout.keys?.[text.toLowerCase()] : null;
   if (key) return call("/fnroom/action", { room: view, action: key, args: {} });
+  // A room that adds through an action ({ action, field }): what's typed,
+  // a URL or a path in Lo-fi, goes to it whole. "/Users/me/song.mp3" is a
+  // path, not a command: a command's name has no "/" or "." in it.
+  const adds = isFnRoom(view) ? state.fn.get(view).manifest.layout.add : null;
+  if (adds && typeof adds === "object" && !/^\/[\w-]+(\s|$)/.test(text)) {
+    const [target, ...name] = text.split(" # ");
+    const r = await call("/fnroom/action", { room: view, action: adds.action, args: { [adds.field]: target.trim(), name: name.join(" # ").trim() || undefined } });
+    if (r?.added > 1) return say(`Added ${r.added} tracks.`);
+    return r?.first ? say(`Added "${r.first}".`) : undefined;
+  }
   const m = /^\/([\w-]+)\s*([\s\S]*)$/.exec(text);
   if (m) {
     const [, cmd, args] = m;
@@ -612,6 +639,18 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
         return say(`Unknown command /${cmd}. Try /help.`);
     }
   }
+  // A room whose layout names an "add" list: what's typed goes into it
+  // ("TSLA" in Stocks, or "TSLA, NVDA"), as /set <list> +TSLA would.
+  const addTo = isFnRoom(view) ? state.fn.get(view).manifest.layout.add : null;
+  if (typeof addTo === "string") {
+    // A list that adds what has no sign ("add": true, Weather's cities)
+    // takes the text whole, split only by commas: "New York" is one city.
+    if (state.fn.get(view).manifest.settings?.[addTo]?.add) return roomSettings(call, `${addTo} ${text}`, say, { room: view });
+    for (const one of text.split(/[,\s]+/).filter(Boolean)) await roomSettings(call, `${addTo} +${one}`, say, { room: view });
+    return;
+  }
+  // In the Snippets room, what's typed (not a command) is a new snippet.
+  if (view === "snippet") return snippet(call, `add ${String(value ?? "").replace(/^\s*\n/, "").trimEnd()}`, say, { sources, copy, setView, inPane: true });
   if (view !== "chat") return say(`This is the ${view} room: type a command (/help), or pick a chat room to talk.`);
   // The pane itself shows each sign-in step, so only errors (thrown) need words.
   if (state.auth === "signed_out" || state.auth === "code_sent") return login(call, text, () => {});

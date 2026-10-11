@@ -25,9 +25,9 @@ function fakeCtx(routes) {
 }
 
 const FORECAST = {
-  current: { temperature_2m: 23.4, apparent_temperature: 26.9, weather_code: 61, relative_humidity_2m: 85, wind_speed_10m: 4.4, is_day: 1 },
-  hourly: { time: Array.from({ length: 24 }, (_, i) => `2026-10-09T${String(i).padStart(2, "0")}:00`), precipitation_probability: Array.from({ length: 24 }, (_, i) => (i === 15 ? 80 : 10)) },
-  daily: { time: ["2026-10-09", "2026-10-10", "2026-10-11"], weather_code: [61, 3, 0], temperature_2m_max: [27.9, 27.8, 28.1], temperature_2m_min: [21.2, 23, 22.6], precipitation_probability_max: [80, 20, 0] },
+  current: { time: "2026-10-09T12:00", temperature_2m: 23.4, apparent_temperature: 26.9, weather_code: 61, relative_humidity_2m: 85, wind_speed_10m: 4.4, is_day: 1 },
+  hourly: { time: Array.from({ length: 24 }, (_, i) => `2026-10-09T${String(i).padStart(2, "0")}:00`), precipitation_probability: Array.from({ length: 24 }, (_, i) => (i === 15 ? 80 : 10)), temperature_2m: Array.from({ length: 24 }, (_, i) => 20 + (i === 14 ? 8 : i % 5)) },
+  daily: { time: ["2026-10-09", "2026-10-10", "2026-10-11"], weather_code: [61, 3, 0], temperature_2m_max: [27.9, 27.8, 28.1], temperature_2m_min: [21.2, 23, 22.6], precipitation_probability_max: [80, 20, 0], sunrise: ["2026-10-09T06:00", "2026-10-10T06:01", "2026-10-11T06:01"], sunset: ["2026-10-09T18:00", "2026-10-10T17:59", "2026-10-11T17:58"], uv_index_max: [6.4, 3, 8] },
 };
 
 describe("open-meteo", () => {
@@ -45,6 +45,21 @@ describe("open-meteo", () => {
     assert.deepEqual([t.icon, t.desc, t.tempText, t.feels, t.range, t.rainText, t.aqiText, t.wind], ["☂", "Rain", "23°", "feels 27°", "28° / 21°", "☂ 80%", "AQI 57", "4 km/h"]);
     assert.match(t.rainLine, /^☂ ▂{15}▇▂{8}  peak 80% at 15:00$/);   // scaled to 100%, not to the peak
     assert.deepEqual(d.days.map((x) => `${x.day} ${x.icon} ${x.range} ${x.rain}`), ["Today ☂ 28° / 21° ☂ 80%", "Sat ☁ 28° / 23° ☂ 20%", "Sun ☀ 28° / 23° ☂ 0%"]);
+    // The desktop's parts: the day's columns, the 24 hours, the sun.
+    assert.deepEqual([d.days[0].hiText, d.days[0].loText, d.days[0].rainPct, d.days[0].today, d.days[1].today], ["28°", "21°", "80%", true, null]);
+    assert.equal(t.tempHours.length, 24);
+    assert.deepEqual(t.hourMarks, ["Now", "06:00", "12:00", "18:00"]);
+    assert.equal(t.hourLine, "high at 14:00 · low at Now · ☂ 80% at 15:00");
+    assert.deepEqual(t.sun, { next: "sunset in 6h 00m", rise: "06:00", set: "18:00", pct: 50, length: "12h 0m of daylight", uvText: "UV 6 high", uvTone: "coral" });
+    assert.equal(t.rangeRain, "28° / 21° · ☂ 80%");
+    // At night no sun on the arc, and the next is tomorrow's sunrise.
+    const night = fakeCtx({
+      "https://geocoding-api.open-meteo.com/": [200, { results: [{ name: "Taipei", country_code: "TW", latitude: 25.05, longitude: 121.53 }] }],
+      "https://api.open-meteo.com/v1/forecast": [200, { ...FORECAST, current: { ...FORECAST.current, time: "2026-10-09T21:47" } }],
+      "https://air-quality-api.open-meteo.com/": [200, { current: { us_aqi: 57 } }],
+    });
+    const n = (await openMeteo.fetch({ cities: ["Taipei"], units: "metric" }, night)).first.sun;
+    assert.deepEqual([n.pct, n.next], [null, "sunrise in 8h 14m"]);
     assert.equal(d.cities[1].aqiText, "no place called Atlantis");
     assert.equal(d.cities[1].place, "Atlantis");   // one bad city doesn't sink the rest
 
@@ -98,7 +113,7 @@ describe("hn", () => {
     assert.equal(d.count, 2);
     assert.deepEqual(d.items[0], {
       id: "1", title: "Deno Is Joining Cloudflare", url: "https://deno.com/blog/cloudflare", source: "deno.com", score: 458, comments: 254, age: "2h",
-      meta: "▲ 458 · 254 comments · 2h", share: "Deno Is Joining Cloudflare\nhttps://deno.com/blog/cloudflare\nhttps://news.ycombinator.com/item?id=1",
+      meta: "▲ 458 · 254 comments · 2h", detail: "254 comments · 2h · deno.com", share: "Deno Is Joining Cloudflare\nhttps://deno.com/blog/cloudflare\nhttps://news.ycombinator.com/item?id=1",
     });
     assert.equal(d.items[1].url, "https://news.ycombinator.com/item?id=2");   // an Ask HN links to itself
     assert.deepEqual(await hn.fetch({ list: "off" }, ctx), { items: [], count: 0, off: true });

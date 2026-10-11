@@ -41,6 +41,7 @@ export default {
         comments: s.descendants ?? 0,
         age: ago(s.time, now),
         meta: `▲ ${s.score ?? 0} · ${s.descendants ?? 0} comments · ${ago(s.time, now)}`,
+        detail: `${s.descendants ?? 0} comments · ${ago(s.time, now)} · ${host(s.url) ?? "HN"}`,
         share: `${s.title}\n${url}${url === discuss ? "" : `\n${discuss}`}`,
       };
     });
