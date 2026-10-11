@@ -2,10 +2,11 @@
 // line of text. Each figure is a section with a small drawing, and hovering
 // one opens a card with the detail.
 //
-//   ◔ Usage │ (ring) 77k ⌒⌒ │ (ring·moon) 5h 31% │ (ring·moon) 7d 58% │ $4.21 │ ▮▮▮▮▯ cache │ ●●○ agents
+//   ◔ Usage │ ☀ 77k │ ▂▅▃█ ▲ +5.3k │ (ring·moon) 5h 31% │ (ring·moon) 7d 58% │ $4.21 │ ▮▮▮▮▯ cache │ ●●○ agents
 //
-// The rings are "orbits": the arc is the share used, and for a rate-limit
-// window a small moon rides the ring at the share of time already gone. Arc
+// The context leads with the weather (drawn here, after the terminal's ☀ ☁ ☂
+// ☇ ↯) and a bar per recent prompt for what it added. The rings are
+// "orbits": the arc is the share used, and for a rate-limit window a small moon rides the ring at the share of time already gone. Arc
 // behind the moon: on pace. Arc past it: using faster than time, drawn warm.
 // The terminal keeps its line of text (sysBandPieces).
 
@@ -63,29 +64,37 @@ export function orbitSvg(used, color, elapsed = null) {
   return svg(RING, RING, body);
 }
 
-// The context after each turn as a soft hill: a line with a fading fill.
-export function hillSvg(values, color) {
-  const W = 38;
-  const H = 14;
-  const vals = values.slice(-10);
-  const max = Math.max(...vals, 1);
-  const min = Math.min(...vals);
-  const span = Math.max(1, max - min);
-  const pts = vals.map((v, i) => [(i / Math.max(1, vals.length - 1)) * (W - 2) + 1, H - 2 - ((v - min) / span) * (H - 4)]);
-  // A smooth path through the points: each segment a curve with level handles.
-  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
-  for (let i = 1; i < pts.length; i++) {
-    const [x0, y0] = pts[i - 1];
-    const [x1, y1] = pts[i];
-    const mx = (x0 + x1) / 2;
-    d += ` C${mx.toFixed(1)} ${y0.toFixed(1)} ${mx.toFixed(1)} ${y1.toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`;
-  }
-  const last = pts.at(-1);
-  const area = `${d} L${last[0].toFixed(1)} ${H} L${pts[0][0].toFixed(1)} ${H}Z`;
-  return svg(W, H,
-    `<defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0.45"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>` +
-    `<path d="${area}" fill="url(#h)"/><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>` +
-    `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="1.9" fill="${color}"/>`);
+// The weather, drawn: a sun with dotted rays, a cloud, an umbrella, a cloud
+// with a bolt, and two arrows pressing in for "compact soon".
+const WEATHER = {
+  "☀": (c) => `<circle cx="9" cy="9" r="3.6" fill="${c}"/>` +
+    [0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
+      const t = (a * Math.PI) / 180;
+      return `<circle cx="${(9 + 6.6 * Math.cos(t)).toFixed(2)}" cy="${(9 + 6.6 * Math.sin(t)).toFixed(2)}" r="1.15" fill="${c}"/>`;
+    }).join(""),
+  "☁": (c) => `<path d="M5 14h8.6a3.4 3.4 0 0 0 .2-6.8A4.6 4.6 0 0 0 5 8.3 2.9 2.9 0 0 0 5 14z" fill="${c}"/>`,
+  "☂": (c) => `<path d="M2 9.5a7 7 0 0 1 14 0z" fill="${c}"/><path d="M9 9.5v5a1.8 1.8 0 0 1-3.6 0" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round"/>`,
+  "☇": (c) => `<path d="M4.4 11h8.8a3 3 0 0 0 .2-6A4.2 4.2 0 0 0 5 5.6 2.7 2.7 0 0 0 4.4 11z" fill="${c}" fill-opacity="0.55"/><path d="M9.8 8.5 7 12.6h2.6L8.4 16.5l3.4-4.9H9.2z" fill="${c}"/>`,
+  "↯": (c) => `<path d="M2.5 4.5 7 9l-4.5 4.5M15.5 4.5 11 9l4.5 4.5" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 3v12" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="1.5 2.5"/>`,
+};
+export function weatherSvg(icon, color) {
+  return svg(18, 18, (WEATHER[icon] ?? WEATHER["☁"])(color));
+}
+
+// What each recent prompt added to the context, a bar each: the latest in the
+// weather's color, the ones before it in grey.
+const BAR = { w: 4, gap: 2, h: 14 };
+export function barsWidth(n) {
+  return Math.max(1, n) * (BAR.w + BAR.gap) - BAR.gap;
+}
+export function barsSvg(deltas, color) {
+  const max = Math.max(...deltas, 1);
+  const body = deltas.map((d, i) => {
+    const h = Math.max(2, (Math.max(0, d) / max) * BAR.h);
+    const last = i === deltas.length - 1;
+    return `<rect x="${i * (BAR.w + BAR.gap)}" y="${(BAR.h - h).toFixed(1)}" width="${BAR.w}" height="${h.toFixed(1)}" rx="1.2" fill="${last ? color : "rgba(127,127,127,0.45)"}"/>`;
+  }).join("");
+  return svg(barsWidth(deltas.length), BAR.h, body);
 }
 
 // The cache's share of input as five cells, like a battery.
@@ -144,9 +153,10 @@ export function usageSections(now, columns = 100) {
     out.push({
       key: "ctx",
       color: f.color,
-      ring: { used: c.percent },
+      weather: f.icon,
       value: fmtTokens(c.tokens),
-      hill: columns >= 70 && hist.length >= 2 ? hist : null,
+      bars: hist.length >= 2 ? hist.slice(1).map((t, i) => t - hist[i]).slice(columns >= 70 ? -8 : -4) : null,
+      sub: delta ? (delta > 0 ? `▲ +${fmtTokens(delta)}` : `▼ −${fmtTokens(-delta)}`) : null,
       tip: [
         `${f.icon} ${f.word} · ${Math.round(c.percent)}% of the context`,
         `  ${fmtTokens(c.tokens)} of ${fmtTokens(c.window)} tokens`,
@@ -244,12 +254,16 @@ function hoverCard({ Box, Text }, color, lines) {
 function section(els, s) {
   const { Box, Text, Svg } = els;
   const parts = [];
+  if (s.weather) parts.push(Svg({ key: "wx", source: weatherSvg(s.weather, s.color), alt: s.tip[0], width: 18, height: 18 }));
   if (s.ring) parts.push(Svg({ key: "ring", source: orbitSvg(s.ring.used, s.color, s.ring.elapsed ?? null), alt: s.tip[0], width: RING, height: RING }));
   if (s.cells != null) parts.push(Svg({ key: "cells", source: cellsSvg(s.cells, s.color), alt: s.tip[0], width: 28, height: 14 }));
   if (s.dots) parts.push(Svg({ key: "dots", source: dotsSvg(s.dots), alt: s.tip[0], width: Math.max(8, Math.min(MAX_DOTS, s.dots.length) * 9), height: 14, isInteractive: true }));
   if (s.label) parts.push(Text({ key: "l", color: theme.muted, children: s.label }));
   parts.push(Text({ key: "v", bold: true, ...(s.valueColor ? { color: s.valueColor } : {}), children: s.value }));
-  if (s.hill) parts.push(Svg({ key: "hill", source: hillSvg(s.hill, s.color), alt: "Context after each turn", width: 38, height: 14 }));
+  if (s.bars) {
+    parts.push(Text({ key: "bsep", color: theme.muted, children: "│" }));
+    parts.push(Svg({ key: "bars", source: barsSvg(s.bars, s.color), alt: `Tokens added by the last ${s.bars.length} prompts`, width: barsWidth(s.bars.length), height: BAR.h }));
+  }
   if (s.sub) parts.push(Text({ key: "s", color: theme.muted, children: s.sub }));
   if (s.key === "agents" && s.dots.length > MAX_DOTS) parts.push(Text({ key: "more", color: theme.muted, children: `+${s.dots.length - MAX_DOTS}` }));
   return Box({

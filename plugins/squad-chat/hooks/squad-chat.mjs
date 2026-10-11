@@ -14,7 +14,7 @@
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
-import { applyMeasure, applyTurnUsage, recordTurnContext, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
 
@@ -425,6 +425,24 @@ async function saveSysRooms($, list) {
 
 // The engine's figures, asked for directly: on opening the room, and for
 // the context breakdown (estimated locally, so it costs nothing).
+// This session's tokens and chart, kept per session across reloads, and
+// dropped once a session has been idle for a week.
+const USAGE_PREFIX = "usage:";
+const USAGE_KEEP_MS = 7 * 86_400_000;
+async function restoreSessionUsage($) {
+  try {
+    const now = Date.now();
+    for (const key of await $.store.keys()) {
+      if (!key.startsWith(USAGE_PREFIX)) continue;
+      const saved = await $.store.get(key);
+      if (key === USAGE_PREFIX + state.sessionId) restoreUsage(state.usage, saved);
+      else if (!(now - (saved?.at ?? 0) < USAGE_KEEP_MS)) await $.store.delete(key);
+    }
+  } catch (err) {
+    $.ui.log(`squad-chat: could not restore usage: ${err?.message ?? err}`, { to: "debug" });
+  }
+}
+
 async function refreshUsage($) {
   try {
     const u = await $.session.usage(state.usage.showBreakdown ? { breakdown: "summary" } : {});
@@ -579,6 +597,7 @@ export function register(on, options) {
     const savedView = await $.store.get("view");
     if (savedView === "chat" || (typeof savedView === "string" && ROOM_ID.test(savedView))) state.view = savedView;
     try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
+    await restoreSessionUsage($);
     try { cwdCache = await $.session.cwd(); } catch { cwdCache = null; }
     try { state.usage.model = (await $.session.model()) || state.usage.model; } catch { /* the first turn tells */ }
     beat($, false);   // this session's own row in the Agents room, before any heartbeat goes out
@@ -715,10 +734,12 @@ export function register(on, options) {
     turnEnded(state.usage, Date.now());
     sysChanged($);
     // The context after the turn, for the band's forecast chart: read fresh,
-    // as the status line has it once the turn is done.
+    // as the status line has it once the turn is done. Kept, so a reload
+    // brings the chart and the cache figures back.
     (async () => {
       await refreshUsage($);
       if (recordTurnContext(state.usage)) $.ui.invalidate("ui.render");
+      if (state.sessionId) await $.store.set(USAGE_PREFIX + state.sessionId, usageSnapshot(state.usage, Date.now()));
     })().catch(() => {});
     if (state.working) {
       state.working = false;

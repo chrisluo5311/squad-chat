@@ -229,27 +229,41 @@ test('band: stays out of the way while the pane is shown', SLOW, async ($, on) =
 
 test('band: on the desktop, Usage is a capsule of drawings with a card per figure', SLOW, async ($, on) => {
   recordUi(on)
+  on('session.id', () => ({ value: 'sess-band' }))
   on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
   on('turn.complete', () => ({ text: '', usage: { input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' } }))
-  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  const store: Record<string, unknown> = { view: 'usage' }
+  const bridge = fakeBridge(on, { store })
   await bridge.start($)
   signedIn(bridge)
   await settle()
   const resetsAt = new Date(Date.now() + 2.5 * 3_600_000).toISOString()   // half the 5-hour window gone
-  await $.session.measure({ context: { tokens: 77_000, window: 200_000, percent: 38 }, rateLimits: [{ kind: 'five_hour', percentUsed: 70, resetsAt }], cost: { usd: 4.21 }, changed: ['context', 'rateLimits', 'cost'] })
+  const measure = (tokens: number) => $.session.measure({ context: { tokens, window: 200_000, percent: (tokens / 200_000) * 100 }, rateLimits: [{ kind: 'five_hour', percentUsed: 70, resetsAt }], cost: { usd: 4.21 }, changed: ['context', 'rateLimits', 'cost'] })
+  await measure(71_700)
   await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  await settle()
+  await measure(77_000)
+  await $.turn.complete({ turnId: 't2', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
   await settle()
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
   expect(await ui.find({ type: 'Text', text: '◔ Usage' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '77k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '▲ +5k' })).toBeDefined()           // what the last prompt added
+  const alts = (await ui.findAll({ type: 'Svg' })).map((x: any) => x.props.alt)
+  expect(alts.some((a: string) => a.startsWith('☁ Cloudy'))).toBe(true)          // the weather, drawn
+  expect(alts).toContain('Tokens added by the last 1 prompts')                   // a bar per prompt
   expect(await ui.find({ type: 'Text', text: '70%' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '$4.21' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '90%' })).toBeDefined()              // the cache cells
   expect(await ui.find({ type: 'Text', text: /20 pts ahead of the clock/ })).toBeDefined()   // in the 5h card
-  expect(((await ui.find({ type: 'Svg' })) as any)?.props.alt).toMatch(/of the context/)
   await ui.press({ key: 'open' })
   await ui.unmount()
+
+  // Kept for a reload: the tokens (so the cache figure) and the chart.
+  const kept = store['usage:sess-band'] as any
+  expect(kept.tokens.cacheRead).toBe(18_000)
+  expect(kept.ctxHistory).toEqual([71_700, 77_000])
 
   // The terminal keeps its line of text.
   const term = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
