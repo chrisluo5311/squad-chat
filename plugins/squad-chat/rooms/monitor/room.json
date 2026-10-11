@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "monitor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Monitor",
   "icon": "▦",
   "color": "teal",
@@ -69,6 +69,14 @@
       { "type": "meter", "label": "CPU", "value": "sys.cpu.pct", "right": "{sys.cpu.tempText}" },
       { "type": "meter", "label": "Memory", "value": "sys.mem.pct", "right": "{sys.mem.usedText}" },
       { "type": "text", "text": "↓ {sys.net.rxText}  ↑ {sys.net.txText}" }
+    ],
+    "pills": [
+      {"draw": {"type": "icon", "icon": "chip"}, "colorFrom": "sys.cpu.tone", "value": "{sys.cpu.pct}%", "tip": ["CPU {sys.cpu.pct}%", "{sys.cpu.meta}", "{sys.cpu.load}"]},
+      {"draw": {"type": "area", "value": "sys.cpu.hist"}, "colorFrom": "sys.cpu.tone"},
+      {"when": "sys.mem", "draw": {"type": "orbit", "value": "sys.mem.pct"}, "colorFrom": "sys.mem.tone", "label": "mem", "value": "{sys.mem.pct}%", "tip": ["Memory {sys.mem.pct}% used", "{sys.mem.usedText}", "swap {sys.mem.swapText}"]},
+      {"draw": {"type": "icon", "icon": "net"}, "color": "sky", "value": "↓{sys.net.rxText}", "sub": "↑{sys.net.txText}", "tip": ["Network", "down {sys.net.rxText} · up {sys.net.txText}"]},
+      {"when": "sys.cpu.temp", "draw": {"type": "thermometer", "value": "sys.cpu.temp"}, "colorFrom": "sys.cpu.tempTone", "value": "{sys.cpu.tempText}", "tip": ["CPU {sys.cpu.tempText}", "{sys.fans}"]},
+      {"when": "sys.battery", "draw": {"type": "battery", "value": "sys.battery.pct", "flag": "sys.battery.charging"}, "colorFrom": "sys.battery.tone", "value": "{sys.battery.pct}%", "tip": ["Battery {sys.battery.pct}%", "{sys.battery.detail}"]}
     ],
     "band": "{sys.band}",
     "hint": "/set cpu_temp 90 · /set alerts off · /chat set monitor",

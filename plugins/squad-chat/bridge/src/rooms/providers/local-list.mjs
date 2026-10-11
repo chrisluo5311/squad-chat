@@ -67,7 +67,8 @@ export default {
   hosts: [],
   async fetch(params, ctx) {
     const items = load(ctx.dataDir).sort(byName);
-    return { items, count: items.length };
+    const latest = items.reduce((a, x) => (!a || String(x.at ?? "") > String(a.at ?? "") ? x : a), null);
+    return { items, count: items.length, latest: latest ? { name: latest.name, lang: latest.lang ?? "", at: latest.at ?? "" } : null };
   },
   actions: {
     add: (params, args, ctx) => locked(ctx.dataDir, () => {

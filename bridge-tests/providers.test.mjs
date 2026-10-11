@@ -97,7 +97,7 @@ describe("hn", () => {
     const d = await hn.fetch({ list: "best", count: 3 }, ctx);
     assert.equal(d.count, 2);
     assert.deepEqual(d.items[0], {
-      id: "1", title: "Deno Is Joining Cloudflare", url: "https://deno.com/blog/cloudflare", source: "deno.com",
+      id: "1", title: "Deno Is Joining Cloudflare", url: "https://deno.com/blog/cloudflare", source: "deno.com", score: 458, comments: 254, age: "2h",
       meta: "▲ 458 · 254 comments · 2h", share: "Deno Is Joining Cloudflare\nhttps://deno.com/blog/cloudflare\nhttps://news.ycombinator.com/item?id=1",
     });
     assert.equal(d.items[1].url, "https://news.ycombinator.com/item?id=2");   // an Ask HN links to itself

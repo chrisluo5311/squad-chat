@@ -32,6 +32,14 @@ export function classify(entry) {
   return { symbol: s.toUpperCase(), yahoo: s.toUpperCase() };
 }
 
+// The day's prices, thinned to 24 points at most: the band's line.
+function thin(values) {
+  const v = values.filter(Number.isFinite);
+  if (v.length < 2) return [];
+  const step = Math.max(1, Math.ceil(v.length / 24));
+  return v.filter((_, i) => i % step === 0 || i === v.length - 1);
+}
+
 function spark(values) {
   const v = values.filter(Number.isFinite);
   if (v.length < 2) return "";
@@ -166,6 +174,7 @@ export default {
         arrow: dir > 0 ? "▲" : dir < 0 ? "▼" : "–",
         color: dir > 0 ? upColor : dir < 0 ? downColor : "sand",
         spark: spark(y?.line ?? []),
+        line: thin(y?.line ?? []),
         volText: volume(t ? t.volume : y.volume, isTw),
         market: isTw ? "TW" : "",
         open,
@@ -194,6 +203,8 @@ export default {
       markets,
       anyOpen,
       opensAt,
+      statusText: anyOpen ? "open" : opensAt ? `closed · opens ${new Date(opensAt).toTimeString().slice(0, 5)}` : "closed",
+      statusTone: anyOpen ? "leaf" : "sand",
       updated: new Date(now).toTimeString().slice(0, 5),
       band: quotes.filter((q) => q.price != null).slice(0, 4).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(" · ") || "no quotes",
       note: "Prices may be delayed. Not investment advice.",

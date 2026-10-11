@@ -314,6 +314,7 @@ export default {
     const conflict = now.state === "playing" && (await pixelPlaying(ctx)) ? "Pixel Play is playing too." : "";
     return {
       available: !!t.mpv,
+      playing: now.state === "playing",
       ytdlp: !!t.ytdlp,
       now,
       entries: list.map((e) => ({ id: e.id, name: e.name, tag: TAG[e.kind] + (e.kind !== "file" && e.kind !== "stream" && !t.ytdlp ? " (needs yt-dlp)" : ""), on: mine(ctx) && e.id === mpv.entryId && now.state !== "stopped" ? "♫" : "" })),

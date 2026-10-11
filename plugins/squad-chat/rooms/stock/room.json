@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "stock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Stocks",
   "icon": "$",
   "color": "rose",
@@ -52,6 +52,10 @@
       "max": 4,
       "empty": "Nothing to watch: /set watchlist 2330, AAPL"
     },
+    "pills": [
+      {"draw": {"type": "dot"}, "colorFrom": "q.statusTone", "sub": "{q.statusText}", "tip": ["{q.markets}", "updated {q.updated}", "{q.note}"]},
+      {"each": "q.quotes", "max": 4, "draw": {"type": "area", "value": "it.line"}, "colorFrom": "it.color", "label": "{it.symbol}", "sub": "{it.priceText}", "value": "{it.arrow}{it.pctText}", "tip": ["{it.symbol} {it.name}", "{it.priceText} ({it.changeText}, {it.pctText})", "volume {it.volText}"]}
+    ],
     "band": "{q.band}",
     "hint": "/set watchlist +2454 · /set colors green-up · /set move 3 · r",
     "placeholder": "/set watchlist +TSLA · /set move 0 · r · /help"

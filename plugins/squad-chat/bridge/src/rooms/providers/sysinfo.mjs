@@ -36,6 +36,11 @@ function spark(values, max = Math.max(...values, 0)) {
   return values.map((v) => (max > 0 && v > 0 ? SPARKS[Math.min(7, Math.max(0, Math.round((v / max) * 7)))] : SPARKS[0])).join("");
 }
 
+// A figure's color on the band: its own until `warn`, amber, then red.
+function tone(v, warn, alarm, calm = "teal") {
+  return v >= alarm ? "red" : v >= warn ? "amber" : calm;
+}
+
 function push(list, v) {
   list.push(Number.isFinite(v) ? v : 0);
   if (list.length > HISTORY) list.shift();
@@ -275,6 +280,10 @@ export default {
     return {
       cpu: {
         pct: cpuPct,
+        hist: [...s.hist.cpu],
+        tone: tone(cpuPct, 70, 90),
+        temp: Number.isFinite(sen?.cpuTemp) ? Math.round(sen.cpuTemp) : null,
+        tempTone: Number.isFinite(sen?.cpuTemp) ? tone(sen.cpuTemp, 80, 90) : null,
         cores: t.cores,
         load: load.length ? `load ${load[0].toFixed(2)}` : "",
         spark: spark(s.hist.cpu, 100),
@@ -284,6 +293,7 @@ export default {
       },
       mem: m ? {
         pct: memPct,
+        tone: tone(memPct, 80, 90),
         usedText: `${bytes(m.used)} / ${bytes(m.total, 0)}`,
         swapPct: m.swapTotal > 0 ? pctOf(m.swapUsed, m.swapTotal) : 0,
         swapText: m.swapTotal > 0 ? `${bytes(m.swapUsed)} / ${bytes(m.swapTotal, 0)}` : "no swap",
@@ -295,7 +305,7 @@ export default {
       fans: (sen?.fans ?? []).length ? sen.fans.map((r, i) => `fan ${i + 1} ${Math.round(r)} rpm`).join(" · ") : "",
       net: { ...net, rxSpark: spark(s.hist.rx, netMax), txSpark: spark(s.hist.tx, netMax) },
       disk: d ? { pct: pctOf(d.used, d.total), usedText: `${bytes(d.used, 0)} / ${bytes(d.total, 0)}`, freeText: `${bytes(d.free, 0)} free` } : null,
-      battery: b ? { pct: b.pct, state: b.state, detail: [b.state, b.timeText, b.power].filter(Boolean).join(" · ") } : null,
+      battery: b ? { pct: b.pct, state: b.state, charging: b.state !== "on battery", tone: b.state === "on battery" ? tone(100 - b.pct, 80, 90, "leaf") : "leaf", detail: [b.state, b.timeText, b.power].filter(Boolean).join(" · ") } : null,
       sensorHint: os.sensorHint,
       // 🌡 and ⚡ carry the emoji selector (U+FE0F): without it the terminal
       // gives 🌡 one cell, draws it in two, and it covers the space after it.

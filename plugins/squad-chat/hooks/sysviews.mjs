@@ -15,6 +15,8 @@ import {
   totalTokens, cacheRatio, burnRate, limitWindows, spendSeries, toolRows, agentTree, agentCounts, isEnded, topTool,
 } from "./metrics.mjs";
 import { gitAttention, ghStatusText } from "./github.mjs";
+import * as K from "./bandkit.mjs";
+import { capsule, draw, label as pLabel, value as pValue, sub as pSub, msg as pMsg } from "./bands.mjs";
 import { orderSessions, mergedFeed } from "./sessions.mjs";
 import { fnMeta, fnDock, fnInline, fnBandPieces, fnSnapshot } from "./fnviews.mjs";
 
@@ -630,6 +632,82 @@ export function sysBandPieces(view, width = 0) {
     [{ text: `${list.length} session${list.length === 1 ? "" : "s"}`, color: theme.muted }],
     [{ text: `${running} agent${running === 1 ? "" : "s"} running`, color: running ? theme.agents : theme.muted }],
   ]);
+}
+
+// ---------------------------------------------------------------- the desktop band
+
+function gitSections() {
+  const g = state.git;
+  if (g.status === "no-repo") return [{ key: "none", color: theme.warn, parts: [pSub("not a git repository")] }];
+  const l = g.local;
+  const out = [];
+  if (l?.branch) {
+    out.push({ key: "branch", color: theme.git, parts: [draw(K.icon("branch", theme.git), "Branch"), pValue(l.branch)],
+      tip: [`⎇ ${l.branch}`, g.repo?.name ? `in ${g.repo.name}` : null, l.upstream ? `tracks ${l.upstream}` : "not pushed yet"] });
+    const ahead = l.upstream ? l.ahead : l.unpushed ?? 0;
+    out.push({ key: "sync", color: ahead ? theme.sky : theme.git, parts: l.upstream
+      ? (l.ahead || l.behind
+        ? [pValue(`↑${l.ahead}`, l.ahead ? theme.sky : theme.muted), pValue(`↓${l.behind}`, l.behind ? theme.amber : theme.muted)]
+        : [pSub("in sync")])
+      : [pSub(l.unpushed ? `↑${l.unpushed} local` : "local")],
+      tip: l.upstream ? [`${l.ahead} to push · ${l.behind} to pull`] : ["No upstream: push to share this branch"] });
+    const dot = (c) => draw({ source: K.svg(10, 10, `<circle cx="5" cy="5" r="4" fill="${c}"/>`), width: 10, height: 10 }, "Working tree");
+    out.push(l.changed
+      ? { key: "tree", color: theme.amber, parts: [dot(theme.amber), pValue(String(l.changed)), pSub("changed")], tip: [`${l.changed} file${l.changed === 1 ? "" : "s"} changed, not committed`] }
+      : { key: "tree", color: theme.online, parts: [dot(theme.online), pSub("clean")] });
+  }
+  if (ghStatusText(g)) out.push({ key: "gh", color: theme.warn, parts: [pSub("gh isn't set up")], tip: [ghStatusText(g)] });
+  const pr = g.pr;
+  if (pr) {
+    const c = pr.checks;
+    const color = c.fail ? theme.error : c.pending ? theme.amber : c.total ? theme.online : theme.git;
+    const word = !c.total ? [pSub("no checks")]
+      : c.fail ? [pValue(`${c.fail} failing`, theme.error)]
+        : c.pending ? [pValue(`${c.pending} running`, theme.amber)]
+          : [pValue(`${c.pass}/${c.total}`, theme.online), pSub("checks")];
+    out.push({ key: "pr", color, parts: [
+      draw(K.icon("pr", theme.git), "Pull request"),
+      pLabel(`#${pr.number}`),
+      c.total ? draw(K.segments([{ n: c.pass, color: theme.online }, { n: c.pending, color: theme.amber }, { n: c.fail, color: theme.error }]), `checks: ${c.pass} passed, ${c.pending} running, ${c.fail} failed`) : null,
+      ...word,
+    ], tip: [`#${pr.number} ${pr.title}`, `${prState(pr).text} · ${mergePiece(pr).text}`, `checks ✓${c.pass} ●${c.pending} ✗${c.fail}`] });
+  }
+  if (g.reviewMe.length) out.push({ key: "review", color: theme.amber, parts: [pValue(String(g.reviewMe.length), theme.amber), pSub(`review${g.reviewMe.length === 1 ? "" : "s"} for you`)],
+    tip: g.reviewMe.slice(0, 5).map((n) => `#${n}`) });
+  return out;
+}
+
+function agentSections(now) {
+  const list = allSessions();
+  const agents = list.flatMap((s) => s.agents ?? []);
+  const running = agents.filter((a) => !isEnded(a.status)).length;
+  const out = [{
+    key: "sessions",
+    color: theme.agents,
+    parts: [draw(K.dots(list.map((s) => (sessionBusy(s) ? "live" : "idle")), theme.agents), "Sessions, busy ones breathing"), pValue(String(list.length)), pSub(`session${list.length === 1 ? "" : "s"}`)],
+    tip: [`${list.length} Claude session${list.length === 1 ? "" : "s"} here`, ...list.slice(0, 5).map((s) => `${sessionBusy(s) ? "●" : "○"} ${s.project}${s.branch ? ` (${s.branch})` : ""} · ${s.activity?.state ?? "idle"}`)],
+  }];
+  if (agents.length) {
+    const marks = agents.map((a) => (!isEnded(a.status) ? "live" : a.status === "completed" ? "done" : "failed"));
+    out.push({ key: "agents", color: theme.agents, parts: [draw(K.dots(marks, theme.agents), `${running} running`), pValue(String(running)), pSub("running")],
+      tip: [`${running} running · ${agents.length - running} done`, ...agents.slice(-5).map((a) => `${isEnded(a.status) ? (a.status === "completed" ? "✓" : "✗") : "◐"} ${a.type}: ${clip(a.description ?? "", 40)}`)] });
+  } else out.push({ key: "agents", color: theme.muted, parts: [pSub("no agents running")] });
+  const busy = list.find(sessionBusy);
+  if (busy) {
+    const a = busy.activity ?? {};
+    const what = a.state === "tool" ? `${a.tool} · ${fmtDur(a.since ? now - a.since : 0)}` : a.state === "thinking" ? "thinking" : "waiting on agents";
+    out.push({ key: "busy", color: nameColor(busy.id), parts: [pValue(busy.project, nameColor(busy.id)), pSub(what)],
+      tip: [busy.project, busy.branch ? `⎇ ${busy.branch}` : null, shortModel(busy.model)] });
+  }
+  return out;
+}
+
+// Git and Agents on the desktop, as a capsule.
+export function sysBandDesktop(view, els, { onOpen }, now = Date.now()) {
+  const meta = SYS[view];
+  if (!meta || view === "usage") return null;
+  const sections = view === "git" ? gitSections() : agentSections(now);
+  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen });
 }
 
 // The same as plain text.

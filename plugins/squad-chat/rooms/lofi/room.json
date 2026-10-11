@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "lofi",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "name": "Lo-fi",
   "icon": "♫",
   "color": "coral",
@@ -62,6 +62,11 @@
         { "label": "−", "action": "down" },
         { "label": "+", "action": "up" }
       ] }
+    ],
+    "pills": [
+      {"draw": {"type": "equalizer", "flag": "p.playing"}, "color": "coral", "msg": "{p.now.title}", "tip": ["{p.now.title}", "{p.now.source}"]},
+      {"when": "p.now.pct", "draw": {"type": "progress", "value": "p.now.pct"}, "color": "coral", "sub": "{p.now.timeText}"},
+      {"color": "sand", "label": "vol", "value": "{p.now.volume}"}
     ],
     "band": "{p.band}",
     "snapshot": "{p.share}",

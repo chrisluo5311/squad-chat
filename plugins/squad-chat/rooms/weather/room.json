@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "weather",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "name": "Weather",
   "icon": "☀",
   "color": "sky",
@@ -68,6 +68,12 @@
       "max": 4,
       "empty": "No cities yet: /set cities Taipei"
     },
+    "pills": [
+      {"when": "wx.first", "draw": {"type": "weather", "value": "wx.first.icon"}, "color": "amber", "label": "{wx.first.name}", "sub": "{wx.first.country}", "value": "{wx.first.tempText}", "tip": ["{wx.first.place} · {wx.first.desc}", "{wx.first.feels} · {wx.first.range}", "humidity {wx.first.humidity} · wind {wx.first.wind}"]},
+      {"when": "wx.first", "draw": {"type": "drop", "value": "wx.first.rain"}, "color": "sky", "value": "{wx.first.rain}%", "tip": ["{wx.first.rain}% chance of rain today", "{wx.first.rainLine}"]},
+      {"when": "wx.first.rainNext", "draw": {"type": "bars", "value": "wx.first.rainNext"}, "color": "sky", "tip": ["Chance of rain, the next 8 hours"]},
+      {"when": "wx.first.aqi", "draw": {"type": "dot"}, "colorFrom": "wx.first.aqiTone", "label": "AQI", "value": "{wx.first.aqi}", "tip": ["Air quality (US AQI) {wx.first.aqi}"]}
+    ],
     "band": "{wx.first.icon} {wx.first.name} {wx.first.tempText} · {wx.first.rainText}",
     "hint": "/set cities Tokyo adds a city · ✕ drops one · /set units imperial · r refreshes",
     "placeholder": "/set cities Osaka · /set units metric · r · /help"

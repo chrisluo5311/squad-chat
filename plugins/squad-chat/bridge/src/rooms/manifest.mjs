@@ -4,7 +4,7 @@
 // bindings are plain paths into the providers' data. Nothing in it runs.
 
 export const SCHEMA = 1;
-export const COLORS = ["sky", "leaf", "lilac", "amber", "coral", "rose", "teal", "sand"];
+export const COLORS = ["sky", "leaf", "lilac", "amber", "coral", "rose", "teal", "sand", "red"];
 const RESERVED = new Set(["chat", "usage", "git", "agents", "all", "none"]);
 
 const ID = /^[a-z][a-z0-9-]{1,23}$/;
@@ -28,6 +28,42 @@ const WIDGETS = {
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" },
 };
+
+// The desktop band's pills: each a small drawing, words around it and a card
+// on hover, all bound to the data by paths and {path} templates. A pill with
+// `each` repeats for the first `max` items of a list, which its bindings
+// reach as `it` ({it.symbol}). The drawings are the plugin's own; a manifest
+// only picks one and says where its number comes from.
+export const DRAWS = ["area", "bars", "orbit", "drop", "battery", "thermometer", "equalizer", "progress", "weather", "icon", "dot"];
+export const PILL_ICONS = ["branch", "pr", "stack", "flame", "chip", "net", "spark", "clock"];
+const NEEDS_VALUE = new Set(["area", "bars", "orbit", "drop", "battery", "thermometer", "progress", "weather"]);
+const PILL_TEXT = ["label", "value", "sub", "msg", "tag"];
+
+function checkPills(pills, errors) {
+  if (pills == null) return;
+  if (!Array.isArray(pills) || !pills.length || pills.length > 6) return errors.push("layout.pills: 1-6 pills");
+  pills.forEach((p, i) => {
+    const where = `layout.pills[${i}]`;
+    if (!p || typeof p !== "object") return errors.push(`${where}: not an object`);
+    for (const k of ["when", "each", "colorFrom"]) if (p[k] != null && !(typeof p[k] === "string" && PATH.test(p[k]))) errors.push(`${where}.${k}: not a path`);
+    if (p.max != null && !(Number.isInteger(p.max) && p.max > 0 && p.max <= 6)) errors.push(`${where}.max: 1-6`);
+    if (p.color != null && !COLORS.includes(p.color)) errors.push(`${where}.color: one of ${COLORS.join(", ")}`);
+    for (const k of PILL_TEXT) if (p[k] != null && !str(p[k], 200)) errors.push(`${where}.${k}: 1-200 characters`);
+    if (p.tip != null && !(Array.isArray(p.tip) && p.tip.length && p.tip.length <= 6 && p.tip.every((t) => str(t, 200)))) errors.push(`${where}.tip: 1-6 lines of 1-200 characters`);
+    const d = p.draw;
+    if (d != null) {
+      if (!DRAWS.includes(d?.type)) errors.push(`${where}.draw.type: one of ${DRAWS.join(", ")}`);
+      else {
+        if (NEEDS_VALUE.has(d.type) && !(typeof d.value === "string" && PATH.test(d.value))) errors.push(`${where}.draw.value: a path`);
+        if (d.flag != null && !(typeof d.flag === "string" && PATH.test(d.flag))) errors.push(`${where}.draw.flag: not a path`);
+        if (d.type === "icon" && !PILL_ICONS.includes(d.icon)) errors.push(`${where}.draw.icon: one of ${PILL_ICONS.join(", ")}`);
+      }
+      for (const k of Object.keys(d ?? {})) if (!["type", "value", "flag", "icon"].includes(k)) errors.push(`${where}.draw.${k}: not a field of a drawing`);
+    }
+    if (!PILL_TEXT.some((k) => p[k] != null) && d == null) errors.push(`${where}: shows nothing (a drawing or some text)`);
+    for (const k of Object.keys(p)) if (![...PILL_TEXT, "when", "each", "max", "color", "colorFrom", "tip", "draw"].includes(k)) errors.push(`${where}.${k}: not a field of a pill`);
+  });
+}
 
 // A setting's kinds. A "list" holds strings (or URLs, whose hosts must be
 // the room's own), "enum" one of `values`. A list with `add` takes what's
@@ -295,6 +331,7 @@ export function checkManifest(m, providers) {
     });
     if (l.inline != null) checkBody(l.inline, "layout.inline", errors, actionsUsed);
     for (const k of ["band", "hint", "placeholder", "snapshot"]) if (l[k] != null && !str(l[k], 200)) errors.push(`layout.${k}: 1-200 characters`);
+    checkPills(l.pills, errors);
     if (l.keys != null) {
       const keys = typeof l.keys === "object" && !Array.isArray(l.keys) ? Object.entries(l.keys) : null;
       if (!keys || keys.length > 10) errors.push("layout.keys: up to 10 keys");
