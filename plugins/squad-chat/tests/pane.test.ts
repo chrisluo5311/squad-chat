@@ -227,6 +227,37 @@ test('band: stays out of the way while the pane is shown', SLOW, async ($, on) =
   await ui.unmount()
 })
 
+test('band: on the desktop, Usage is a capsule of drawings with a card per figure', SLOW, async ($, on) => {
+  recordUi(on)
+  on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
+  on('turn.complete', () => ({ text: '', usage: { input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' } }))
+  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const resetsAt = new Date(Date.now() + 2.5 * 3_600_000).toISOString()   // half the 5-hour window gone
+  await $.session.measure({ context: { tokens: 77_000, window: 200_000, percent: 38 }, rateLimits: [{ kind: 'five_hour', percentUsed: 70, resetsAt }], cost: { usd: 4.21 }, changed: ['context', 'rateLimits', 'cost'] })
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  await settle()
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◔ Usage' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '77k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '70%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '$4.21' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '90%' })).toBeDefined()              // the cache cells
+  expect(await ui.find({ type: 'Text', text: /20 pts ahead of the clock/ })).toBeDefined()   // in the 5h card
+  expect(((await ui.find({ type: 'Svg' })) as any)?.props.alt).toMatch(/of the context/)
+  await ui.press({ key: 'open' })
+  await ui.unmount()
+
+  // The terminal keeps its line of text.
+  const term = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await term.find({ type: 'Svg' })).toBeUndefined()
+  expect(await term.find({ type: 'Text', text: /Cloudy/ })).toBeDefined()
+  await term.unmount()
+})
+
 test('unread shows on the status line and clears when the pane is focused', SLOW, async ($, on) => {
   const seen = recordUi(on)
   const bridge = fakeBridge(on)

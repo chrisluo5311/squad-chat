@@ -15,6 +15,7 @@ import { snippetTitle, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
 import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge } from "./sysviews.mjs";
 import { fnHint, fnPlaceholder } from "./fnviews.mjs";
+import { usageBandDesktop } from "./usageband.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
 
@@ -618,6 +619,11 @@ function inlineView(els, props, handlers) {
 export function bandView(els, props, { onOpen }) {
   const { Box, Text, Button } = els;
   const view = activeView();
+  // The desktop draws Usage as a capsule of small drawings (usageband.mjs).
+  if (view === "usage" && props.surface === "desktop" && els.Svg) {
+    const capsule = usageBandDesktop(els, props, { onOpen });
+    if (capsule) return capsule;
+  }
   if (view !== "chat") {
     const meta = roomMeta(view);
     return Box({ flexDirection: "row", children: [

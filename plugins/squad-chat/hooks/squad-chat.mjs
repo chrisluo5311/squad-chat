@@ -685,7 +685,7 @@ export function register(on, options) {
     if (e.props?.hasSurvey || (activeView() === "chat" && !chatShown)) return next(e);
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
-    return bandView($.ui.resolve(e), e.props ?? {}, { onOpen: () => { void openPane($); } });
+    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openPane($); } });
   });
 
   // "auto" do not disturb: a turn still running after LONG_TURN_MS goes quiet
