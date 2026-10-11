@@ -703,11 +703,11 @@ function agentSections(now) {
 }
 
 // Git and Agents on the desktop, as a capsule.
-export function sysBandDesktop(view, els, { onOpen }, now = Date.now()) {
+export function sysBandDesktop(view, els, { onOpen, columns = 0 }, now = Date.now()) {
   const meta = SYS[view];
   if (!meta || view === "usage") return null;
   const sections = view === "git" ? gitSections() : agentSections(now);
-  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen });
+  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen, columns });
 }
 
 // The same as plain text.

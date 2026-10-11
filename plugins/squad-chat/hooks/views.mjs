@@ -618,7 +618,7 @@ function inlineView(els, props, handlers) {
 
 // The chat room on the desktop: faces of who's online, what's new, and the
 // latest message (or who's typing).
-function chatBandDesktop(els, { onOpen }) {
+function chatBandDesktop(els, { onOpen, columns }) {
   const room = currentRoom();
   const others = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id);
   const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
@@ -652,7 +652,7 @@ function chatBandDesktop(els, { onOpen }) {
       sections.push({ key: "msg", color: who, grow: true, parts: [pValue(displayName(last), who), pMsg(oneLine(last))] });
     }
   }
-  return capsule(els, { room: `${glyph.brand} #${room.slug}`, color: theme.accent, sections, onOpen });
+  return capsule(els, { room: `${glyph.brand} #${room.slug}`, color: theme.accent, sections, onOpen, columns });
 }
 
 // One line above the prompt while the pane can't be seen (terminal too
@@ -662,10 +662,11 @@ export function bandView(els, props, { onOpen }) {
   const { Box, Text, Button } = els;
   const view = activeView();
   if (props.surface === "desktop" && els.Svg) {
-    const desk = view === "chat" ? chatBandDesktop(els, { onOpen })
+    const fit = { onOpen, columns: props.bodyColumns || 100 };
+    const desk = view === "chat" ? chatBandDesktop(els, fit)
       : view === "usage" ? usageBandDesktop(els, props, { onOpen })
-        : fnMeta(view) ? fnBandDesktop(view, els, { onOpen })
-          : sysBandDesktop(view, els, { onOpen });
+        : fnMeta(view) ? fnBandDesktop(view, els, fit)
+          : sysBandDesktop(view, els, fit);
     if (desk) return desk;
   }
   if (view !== "chat") {
