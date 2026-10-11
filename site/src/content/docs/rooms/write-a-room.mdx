@@ -3,6 +3,8 @@ title: Write a room
 description: A room is one JSON file. How to write one, try it, and put it in the store.
 ---
 
+import BandGallery from "../../../components/BandGallery.astro";
+
 A room is one file, `room.json`: what it's called, which of squad-chat's providers feed it, the hosts they may reach, its settings, and how its cards look. There's no code in it, and there can't be. That's what lets anyone install a room without trusting whoever wrote it. If what you want needs a provider squad-chat doesn't have, open an issue or a pull request for the provider itself.
 
 ## A first room
@@ -122,7 +124,11 @@ Paths are plain dots into the providers' data, starting with the provider's `id`
 
 ## The band on the desktop
 
-In the terminal the band is the `band` line. In the desktop app it can be a row of pills, each a small drawing with a few words and a card on hover. `pills` lists up to 6:
+In the terminal the band is the `band` line. In the desktop app it can be a row of pills, each a small drawing with a few words and a card on hover. Here is every room's band as the app draws it (the figures are made up, hover a pill to light it):
+
+<BandGallery />
+
+`pills` lists up to 6:
 
 ```json
 "pills": [

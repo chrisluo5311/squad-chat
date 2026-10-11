@@ -3,6 +3,8 @@ title: Layouts
 description: Where the pane goes, depending on your terminal's width, and the status line.
 ---
 
+import BandGallery from "../../../components/BandGallery.astro";
+
 Claude Code decides where the pane goes, not the mod. It depends on the layout and how wide your terminal is.
 
 | Where | What you see |
@@ -16,6 +18,10 @@ Claude Code decides where the pane goes, not the mod. It depends on the layout a
   <img src="/squad-chat/media/band.png" alt="The one-line summary above the prompt while the pane is closed" />
   <figcaption>The one-line summary above the prompt while the pane is closed.</figcaption>
 </figure>
+
+In the desktop app that line is a capsule of small drawings instead, one per figure, with a card on hover for the detail. Each room draws its own (the figures here are made up):
+
+<BandGallery />
 
 ## Getting the docked layout
 
