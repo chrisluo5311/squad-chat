@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "fx-rates",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minSquadChat": "0.16.0",
   "name": "FX Rates",
   "icon": "¤",
@@ -37,6 +37,10 @@
           { "field": "rate", "right": true }
         ], "empty": "No currencies: /set symbols EUR, JPY" }
       }
+    ],
+    "pills": [
+      { "when": "fx.base", "draw": { "type": "dot" }, "color": "leaf", "label": "1", "value": "{fx.base}", "tip": ["Rates for 1 {fx.base}", "ECB reference rates, {fx.date}"] },
+      { "each": "fx.rows", "max": 4, "color": "leaf", "label": "{it.code}", "value": "{it.rate}", "tip": ["1 {fx.base} = {it.rate} {it.code}", "{fx.date}"] }
     ],
     "band": "1 {fx.base} = {fx.rows.0.rate} {fx.rows.0.code}",
     "hint": "/set base EUR · /set symbols +CHF · r refreshes"

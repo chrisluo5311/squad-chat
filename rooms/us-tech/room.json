@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "us-tech",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minSquadChat": "0.15.0",
   "name": "US Tech Stocks",
   "icon": "◆",
@@ -32,6 +32,10 @@
           { "type": "text", "text": "{q.note}" }
         ]
       }
+    ],
+    "pills": [
+      { "draw": { "type": "dot" }, "colorFrom": "q.statusTone", "sub": "{q.statusText}", "tip": ["{q.markets}", "updated {q.updated}", "{q.note}"] },
+      { "each": "q.quotes", "max": 4, "draw": { "type": "area", "value": "it.line" }, "colorFrom": "it.color", "label": "{it.symbol}", "sub": "{it.priceText}", "value": "{it.arrow}{it.pctText}", "tip": ["{it.symbol} {it.name}", "{it.priceText} ({it.changeText}, {it.pctText})", "volume {it.volText}"] }
     ],
     "band": "{q.band}",
     "hint": "/set watchlist +AMD · /set move 3 · r refreshes"

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "crypto",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minSquadChat": "0.16.0",
   "name": "Crypto",
   "icon": "₿",
@@ -48,6 +48,9 @@
           { "type": "text", "text": "Not investment advice." }
         ]
       }
+    ],
+    "pills": [
+      { "each": "c.rows", "max": 4, "draw": { "type": "dot" }, "colorFrom": "it.changeColor", "label": "{it.id}", "sub": "{it.price}", "value": "{it.changeArrow}{it.change}", "tip": ["{it.id} {it.price}", "{it.change} in 24h", "updated {c.updated} · not investment advice"] }
     ],
     "band": "{c.rows.0.id} {c.rows.0.price} {c.rows.0.change}",
     "hint": "/set coins +dogecoin · /set currency eur · /set move 5 · r"
