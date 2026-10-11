@@ -41,10 +41,12 @@ describe("open-meteo", () => {
     const d = await openMeteo.fetch({ cities: ["Taipei", "Atlantis"], units: "metric" }, ctx);
     const t = d.first;
     assert.equal(t.name, "Taipei");
+    assert.equal(t.place, "Taipei TW");
     assert.deepEqual([t.icon, t.desc, t.tempText, t.feels, t.range, t.rainText, t.aqiText, t.wind], ["☂", "Rain", "23°", "feels 27°", "28° / 21°", "☂ 80%", "AQI 57", "4 km/h"]);
     assert.match(t.rainLine, /^☂ ▂{15}▇▂{8}  peak 80% at 15:00$/);   // scaled to 100%, not to the peak
     assert.deepEqual(d.days.map((x) => `${x.day} ${x.icon} ${x.range} ${x.rain}`), ["Today ☂ 28° / 21° ☂ 80%", "Sat ☁ 28° / 23° ☂ 20%", "Sun ☀ 28° / 23° ☂ 0%"]);
-    assert.equal(d.cities[1].aqiText, "no place called Atlantis");   // one bad city doesn't sink the rest
+    assert.equal(d.cities[1].aqiText, "no place called Atlantis");
+    assert.equal(d.cities[1].place, "Atlantis");   // one bad city doesn't sink the rest
 
     // A name is looked up once; imperial asks for °F and mph.
     ctx.seen.length = 0;

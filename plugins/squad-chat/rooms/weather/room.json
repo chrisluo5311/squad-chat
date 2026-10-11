@@ -26,7 +26,7 @@
           "items": "wx.cities",
           "columns": [
             { "field": "icon", "width": 2, "color": "amber" },
-            { "field": "name", "grow": true },
+            { "field": "place", "grow": true },
             { "field": "tempText", "width": 5, "right": true },
             { "field": "aqiText", "width": 7, "right": true }
           ],

@@ -23448,6 +23448,8 @@ async function city(name, units, ctx) {
   return {
     name: p.name,
     country: p.country,
+    // With its country, so a slip that's another real place shows: "Tokoyo CF".
+    place: p.country ? `${p.name} ${p.country}` : p.name,
     icon,
     desc,
     temp,
@@ -23489,7 +23491,7 @@ var open_meteo_default = {
     const names = (Array.isArray(params.cities) ? params.cities : []).slice(0, MAX_CITIES);
     if (!names.length) return { cities: [], first: null, days: [] };
     const settled = await Promise.allSettled(names.map((n) => city(n, params.units, ctx)));
-    const cities = settled.map((r, i) => r.status === "fulfilled" ? { ...r.value, query: names[i] } : { name: names[i], query: names[i], icon: "?", tempText: "\u2013", range: "", rainText: "", aqiText: r.reason?.message ?? "failed", days: [] });
+    const cities = settled.map((r, i) => r.status === "fulfilled" ? { ...r.value, query: names[i] } : { name: names[i], place: names[i], query: names[i], icon: "?", tempText: "\u2013", range: "", rainText: "", aqiText: r.reason?.message ?? "failed", days: [] });
     if (settled.every((r) => r.status === "rejected")) throw settled[0].reason;
     const first = cities.find((c) => c.days?.length) ?? cities[0];
     return { cities, first, days: first.days ?? [], updated: (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5) };

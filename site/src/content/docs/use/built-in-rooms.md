@@ -83,7 +83,7 @@ It toasts when the CPU runs hot, memory or the disk is nearly full, or the batte
 
 Now, the next 24 hours and the week, for the cities you pick, from [Open-Meteo](https://open-meteo.com) with no key:
 
-- **Now.** Each city's sky, temperature right now and the air quality (US AQI). Today's high, low and chance of rain are in This week.
+- **Now.** Each city with its country code, its sky, temperature right now and the air quality (US AQI). Today's high, low and chance of rain are in This week.
 - **The next 24 hours** for the city you pressed in Now (the first one to start): what it feels like, humidity, wind, and the chance of rain hour by hour.
 - **This week** for that city: each day's sky, high and low, and chance of rain.
 
