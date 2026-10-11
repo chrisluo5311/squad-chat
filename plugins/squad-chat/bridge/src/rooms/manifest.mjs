@@ -17,18 +17,21 @@ const ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 
 // The widgets a layout may use, and each one's fields: "path" (into the
 // data), "field" (of an item), "text" (a template with {path} holes),
-// "int", "bool", "color".
+// "int", "bool", "color", "drop" (a ✕ on each row that takes it out of a
+// list setting), "pick" (a row pressed is kept in a string setting, and
+// shown at the path `as` in place of what the provider put there).
 const WIDGETS = {
   list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text" },
   buttons: { buttons: "buttons!" },
-  table: { items: "path!", columns: "columns!", max: "int", empty: "text" },
+  table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" },
 };
 
 // A setting's kinds. A "list" holds strings (or URLs, whose hosts must be
-// the room's own), "enum" one of `values`.
+// the room's own), "enum" one of `values`. A list with `add` takes what's
+// typed as more of it, and `min` is how few it may hold.
 const SETTING_TYPES = ["list", "enum", "string", "bool", "int"];
 const SETTING_KEY = /^[a-z][a-z0-9_]{0,19}$/;
 
@@ -46,6 +49,8 @@ function checkSettings(settings, hosts, errors) {
     if (st.type === "enum" && !(Array.isArray(st.values) && st.values.length && st.values.length <= 10 && st.values.every((v) => str(v, 30)))) errors.push(`${where}.values: 1-10 choices`);
     if (st.type === "list" && st.item != null && !["string", "url"].includes(st.item)) errors.push(`${where}.item: string or url`);
     if (st.type === "list" && st.max != null && !(Number.isInteger(st.max) && st.max > 0 && st.max <= 20)) errors.push(`${where}.max: 1-20`);
+    if (st.type === "list" && st.add != null && typeof st.add !== "boolean") errors.push(`${where}.add: true or false`);
+    if (st.type === "list" && st.min != null && !(Number.isInteger(st.min) && st.min >= 0 && st.min <= (st.max ?? 10))) errors.push(`${where}.min: 0 to its max`);
     if (st.type === "int" && [st.min, st.max].some((v) => v != null && !Number.isInteger(v))) errors.push(`${where}: min and max are whole numbers`);
     const bad = settingError(st, st.default, hosts);
     if (bad) errors.push(`${where}.default: ${bad}`);
@@ -58,6 +63,7 @@ export function settingError(st, value, hosts = []) {
     case "list": {
       if (!Array.isArray(value)) return "a list";
       if (value.length > (st.max ?? 10)) return `at most ${st.max ?? 10}`;
+      if (value.length < (st.min ?? 0)) return `at least ${st.min}`;
       for (const v of value) {
         if (!str(v, st.item === "url" ? 300 : 100)) return `each one 1-${st.item === "url" ? 300 : 100} characters`;
         if (st.item === "url") {
@@ -126,6 +132,7 @@ function checkWidget(body, where, errors, uses) {
         if (!(typeof c?.field === "string" && PATH.test(c.field))) errors.push(`${where}.columns[${i}].field: not a path`);
         if (c.label != null && !str(c.label, 20)) errors.push(`${where}.columns[${i}].label: 1-20 characters`);
         if (c.width != null && !(Number.isInteger(c.width) && c.width > 0 && c.width <= 40)) errors.push(`${where}.columns[${i}].width: 1-40`);
+        if (c.grow != null && typeof c.grow !== "boolean") errors.push(`${where}.columns[${i}].grow: true or false`);
         if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
       });
@@ -135,6 +142,17 @@ function checkWidget(body, where, errors, uses) {
       if (!(typeof v?.action === "string" && ACTION.test(v.action))) errors.push(`${where}.act.action: an action's name`);
       else uses.push({ where: `${where}.act`, provider: v.provider, action: v.action });
       if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.act.field: not a path`);
+    }
+    if (k === "drop") {
+      if (!(typeof v?.setting === "string" && SETTING_KEY.test(v.setting))) errors.push(`${where}.drop.setting: a setting's key`);
+      else uses.push({ where: `${where}.drop`, setting: v.setting, settingType: "list" });
+      if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.drop.field: not a path`);
+    }
+    if (k === "pick") {
+      if (!(typeof v?.setting === "string" && SETTING_KEY.test(v.setting))) errors.push(`${where}.pick.setting: a setting's key`);
+      else uses.push({ where: `${where}.pick`, setting: v.setting, settingType: "string" });
+      if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.pick.field: not a path`);
+      if (!(typeof v?.as === "string" && PATH.test(v.as))) errors.push(`${where}.pick.as: not a path`);
     }
     if (k === "buttons") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
@@ -287,8 +305,13 @@ export function checkManifest(m, providers) {
       }
     }
   }
-  // Every action a button, row or key names must be one its provider has.
+  // Every action a button, row or key names must be one its provider has,
+  // a row's ✕ must name a list setting and a row picked a string one.
   for (const use of actionsUsed) {
+    if (use.setting) {
+      if (m.settings?.[use.setting]?.type !== use.settingType) errors.push(`${use.where}.setting: no ${use.settingType} setting ${use.setting}`);
+      continue;
+    }
     const p = Array.isArray(m.providers) ? (use.provider ? m.providers.find((x) => x?.id === use.provider) : m.providers[0]) : null;
     const def = p ? providers[p.type] : null;
     if (!def) { errors.push(`${use.where}: no provider ${use.provider ?? ""}`.trim()); continue; }

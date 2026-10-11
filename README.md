@@ -298,11 +298,11 @@ It toasts when the CPU runs hot, memory or the disk is nearly full, or the batte
 
 Now, the next 24 hours and the week, for the cities you pick, from [Open-Meteo](https://open-meteo.com) with no key:
 
-* **Now.** Each city's sky, temperature, today's high and low, the chance of rain and the air quality (US AQI).
-* **The next 24 hours** for the first city: what it feels like, humidity, wind, and the chance of rain hour by hour.
-* **This week**: each day's sky, high and low, and chance of rain.
+* **Now.** Each city with its country code, its sky, temperature right now and the air quality (US AQI). Today's high, low and chance of rain are in This week.
+* **The next 24 hours** for the city you pressed in Now (the first one to start): what it feels like, humidity, wind, and the chance of rain hour by hour.
+* **This week** for that city: each day's sky, high and low, and chance of rain.
 
-Pick cities with `/chat set weather cities Taipei, Tokyo` (or `+Osaka`, `-Tokyo`), and units with `/chat set weather units imperial`. Inside the room, `/set cities …` does the same. It refreshes every 10 minutes while you look at it and every 30 otherwise.
+Add a city with `/chat set weather cities Tokyo` (or several, `Osaka, Seoul`). It goes below the ones you have. ✕ at the end of a city's row drops it, as does `-Tokyo`, and once one city is left the ✕ goes, so there's always one. Units are `/chat set weather units imperial`. Inside the room, `/set cities …` does the same. It refreshes every 10 minutes while you look at it and every 30 otherwise.
 
 #### ✦ Tech News
 

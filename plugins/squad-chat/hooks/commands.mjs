@@ -300,7 +300,7 @@ export async function roomSettings(call, args, say, { room: here = null } = {}) 
   if (!keys.includes(k)) return say(`${room.manifest.name} has no setting ${key}. It has ${keys.join(", ")}.`);
   const st = schema[k];
   if (!rest.length) {
-    const how = st.type === "list" ? "a list split by commas, +one to add, -one to drop" : st.type === "enum" ? st.values.join(", ") : st.type === "bool" ? "on or off" : st.type;
+    const how = st.type === "list" ? (st.add ? "one or more to add, split by commas, -one to drop" : "a list split by commas, +one to add, -one to drop") : st.type === "enum" ? st.values.join(", ") : st.type === "bool" ? "on or off" : st.type;
     return say(`${st.label ?? k}: ${showSetting(room.settings[k] ?? st.default)}. Set it with ${c} ${k} <${how}>, or ${c} ${k} default.`);
   }
   const r = await call("/fnroom/settings", { room: id, key: k, value: rest.join(" ") });

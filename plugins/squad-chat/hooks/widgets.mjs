@@ -202,7 +202,8 @@ export function pill(els, key, text, color, extra = {}) {
 
 // Pieces of one row, left to right, each { text, color, bold, grow } or
 // { node }. The piece marked `grow` takes the space left and is cut to fit;
-// the others keep their size, so a status at the end of a row always shows.
+// the others keep their size, so a status at the end of a row always shows
+// (`right` sets its text against the right edge).
 // One with `width` is a column of that many cells (`right` to right-align).
 // `gap` puts that many cells between the pieces, as a table's columns need.
 export function line(els, key, pieces, { gap = 0 } = {}) {
@@ -210,7 +211,7 @@ export function line(els, key, pieces, { gap = 0 } = {}) {
   return Box({ key, flexDirection: "row", gap, children: pieces.filter(Boolean).map((p, i) => (p.width != null
     ? col(els, `p${i}`, p.text, p.width, { right: p.right, color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic })
     : p.grow
-    ? Box({ key: `p${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, children: p.text })] })
+    ? Box({ key: `p${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: "hidden", justifyContent: p.right ? "flex-end" : "flex-start", children: [p.node ?? Text({ key: "t", wrap: "truncate-end", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, children: p.text })] })
     : Box({ key: `p${i}`, flexShrink: 0, children: [p.node ?? Text({ key: "t", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, backgroundColor: p.bg, children: p.text })] }))) });
 }
 

@@ -36,13 +36,42 @@ const firstLine = (s) => String(s ?? "").split("\n").find((l) => l.trim()) ?? ""
 const color = (name, fallback) => palette[name] ?? fallback;
 const muted = (els, key, text) => els.Text({ key, color: theme.muted, wrap: "truncate-end", children: text });
 
+// `obj` with `value` at `path`, the objects on the way copied.
+function withPath(obj, path, value) {
+  const [k, ...rest] = String(path).split(".");
+  return { ...obj, [k]: rest.length ? withPath(obj?.[k] ?? {}, rest.join("."), value) : value };
+}
+
+// The tables whose rows are picked.
+function pickTables(manifest) {
+  const out = [];
+  const walk = (b) => (Array.isArray(b) ? b.forEach(walk) : b?.pick ? out.push(b) : null);
+  (manifest.layout?.cards ?? []).forEach((c) => walk(c.body));
+  walk(manifest.layout?.inline);
+  return out;
+}
+
+// The row a table's setting names, or null (then what the provider put at
+// `as` stays).
+function pickedRow(room, b, data) {
+  const items = lookup(data, b.items);
+  if (!Array.isArray(items)) return null;
+  const want = String(room.settings?.[b.pick.setting] ?? room.manifest.settings?.[b.pick.setting]?.default ?? "").toLowerCase();
+  return items.find((it) => String(lookup(it, b.pick.field) ?? "").toLowerCase() === want) ?? null;
+}
+
 function roomState(id) {
   const room = state.fn.get(id);
   const providers = room?.manifest.providers ?? [];
   const loaded = providers.length > 0 && providers.every((p) => room.data[p.id] != null);
   const error = providers.map((p) => room.error[p.id]).find(Boolean) ?? null;
   const stale = providers.some((p) => room.stale[p.id]);
-  return { room, data: room?.data ?? {}, loaded, error, stale };
+  let data = room?.data ?? {};
+  for (const b of room ? pickTables(room.manifest) : []) {
+    const row = pickedRow(room, b, data);
+    if (row) data = withPath(data, b.pick.as, row);
+  }
+  return { room, data, loaded, error, stale };
 }
 
 // ---------------------------------------------------------------- widgets
@@ -68,10 +97,19 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     if (header + n * per > limit) n = Math.max(0, Math.floor((limit - header - 1) / per));
     const more = items.length - n;
     const nodes = [];
+    // The column marked `grow` takes the row's spare space, or else the last
+    // one when it has no width.
+    const grows = (c, i) => (b.columns.some((x) => x.grow) ? !!c.grow : i === b.columns.length - 1 && !c.width);
+    // A row's ✕ takes it out of a list setting, while the list holds more
+    // than its least. Its column stays when the ✕ goes, so rows line up.
+    const dropSt = b.drop ? state.fn.get(room)?.manifest.settings?.[b.drop.setting] : null;
+    const dropList = dropSt ? state.fn.get(room)?.settings?.[b.drop.setting] ?? dropSt.default ?? [] : [];
+    const canDrop = !!dropSt && dropList.length > (dropSt.min ?? 0);
+    const picked = b.pick ? lookup(data, `${b.pick.as}.${b.pick.field}`) : null;
     if (header) {
-      nodes.push(line(els, `${key}-head`, b.columns.map((c, i) => (i === b.columns.length - 1 && !c.width
+      nodes.push(line(els, `${key}-head`, [...b.columns.map((c, i) => (grows(c, i)
         ? { text: c.label ?? "", color: theme.muted, grow: true, right: c.right }
-        : { text: c.label ?? "", width: c.width ?? 12, right: c.right, color: theme.muted })), { gap: 1 }));
+        : { text: c.label ?? "", width: c.width ?? 12, right: c.right, color: theme.muted })), dropSt ? { text: "", width: 1 } : null], { gap: 1 }));
     }
     items.slice(0, n).forEach((item, i) => {
       const k = `${key}-${String(item?.id ?? i)}`;
@@ -79,9 +117,17 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
         // A column's color: fixed, or named by the row ("colorFrom": a
         // field holding one of the palette's names, as a quote's up or down).
         const tint = (c) => color(c.colorFrom ? lookup(item, c.colorFrom) : null, color(c.color));
-        nodes.push(line(els, k, b.columns.map((c, j) => (j === b.columns.length - 1 && !c.width
-          ? { text: show(lookup(item, c.field)), grow: true, color: tint(c) }
-          : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) })), { gap: 1 }));
+        const dropOn = canDrop ? lookup(item, b.drop.field) : null;
+        // With `pick`, the growing column is pressed to pick its row, and
+        // the rows not picked are dimmed.
+        const pickOn = b.pick ? lookup(item, b.pick.field) : null;
+        const pickBtn = (text) => Button({ key: `pick-${k}`, plain: true, label: text, dimColor: String(pickOn) !== String(picked), onPress: () => handlers.onSetSetting?.(room, b.pick.setting, String(pickOn)) });
+        nodes.push(line(els, k, [...b.columns.map((c, j) => (grows(c, j)
+          ? { text: show(lookup(item, c.field)), grow: true, right: c.right, color: tint(c), node: pickOn != null ? pickBtn(show(lookup(item, c.field))) : undefined }
+          : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) })),
+        dropOn != null
+          ? { node: Button({ key: `drop-${k}`, plain: true, label: "✕", onPress: () => handlers.onSetSetting?.(room, b.drop.setting, `-${dropOn}`) }) }
+          : dropSt ? { text: "", width: 1 } : null], { gap: 1 }));
         return;
       }
       const title = show(lookup(item, b.title));

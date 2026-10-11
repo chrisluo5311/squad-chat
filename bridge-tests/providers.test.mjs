@@ -41,10 +41,12 @@ describe("open-meteo", () => {
     const d = await openMeteo.fetch({ cities: ["Taipei", "Atlantis"], units: "metric" }, ctx);
     const t = d.first;
     assert.equal(t.name, "Taipei");
-    assert.deepEqual([t.icon, t.desc, t.tempText, t.feels, t.range, t.rainText, t.aqiText, t.wind], ["☂", "Rain", "23°", "feels 27°", "28° / 21°", "☂ 80%", "AQI 57 moderate", "4 km/h"]);
+    assert.equal(t.place, "Taipei TW");
+    assert.deepEqual([t.icon, t.desc, t.tempText, t.feels, t.range, t.rainText, t.aqiText, t.wind], ["☂", "Rain", "23°", "feels 27°", "28° / 21°", "☂ 80%", "AQI 57", "4 km/h"]);
     assert.match(t.rainLine, /^☂ ▂{15}▇▂{8}  peak 80% at 15:00$/);   // scaled to 100%, not to the peak
     assert.deepEqual(d.days.map((x) => `${x.day} ${x.icon} ${x.range} ${x.rain}`), ["Today ☂ 28° / 21° ☂ 80%", "Sat ☁ 28° / 23° ☂ 20%", "Sun ☀ 28° / 23° ☂ 0%"]);
-    assert.equal(d.cities[1].aqiText, "no place called Atlantis");   // one bad city doesn't sink the rest
+    assert.equal(d.cities[1].aqiText, "no place called Atlantis");
+    assert.equal(d.cities[1].place, "Atlantis");   // one bad city doesn't sink the rest
 
     // A name is looked up once; imperial asks for °F and mph.
     ctx.seen.length = 0;
@@ -61,7 +63,19 @@ describe("open-meteo", () => {
       "https://api.open-meteo.com/v1/forecast": [200, FORECAST],
       "https://air-quality-api.open-meteo.com/": [200, { current: { us_aqi: 342 } }],
     });
-    assert.equal((await openMeteo.fetch({ cities: ["Delhi"] }, smoky)).first.aqiText, "AQI 342 hazardous");
+    assert.equal((await openMeteo.fetch({ cities: ["Delhi"] }, smoky)).first.aqiText, "AQI 342");
+  });
+
+  it("checks cities as they're added: named as the search names them, none it can't find", async () => {
+    const ctx = fakeCtx({
+      "https://geocoding-api.open-meteo.com/v1/search?name=osaka": [200, { results: [{ name: "Osaka", country_code: "JP", latitude: 34.69, longitude: 135.5 }] }],
+      "https://geocoding-api.open-meteo.com/v1/search?name=Tokoyo": [200, { generationtime_ms: 0.4 }],
+    });
+    assert.deepEqual(await openMeteo.check.cities(["osaka"], ctx), ["Osaka"]);
+    await assert.rejects(openMeteo.check.cities(["osaka", "Tokoyo"], ctx), (err) => err.status === 400 && /^No place called Tokoyo\./.test(err.message));
+    // A search that fails can't say a city isn't there, so it lets it through.
+    const busy = fakeCtx({ "https://geocoding-api.open-meteo.com/": [429, { error: true }] });
+    assert.deepEqual(await openMeteo.check.cities(["Lisbon"], busy), ["Lisbon"]);
   });
 
   it("fails as a whole only when every city does", async () => {
