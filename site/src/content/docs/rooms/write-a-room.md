@@ -62,7 +62,7 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | `http-json` | `url`, `vars`, `rows`, `fields`, `values` (see [Any JSON API](#any-json-api)) | `rows[]` with each field formatted, the `values`, `count`, `updated` |
 | `rss` | `feeds`: feed URLs on the room's hosts | `items[]` (`title`, `url`, `source`, `meta`, `share`), `count`, `failed` |
 | `hn` | `list` (`top`, `best`, `new`, `off`), `count` | `items[]` as `rss`, `count`, `list` |
-| `open-meteo` | `cities`, `units` (`metric` or `imperial`) | `cities[]` (`name`, `icon`, `desc`, `tempText`, `range`, `rainText`, `aqiText`, …), `first`, `days[]`, `updated` |
+| `open-meteo` | `cities` (each new one looked up first, and refused if there's no such place), `units` (`metric` or `imperial`) | `cities[]` (`name`, `place` (with the country code), `query` (as the setting has it), `icon`, `desc`, `tempText`, `range`, `rainText`, `aqiText`, `days[]`, …), `first`, `days[]`, `updated` |
 | `quotes` | `watchlist`, `colors` (`market`, `red-up`, `green-up`), `move` | `quotes[]` (`symbol`, `name`, `priceText`, `pctText`, `arrow`, `color`, `spark`, `volText`, `when`), `markets`, `band`, `note`, `updated` |
 | `local-list` | `max` | `items[]` (`id`, `name`, `lang`, `body`), `count` |
 | `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu`, `mem`, `gpu`, `net`, `disk`, `battery`, `band`, … (see the Monitor room's manifest) |

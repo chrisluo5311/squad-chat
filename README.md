@@ -302,7 +302,7 @@ Now, the next 24 hours and the week, for the cities you pick, from [Open-Meteo](
 * **The next 24 hours** for the city you pressed in Now (the first one to start): what it feels like, humidity, wind, and the chance of rain hour by hour.
 * **This week** for that city: each day's sky, high and low, and chance of rain.
 
-Add a city with `/chat set weather cities Tokyo` (or several, `Osaka, Seoul`). It goes below the ones you have. ✕ at the end of a city's row drops it, as does `-Tokyo`, and once one city is left the ✕ goes, so there's always one. Units are `/chat set weather units imperial`. Inside the room, `/set cities …` does the same. It refreshes every 10 minutes while you look at it and every 30 otherwise.
+Add a city with `/chat set weather cities Tokyo` (or several, `Osaka, Seoul`). It goes below the ones you have. ✕ at the end of a city's row drops it, as does `-Tokyo`, and once one city is left the ✕ goes, so there's always one. A name the place search can't find is refused, and the country code after each name shows when a slip landed on another real place. Units are `/chat set weather units imperial`, and `/chat set weather city Tokyo` picks the city shown below, as pressing it does. Inside the room, `/set cities …` does the same. It refreshes every 10 minutes while you look at it and every 30 otherwise.
 
 #### ✦ Tech News
 
@@ -360,7 +360,7 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 | `/chat store [words]` | The rooms in the [room store](https://chrisluo5311.github.io/squad-chat/rooms/store/), and which you have |
 | `/chat install <id>` / `update [id]` / `uninstall <id>` | Install a room from the store (a look first, then again to install), bring installed ones up to date, or remove one |
-| `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. |
+| `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. Some lists, as Weather's cities, add what's typed instead of replacing the list. |
 | `/snippet add <name>` | Save the text you selected, or else the last code block in Claude's reply, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |
 | `/snippet copy <name>` / `share <name> [#room]` | Copy a saved snippet, or share it to a chat room after a look |

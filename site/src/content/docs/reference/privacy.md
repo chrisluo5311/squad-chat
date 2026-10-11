@@ -58,7 +58,7 @@ These four are off until you turn them on, and each says where it goes when you 
 
 | Room | Reaches | Sends |
 | --- | --- | --- |
-| ☀ Weather | `geocoding-api.open-meteo.com`, `api.open-meteo.com`, `air-quality-api.open-meteo.com` | the names of the cities you picked, then their coordinates |
+| ☀ Weather | `geocoding-api.open-meteo.com`, `api.open-meteo.com`, `air-quality-api.open-meteo.com` | the names of the cities you picked (each one also as you add it, to check it exists), then their coordinates |
 | ✦ Tech News | `hacker-news.firebaseio.com`, `www.ithome.com.tw`, `www.theverge.com`, `feeds.arstechnica.com`, `techcrunch.com` | requests for the story lists and feeds |
 | $ Stocks | `mis.twse.com.tw`, `query1.finance.yahoo.com` | the symbols on your watchlist |
 | ♫ Lo-fi | `ice2.somafm.com`, `www.youtube.com`, and the streams you add | nothing until you press play, then mpv asks for that stream. YouTube's audio comes from Google's video servers through yt-dlp. |
