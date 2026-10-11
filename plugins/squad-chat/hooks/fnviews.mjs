@@ -5,7 +5,7 @@
 
 import { state } from "./state.mjs";
 import { theme, palette } from "./theme.mjs";
-import { rowsFor, meter, tiles, line, card, stackCards, CARD_GAP } from "./widgets.mjs";
+import { rowsFor, meter, tiles, line, card, stackCards } from "./widgets.mjs";
 
 export function fnMeta(id) {
   const m = state.fn.get(id)?.manifest;
@@ -139,8 +139,9 @@ const shownCards = (layout, data) => layout.cards.filter((c) => !c.when || !!loo
 
 // ---------------------------------------------------------------- the pane
 
-// The docked pane's cards for a function room, within `capacity` rows. A
-// list gives up rows ("+ 3 more") before a card is left out.
+// The docked pane's cards for a function room, in a window `capacity` rows
+// tall. A list gives up rows ("+ 3 more") to fit the window, and cards
+// past its bottom are a scroll away.
 export function fnDock(els, id, w, capacity, handlers) {
   const meta = fnMeta(id);
   const { room, data, loaded, error, stale } = roomState(id);
@@ -150,10 +151,8 @@ export function fnDock(els, id, w, capacity, handlers) {
     return [card(els, { key: "fn-wait", title: meta.label.toUpperCase(), color: meta.color, rows: [els.Text({ key: "t", color: error ? theme.warn : theme.muted, wrap: "wrap", children: text })] })];
   }
   const cards = [];
-  let used = 0;
   shownCards(room.manifest.layout, data).forEach((c, i) => {
-    const gap = cards.length ? CARD_GAP : 0;
-    const limit = Math.max(1, capacity - used - gap - 3);
+    const limit = Math.max(1, capacity - 3);
     const filled = body(els, c.body, data, w, handlers, { limit, accent: meta.color, key: `c${i}`, room: id });
     const rows = [...filled.nodes];
     let height = filled.height;
@@ -163,9 +162,8 @@ export function fnDock(els, id, w, capacity, handlers) {
       height: 3 + height,
       node: card(els, { key: `fn-${i}`, title: c.title, color: meta.color, meta: stale && i === 0 ? "stale" : c.meta ? fill(c.meta, data) : undefined, metaColor: stale && i === 0 ? theme.warn : undefined, rows }),
     });
-    used += gap + 3 + height;
   });
-  return stackCards(els, cards, capacity);
+  return stackCards(els, cards, capacity, handlers.scroll);
 }
 
 // The inline pane: a head line, then the manifest's inline widget (or the

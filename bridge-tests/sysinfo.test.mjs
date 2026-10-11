@@ -86,7 +86,7 @@ describe("sysinfo on macOS", () => {
     assert.deepEqual(d.disk, { pct: 80, usedText: "738 GB / 926 GB", freeText: "188 GB free" });
     assert.deepEqual(d.battery, { pct: 85, state: "charging", detail: "charging · 0:42 left · 33 W in" });
     assert.equal(d.sensorHint, "");
-    assert.equal(d.band, "CPU 75% · mem 85% · ↓717 KB/s ↑4.2 KB/s · 96°C · ⚡85%");
+    assert.equal(d.band, "CPU 75% · mem 85% · 🛜 ↓717 KB/s ↑4.2 KB/s · 🌡\uFE0F 96°C · ⚡\uFE0F 85%");
     assert.deepEqual(d.alerts, [{ id: "cpu-temp", text: "▦ CPU at 96°C" }]);
     assert.ok(st.runs.every((r) => !/sudo|powermetrics/.test(r)));
   });

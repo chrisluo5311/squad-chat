@@ -23844,7 +23844,9 @@ var sysinfo_default = {
       disk: d ? { pct: pctOf(d.used, d.total), usedText: `${bytes(d.used, 0)} / ${bytes(d.total, 0)}`, freeText: `${bytes(d.free, 0)} free` } : null,
       battery: b ? { pct: b.pct, state: b.state, detail: [b.state, b.timeText, b.power].filter(Boolean).join(" \xB7 ") } : null,
       sensorHint: os.sensorHint,
-      band: [`CPU ${cpuPct}%`, memPct != null ? `mem ${memPct}%` : null, rx != null ? `\u2193${net.rxText} \u2191${net.txText}` : null, celsius(sen?.cpuTemp) || null, b ? `${b.state === "on battery" ? "\u25AF" : "\u26A1"}${b.pct}%` : null].filter(Boolean).join(" \xB7 "),
+      // 🌡 and ⚡ carry the emoji selector (U+FE0F): without it the terminal
+      // gives 🌡 one cell, draws it in two, and it covers the space after it.
+      band: [`CPU ${cpuPct}%`, memPct != null ? `mem ${memPct}%` : null, rx != null ? `\u{1F6DC} \u2193${net.rxText} \u2191${net.txText}` : null, Number.isFinite(sen?.cpuTemp) ? `\u{1F321}\uFE0F ${celsius(sen.cpuTemp)}` : null, b ? `${b.state === "on battery" ? "\u25AF" : "\u26A1\uFE0F"} ${b.pct}%` : null].filter(Boolean).join(" \xB7 "),
       alerts
     };
   }

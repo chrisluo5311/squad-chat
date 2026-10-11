@@ -11,7 +11,7 @@ const WIDE = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|\p{Extended_Pi
 // Terminal cells a string takes: wide characters (CJK, most emoji) take two.
 export function cells(str) {
   let n = 0;
-  for (const ch of String(str)) n += WIDE.test(ch) ? 2 : 1;
+  for (const ch of String(str)) n += WIDE.test(ch) ? 2 : ch === "\uFE0F" ? 0 : 1;   // the emoji selector takes no cell
   return n;
 }
 
@@ -231,24 +231,39 @@ export function card(els, { key, title, color, meta, metaColor, metaNode, rows, 
   });
 }
 
-// Cards in priority order, as many as the height allows, a row apart so
-// their frames don't run together. What doesn't fit is named on one muted
-// line, so the person knows a taller pane shows more.
-// Each card is { node, height, name }; `capacity` is the rows there are.
+// Cards in priority order, a row apart so their frames don't run together.
+// When they're taller than `capacity` rows they sit in a window that long,
+// a scrollbar at its right, and scroll a card at a time: `scroll.offset` is
+// the card at the top, `scroll.max` the last one that can be (0 when all of
+// them fit) and `scroll.starts` the row each card starts on.
+// Each card is { node, height, name }.
 export const CARD_GAP = 1;
-export function stackCards(els, cards, capacity) {
+export function stackCards(els, cards, capacity, scroll = { offset: 0 }) {
+  const { Box } = els;
+  const shown = cards.filter(Boolean);
+  const starts = [];
+  let content = 0;
+  shown.forEach((c, i) => { content += i ? CARD_GAP : 0; starts.push(content); content += c.height; });
+  const stack = (from) => shown.slice(from).flatMap((c, i) => (i ? [Box({ key: `gap-${c.name}`, height: CARD_GAP, flexShrink: 0 }), c.node] : [c.node]));
+  const last = Math.max(0, starts.findIndex((at) => content - at <= capacity));
+  scroll.max = content > capacity ? last || shown.length - 1 : 0;
+  scroll.starts = starts;
+  if (!scroll.max) return stack(0);
+  const top = Math.min(scroll.max, Math.max(0, scroll.offset ?? 0));
+  return [Box({ key: "cards", flexDirection: "row", height: capacity, flexShrink: 0, children: [
+    Box({ key: "window", flexDirection: "column", flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: "hidden", children: stack(top) }),
+    scrollbar(els, capacity, content, top / scroll.max),
+  ] })];
+}
+
+// A column of `rows` cells: the track, and a thumb as long as the window is
+// next to the whole, `at` of the way down (0 to 1).
+export function scrollbar(els, rows, content, at) {
   const { Box, Text } = els;
-  const shown = [];
-  const hidden = [];
-  let used = 0;
-  for (const c of cards.filter(Boolean)) {
-    const need = c.height + (shown.length ? CARD_GAP : 0);
-    if (!hidden.length && used + need <= capacity) { shown.push(c); used += need; }
-    else hidden.push(c.name);
-  }
-  // The footer needs a row: give up the last card shown if there isn't one.
-  if (hidden.length && used + 1 > capacity && shown.length > 1) hidden.unshift(shown.pop().name);
-  const nodes = shown.flatMap((c, i) => (i ? [Box({ key: `gap-${c.name}`, height: CARD_GAP, flexShrink: 0 }), c.node] : [c.node]));
-  if (hidden.length) nodes.push(Text({ key: "more", color: theme.muted, wrap: "truncate-end", children: `+ ${hidden.join(" · ")}  (a taller pane shows them)` }));
-  return nodes;
+  const thumb = Math.max(1, Math.min(rows, Math.round((rows * rows) / content)));
+  const top = Math.round(at * (rows - thumb));
+  return Box({ key: "scrollbar", flexDirection: "column", width: 1, flexShrink: 0, children: Array.from({ length: rows }, (_, i) => {
+    const on = i >= top && i < top + thumb;
+    return Text({ key: `s${i}`, color: on ? theme.accent : theme.border, children: on ? "┃" : "│" });
+  }) });
 }
