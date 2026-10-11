@@ -171,7 +171,6 @@ const secHtml = (sec: Sec) => sec.parts.map(partHtml).join("");
               </>
             ))}
           </div>
-          <span class="open">Open</span>
         </div>
         {b.note && <p class="note">{b.note}</p>}
         </>
@@ -207,6 +206,5 @@ const secHtml = (sec: Sec) => sec.parts.map(partHtml).join("");
   .sec :global(.msg) { max-width: 330px; overflow: hidden; text-overflow: ellipsis; }
   .sec :global(.chip) { padding: 0 6px; border-radius: 5px; }
   .sec :global(.tag) { font-size: 11px; padding: 0 5px; border: 1px solid; border-radius: 4px; }
-  .open { margin-left: 0.75rem; background: #d97757; color: #1f1e1d; border-radius: 6px; padding: 3px 11px; font-weight: 600; }
   .note { margin: 0 0 0.4rem 0.4rem; color: #8f8a84; font-size: 12px; }
 </style>
