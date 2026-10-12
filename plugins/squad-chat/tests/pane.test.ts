@@ -1060,11 +1060,17 @@ test('Agents room: lists the other sessions on this computer, and heartbeats to 
   await ui.press({ key: 'filter' })                                              // all → here
   expect(await ui.find({ type: 'Text', text: 'npm test' })).toBeUndefined()
 
-  // The desktop: each session's state as a chip, its subagents in a tree of
-  // drawn lines, a running one with a ring.
+  // The desktop: a busy session's spinner, the tool and how long, on one
+  // line (those keep their size, the folder's name gives way); its subagents
+  // in a tree of drawn lines, a running one with a ring.
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
   await settle()
-  expect(await desk.find({ type: 'Text', text: /^ working · Bash 2\ds $/ })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: 'working' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'Bash' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /^2\ds$/ })).toBeDefined()
+  expect((await desk.find({ type: 'Box', key: 'doing' }))!.props.flexShrink).toBe(0)
+  expect((await desk.find({ type: 'Box', key: 'time' }))!.props.flexShrink).toBe(0)
+  expect((await desk.find({ type: 'Box', key: 'p' }))!.props.overflow).toBe('hidden')
   expect(await desk.find({ type: 'Text', text: 'find the routes' })).toBeDefined()
   expect(await desk.find({ type: 'Svg', alt: 'running' })).toBeDefined()
   expect(await desk.find({ type: 'Text', text: 'here' })).toBeDefined()
