@@ -8,10 +8,11 @@ import { emptyGit } from "./github.mjs";
 export const MAX_MESSAGES = 100;   // per room
 
 // The built-in rooms, in tab order. They need no server and no sign-in.
-export const SYS_ROOMS = ["usage", "git", "agents"];
+export const SYS_ROOMS = ["usage", "git", "agents", "focus", "clipboard", "pet"];
 // Function rooms come from the bridge (manifests in rooms/<id>/room.json).
-// These have tabs until /chat rooms says otherwise.
-export const DEFAULT_ROOMS = [...SYS_ROOMS, "snippet", "monitor"];
+// These have tabs until /chat rooms says otherwise. Clipboard reads what
+// you copy, so it waits to be asked for.
+export const DEFAULT_ROOMS = [...SYS_ROOMS.filter((id) => id !== "clipboard"), "snippet", "monitor"];
 export const ROOM_ID = /^[a-z][a-z0-9-]{1,23}$/;
 
 export const state = {
@@ -41,13 +42,17 @@ export const state = {
   pendingShare: null,     // a snippet shown for a look before /share send
   dividerAt: new Map(),   // room id → read marker when the pane last caught up: the "new" line
   // The built-in rooms.
-  view: "chat",           // chat | usage | git | agents: what the pane shows, kept in $.store
+  view: "chat",           // chat, a built-in room or a function room: what the pane shows, kept in $.store
   sysRooms: [...DEFAULT_ROOMS],   // which built-in and function rooms have tabs (/chat rooms), kept in $.store
   fn: new Map(),          // function room id → { manifest, settings, data: { provider: data }, at, error, stale }
   fnInvalid: [],          // manifests the bridge refused: [{ dir, errors }]
   fnToasts: [],           // function rooms' new alerts, waiting to be toasted
   usage: createUsage(),   // this session's numbers (metrics.mjs)
   git: emptyGit(),        // the Git room's snapshot (github.mjs)
+  focus: null,            // the Focus room's timer (focus.mjs), set when the mod loads
+  clipboard: null,        // the Clipboard room's history (clipboard.mjs), likewise
+  pet: null,              // the Pet room's Clawd (pet.mjs), likewise
+  focusStatus: "",        // "🍅 18:42" for the status line while a timer runs, kept by the mod
   sessionId: null,
   self: null,             // this session's latest heartbeat (sessions.mjs)
   sessions: [],           // other sessions' heartbeats, from the bridge
@@ -123,6 +128,7 @@ function sysStatus() {
   const ctx = state.usage.context?.percent;
   if (state.sysRooms.includes("usage") && ctx >= 80) bits.push(`◔ ${Math.round(ctx)}%`);
   if (state.sysRooms.includes("git") && state.git.status === "ok" && state.git.pr?.checks.fail) bits.push("✗ CI");
+  if (state.focusStatus) bits.push(state.focusStatus);
   return bits.join(" · ");
 }
 

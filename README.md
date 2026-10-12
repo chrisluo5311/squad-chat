@@ -87,7 +87,7 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 * **Your own server.** Each group of friends runs its own free Supabase project. There is no central service and no account with us.
 * **Private rooms.** Rooms are joined with a passcode, and the database only shows a room's messages to its members.
 * **Survives bad networks.** After a dropped connection, a closed laptop or a crashed process, it reconnects by itself and fetches exactly the messages you missed.
-* **Built-in rooms for your session.** Next to the chat rooms, the Usage, Git and Agents tabs show context fill, cost, rate limits and tool timings, your pull requests and CI, and every Claude Code session's subagents as they work. They need no server and no sign-in.
+* **Built-in rooms for your session.** Next to the chat rooms, the Usage, Git and Agents tabs show context fill, cost, rate limits and tool timings, your pull requests and CI, and every Claude Code session's subagents as they work. Focus is a Pomodoro timer with a chime, Clipboard keeps what you copied lately, and Pet is Clawd, moving along with your session. They need no server and no sign-in.
 * **Fits any terminal.** Docked beside the transcript in a wide terminal, compact above the prompt in a narrow one, and a one-line summary when the pane is closed.
 
 It is a Claude Code mod: a plugin of function hooks, plus a small Node process that holds the connection to Supabase. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit.
@@ -271,6 +271,32 @@ Every Claude Code session on this computer, in one place:
 
 <br />
 
+#### ◷ Focus
+
+A Pomodoro timer beside your work:
+
+* **A ring** counts the focus round down, then the break. Press **▶ Start**, **⏸ Pause**, **⏭** to end the phase now, or **↺** to start over.
+* **A chime and a toast** when focus ends, and the break starts by itself. When the break ends it chimes again and waits for you.
+* **Your lengths.** Press − and + in the room, or type `50 10` in its box (or `/focus 50 10` at the prompt) for 50 minutes of focus and 10 of break. They're kept, and so is the count of rounds you finished today.
+* **A streak**, drawn as GitHub draws contributions: a square a day for the last few months under the months' names, darker the more rounds you finished (the legend runs from Less to More), with how many days in a row you've kept it up and your best run.
+
+While it runs, the status line shows `🍅 18:42` (`☕` in a break), and the Focus tab shows the minutes left from any other room. With the pane closed, the band above the prompt shows the phase and its time, ten cells for how far it has gone, the streak with this week's days, and what comes next. It turns green during a break. A reload carries on where the timer was.
+
+#### ⧉ Clipboard
+
+What you copied lately, newest first, so you can copy it again. Press **⧉** on a row, **✕** to drop one, or **Clear**. It reads the clipboard every 2 seconds while the room has a tab (`pbpaste` on a Mac, `wl-paste` or `xclip` on Linux) and keeps the last 30 items in memory only, gone when the session ends. Anything that looks like a key or a token shows masked, though ⧉ still copies it whole, and nothing in the room can be shared to a chat. The band above the prompt shows how many are kept and the newest one's first line. It's off until you add it with `/chat rooms +clipboard` or the desktop's **+**.
+
+#### ✿ Pet
+
+Clawd's corner. In the desktop app Clawd is a vector drawing that moves on its own, standing on a little floor:
+
+* **Moods.** On **Auto** it follows what goes on: typing while Claude works, cheering when a focus round ends, vibing through a break, waving at a new message, puzzled when this branch's checks fail, and asleep after ten quiet minutes. Pick a mood in the room to keep it on.
+* **Today together**: how long Claude worked today, the focus rounds you finished, and how Clawd feels.
+* **A bond** that grows with every focus round and every ten minutes of work, a level at a time.
+* **Lately**, a short log of what Clawd noticed: a round finished, a break over, someone writing in a room (who and where, never what), checks failing, a long stretch of work, dozing off.
+
+With the pane closed, the band above the prompt has Clawd saying the latest thing it noticed, or how it feels. Clawd also keeps you company by the pane's input box in every room. **By the input box** picks how: **Stroll** back and forth in the room after the buttons, **Stop & go** (a few steps, a stop to wave, on to the end and back), just **Sit** at the end, or **Off**. The pace follows the mood: a trot while Claude types, an easy walk otherwise, and asleep in the corner after a quiet while. The terminal draws the pixel stickers in half blocks.
+
 #### ⌘ Snippets
 
 Code you reach for again and again, kept on this computer and one click from your clipboard:
@@ -358,8 +384,10 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat usage` / `git` / `agents` / `focus` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
+| `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | Drive the Focus room's timer from the prompt. `/focus` alone opens the room. |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 | `/chat store [words]` | The rooms in the [room store](https://chrisluo5311.github.io/squad-chat/rooms/store/), and which you have |
 | `/chat install <id>` / `update [id]` / `uninstall <id>` | Install a room from the store (a look first, then again to install), bring installed ones up to date, or remove one |
@@ -371,7 +399,7 @@ To show the team, press **⇪ Share** under a built-in room, or type `/chat-shar
 | `/lofi play [name]` / `pause` / `next` / `prev` / `stop` / `vol <0-100>` | Drive the Lo-fi room's player from the prompt |
 | `/lofi add <url, file or folder> [# name]` / `remove <name>` / `import` | Add to the Lo-fi room's list, take one off, or bring in Pixel Play's playlist |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/focus`, `/clipboard`, `/pet`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player. In Focus, `start`, `pause`, `skip`, `reset` or `50 10` drive the timer, and in Pet a mood's name (`wave`, `sleepy`, `auto`) picks it. Type passcodes there: it never touches the conversation.
 
 #### Examples
 
@@ -435,7 +463,7 @@ Stay focused:
 | Docked (fullscreen, ≥ 110 columns) | Room tabs, a FRIENDS card, and the room's messages as bubbles: yours on the right, theirs on the left, grouped by sender, with date labels and a **new** line where you stopped reading |
 | Above the prompt (narrower) | The room, who's online, the last five messages and the input box |
 | Pane closed | One line: the room, who's online, unread count, the latest message and **Open** |
-| Status line | Unread counts per room, such as `💬 #team 3`, or `🔕 #team 3` during do not disturb. The built-in rooms add `◔ 85%` when the context is nearly full and `✗ CI` when this branch's checks fail, and nothing otherwise. |
+| Status line | Unread counts per room, such as `💬 #team 3`, or `🔕 #team 3` during do not disturb. The built-in rooms add `◔ 85%` when the context is nearly full, `✗ CI` when this branch's checks fail and `🍅 18:42` while a focus timer runs, and nothing otherwise. |
 
 <div align="center">
   <img src="docs/screenshots/band.png" alt="The one-line summary above the prompt while the pane is closed" width="100%">

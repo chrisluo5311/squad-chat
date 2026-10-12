@@ -100,9 +100,10 @@ export function fitSections(sections, room, columns) {
   return out;
 }
 
-// The band: the capsule, then the Open button at the far right. With
+// The band: the capsule, then the Open button at the far right, after ‹ ›
+// that switch the band to the room before or after (`onCycle(-1 | 1)`). With
 // `columns`, the sections that don't fit are left out.
-export function capsule(els, { room, color, sections, onOpen, columns = 0 }) {
+export function capsule(els, { room, color, sections, onOpen, onCycle, columns = 0 }) {
   const { Box, Text, Button } = els;
   const children = [Box({ key: "bs-room", flexShrink: 0, paddingX: 1, children: [Text({ key: "t", bold: true, color, children: room })] })];
   for (const s of fitSections(sections, room, columns)) {
@@ -123,6 +124,18 @@ export function capsule(els, { room, color, sections, onOpen, columns = 0 }) {
       children,
     }),
     Box({ key: "gap", flexGrow: 1 }),
-    Box({ key: "open-box", flexShrink: 0, marginLeft: 1, children: [Button({ key: "open", label: "Open", variant: "primary", onPress: onOpen })] }),
+    Box({ key: "open-box", flexDirection: "row", alignItems: "center", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [
+      ...cycleButtons(els, onCycle),
+      Button({ key: "open", label: "Open", variant: "primary", onPress: onOpen }),
+    ] }),
   ] });
+}
+
+// ‹ › beside Open: the band shows the room before or after, the pane stays shut.
+export function cycleButtons({ Button }, onCycle) {
+  if (!onCycle) return [];
+  return [
+    Button({ key: "band-prev", plain: true, dimColor: true, label: "‹", onPress: () => onCycle(-1) }),
+    Button({ key: "band-next", plain: true, dimColor: true, label: "›", onPress: () => onCycle(1) }),
+  ];
 }

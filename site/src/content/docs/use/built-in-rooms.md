@@ -1,9 +1,9 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Focus, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
 ---
 
-Five tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **⌘ Snippets** and **▦ Monitor**. Four more, **☀ Weather**, **✦ Tech News**, **$ Stocks** and **♫ Lo-fi**, wait until you turn them on with `/chat rooms +weather`, `+news`, `+stock` or `+lofi`, since they reach the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
+Seven tabs sit before your chat rooms: **◔ Usage**, **⎇ Git**, **⟡ Agents**, **◷ Focus**, **✿ Pet**, **⌘ Snippets** and **▦ Monitor**. **⧉ Clipboard** waits until you turn it on with `/chat rooms +clipboard`, since it reads what you copy. Four more, **☀ Weather**, **✦ Tech News**, **$ Stocks** and **♫ Lo-fi**, wait until you turn them on with `/chat rooms +weather`, `+news`, `+stock` or `+lofi`, since they reach the web (each one says where when you turn it on). None of them needs a server or a sign-in, and nothing in them goes to a chat room unless you share it. Each tab has its own color and a badge when something there is worth a look, such as a red dot on Git when this branch's checks fail. When the tabs don't fit on one line, the ones you're not looking at shrink to their icon.
 
 Open one with `/chat usage`, `/chat git`, `/chat agents`, `/chat snippet`, `/chat monitor`, `/chat weather`, `/chat news`, `/chat stock` or `/chat lofi`, or press its tab. While the pane is closed, the line above the prompt sums up the room you were last in.
 
@@ -55,6 +55,32 @@ Every Claude Code session on this computer, in one place:
   <img src="/squad-chat/media/agents.gif" alt="The Agents room with two sessions: this one waits on an Explore subagent while the other, in another repository, runs Bash commands one after another. The live feed interleaves both sessions' tool calls with their times." />
   <figcaption>Two sessions at once: this one waits on a subagent while the other runs commands.</figcaption>
 </figure>
+
+## ◷ Focus
+
+A Pomodoro timer beside your work:
+
+* **A ring** counts the focus round down, then the break. Press **▶ Start**, **⏸ Pause**, **⏭** to end the phase now, or **↺** to start over.
+* **A chime and a toast** when focus ends, and the break starts by itself. When the break ends it chimes again and waits for you.
+* **Your lengths.** Press − and + in the room, or type `50 10` in its box (or `/focus 50 10` at the prompt) for 50 minutes of focus and 10 of break. They're kept, and so is the count of rounds you finished today.
+* **A streak**, drawn as GitHub draws contributions: a square a day for the last few months under the months' names, darker the more rounds you finished (the legend runs from Less to More), with how many days in a row you've kept it up and your best run.
+
+While it runs, the status line shows `🍅 18:42` (`☕` in a break), and the Focus tab shows the minutes left from any other room. With the pane closed, the band above the prompt shows the phase and its time, ten cells for how far it has gone, the streak with this week's days, and what comes next. It turns green during a break. A reload carries on where the timer was.
+
+## ⧉ Clipboard
+
+What you copied lately, newest first, so you can copy it again. Press **⧉** on a row, **✕** to drop one, or **Clear**. It reads the clipboard every 2 seconds while the room has a tab (`pbpaste` on a Mac, `wl-paste` or `xclip` on Linux) and keeps the last 30 items in memory only, gone when the session ends. Anything that looks like a key or a token shows masked, though ⧉ still copies it whole, and nothing in the room can be shared to a chat. The band above the prompt shows how many are kept and the newest one's first line.
+
+## ✿ Pet
+
+Clawd's corner. In the desktop app Clawd is a vector drawing that moves on its own, standing on a little floor:
+
+* **Moods.** On **Auto** it follows what goes on: typing while Claude works, cheering when a focus round ends, vibing through a break, waving at a new message, puzzled when this branch's checks fail, and asleep after ten quiet minutes. Pick a mood in the room to keep it on.
+* **Today together**: how long Claude worked today, the focus rounds you finished, and how Clawd feels.
+* **A bond** that grows with every focus round and every ten minutes of work, a level at a time.
+* **Lately**, a short log of what Clawd noticed: a round finished, a break over, someone writing in a room (who and where, never what), checks failing, a long stretch of work, dozing off.
+
+With the pane closed, the band above the prompt has Clawd saying the latest thing it noticed, or how it feels. Clawd also keeps you company by the pane's input box in every room. **By the input box** picks how: **Stroll** back and forth in the room after the buttons, **Stop & go** (a few steps, a stop to wave, on to the end and back), just **Sit** at the end, or **Off**. The pace follows the mood: a trot while Claude types, an easy walk otherwise, and asleep in the corner after a quiet while. The terminal draws the pixel stickers in half blocks.
 
 ## ⌘ Snippets
 

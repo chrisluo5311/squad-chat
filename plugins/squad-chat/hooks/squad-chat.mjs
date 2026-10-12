@@ -10,13 +10,21 @@
 //   fnviews.mjs   function rooms, drawn from the manifests the bridge loads
 //   metrics.mjs   this session's numbers, github.mjs the Git room's data,
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
+//   focus.mjs, clipboard.mjs, pet.mjs   the Focus, Clipboard and Pet rooms
 
-import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, SYS_ROOMS, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
+import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
+import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge } from "./focus.mjs";
+import { createClipboard, addClip, removeClip, CLIP_READERS } from "./clipboard.mjs";
+import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
+
+state.focus = createFocus();
+state.clipboard = createClipboard();
+state.pet = createPet();
 
 const PANE_ID = "squad-chat";
 
@@ -99,7 +107,14 @@ async function runBridge($, options) {
             lastVisible = "";   // a new bridge knows nothing yet
             for (const bad of event.invalid ?? []) $.ui.log(`squad-chat: room ${bad.dir} skipped: ${bad.errors.join("; ")}`, { to: "debug" });
           }
-          if (applyEvent(event)) afterChange($);
+          if (applyEvent(event)) {
+            // Someone else wrote: Clawd waves, and notes who and where (never what).
+            if (event.type === "message" && event.counted && !event.message?.mine) {
+              state.pet.waveAt = Date.now();
+              petNote(state.pet, "👋", `${event.message.user} wrote in #${event.message.slug}`);
+            }
+            afterChange($);
+          }
           // A new or restarted bridge starts out available: tell it again.
           if (event.type === "auth" && event.state === "signed_in" && isQuiet()) sendStatus($);
         }
@@ -384,6 +399,7 @@ async function submitFromPane($, value) {
       refreshRoom: (id) => refreshRoom($, id),
       copy: (text) => copyText($, text, say),
       saveRooms: (list) => saveSysRooms($, list),
+      roomInput: (view, text) => roomInput($, view, text),
     });
     state.dividerAt.clear();   // they've replied: everything above is read
     await markRead($);         // they're looking at the room they just wrote in
@@ -392,6 +408,12 @@ async function submitFromPane($, value) {
   }
   if (/^\/room\b/.test(String(value).trim()) || state.view !== before.view) {
     try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
+  } else {
+    // What's typed can add or take away buttons in the room (Focus's "start"
+    // brings ⏭ and ↺), and a pane whose buttons change loses the keyboard to
+    // the prompt, where the next words would go to Claude: once the new tree
+    // is drawn, the box takes it back.
+    focusAfterDraw($, "compose");
   }
 }
 
@@ -478,6 +500,18 @@ async function setView($, view) {
   if (view === "git") void refreshGit($, { ifOlderThan: 15_000 });
   if (view === "usage") void refreshUsage($);
   afterChange($);
+}
+
+// The band shows the room on show; ‹ › and /chat band move it along the
+// rooms with tabs (and the chat, once you're in a room) with the pane shut.
+function bandRooms() {
+  return [...enabledRooms(), ...(state.auth === "signed_in" && currentRoom() ? ["chat"] : [])];
+}
+async function cycleBand($, dir) {
+  const list = bandRooms();
+  if (!list.length) return;
+  const at = list.indexOf(activeView());
+  await setView($, list[(Math.max(0, at) + dir + list.length) % list.length]);
 }
 
 async function saveSysRooms($, list) {
@@ -570,7 +604,147 @@ function liveNow() {
   if (u.activity.state !== "idle" || runningCalls(u).length || agentCounts(u).running) return true;
   if (activeView() === "agents") return state.sessions.some((s) => (s.activity?.state && s.activity.state !== "idle") || (s.agents ?? []).length);
   if (activeView() === "git") return state.git.runs.some((r) => r.status !== "completed");
+  if (activeView() === "focus") return isRunning(state.focus);
   return false;
+}
+
+// ---------------------------------------------------------------- Focus, Clipboard, Pet
+
+// The Focus room's lengths and today's count are every session's; the
+// running timer is this session's, kept so a reload carries on. Pet's mood
+// choice is every session's.
+const FOCUS_TIMER_PREFIX = "focus:";
+async function restoreRooms($) {
+  try {
+    const now = await $.clock.now();
+    const timer = state.sessionId ? await $.store.get(FOCUS_TIMER_PREFIX + state.sessionId) : null;
+    restoreFocus(state.focus, await $.store.get("focus"), timer, now);
+    restorePet(state.pet, await $.store.get("pet"));
+    state.pet.lastBusyAt = Date.now();
+    state.focusStatus = focusStatus(now);
+  } catch (err) {
+    $.ui.log(`squad-chat: could not restore the rooms: ${err?.message ?? err}`, { to: "debug" });
+  }
+}
+
+async function saveFocus($) {
+  try {
+    await $.store.set("focus", focusSettings(state.focus));
+    if (state.sessionId) {
+      const key = FOCUS_TIMER_PREFIX + state.sessionId;
+      if (state.focus.phase === "idle") await $.store.delete(key);
+      else await $.store.set(key, focusTimer(state.focus));
+    }
+  } catch (err) {
+    $.ui.log(`squad-chat: could not save the timer: ${err?.message ?? err}`, { to: "debug" });
+  }
+}
+
+// The timer changed: show it, keep it.
+function focusChanged($, now) {
+  state.focusStatus = focusStatus(now);
+  afterChange($);
+  void saveFocus($);
+}
+
+// A press or a typed word: start, pause, skip or reset, on the engine's clock.
+const FOCUS_DO = {
+  start: focusStart,
+  resume: focusStart,
+  go: focusStart,
+  pause: focusPause,
+  skip: focusSkip,
+  reset: focusReset,
+};
+async function focusAct($, verb) {
+  const now = await $.clock.now();
+  FOCUS_DO[verb](state.focus, now);
+  focusChanged($, now);
+}
+
+// A phase ran out: the chime, a toast (a timer you set rings even while
+// quiet), and the next phase.
+function focusEnded($, ended, now) {
+  const f = state.focus;
+  if (ended === "focus") petRound(state.pet);
+  else petNote(state.pet, "☕", "Break's over");
+  savePet($);
+  const asset = ended === "focus" ? "sounds/focus-done.wav" : "sounds/break-done.wav";
+  $.audio.play({ asset }).catch((err) => $.ui.log(`squad-chat: chime: ${err?.message ?? err}`, { to: "debug" }));
+  $.ui.toast(ended === "focus"
+    ? `🍅 Focus done (${f.done} today). Break for ${f.rest} min.`
+    : "☕ Break's over. ▶ in the Focus room starts the next round.");
+  focusChanged($, now);
+}
+
+// Words typed in a room of the mod's own: Focus's start, pause, skip, reset
+// or minutes; Clipboard's clear; Pet's moods. True when taken.
+async function roomInput($, view, text) {
+  const word = text.trim().toLowerCase();
+  if (view === "focus") {
+    if (Object.hasOwn(FOCUS_DO, word)) { await focusAct($, word); return true; }
+    if (setLengths(state.focus, word)) { focusChanged($, await $.clock.now()); return true; }
+    return false;
+  }
+  if (view === "clipboard" && word === "clear") { state.clipboard.items = []; $.ui.invalidate("ui.render"); return true; }
+  if (view === "pet" && (word === "auto" || MOODS.includes(word))) { setPetMode($, word); return true; }
+  return false;
+}
+
+function savePet($) {
+  $.store.set("pet", petSaved(state.pet))
+    .catch((err) => $.ui.log(`squad-chat: could not save the pet: ${err?.message ?? err}`, { to: "debug" }));
+}
+function setPetMode($, mode) {
+  state.pet.mode = mode;
+  savePet($);
+  $.ui.invalidate("ui.render");
+}
+
+// The clipboard, read every couple of seconds while the room has a tab.
+// The first reader that runs is kept; when none does, the room says so.
+const CLIP_EVERY_MS = 2_000;
+const CLIP_ENV = { LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" };
+let clipBusy = false;
+let clipAt = 0;
+async function readClipboard($, now) {
+  const c = state.clipboard;
+  if (clipBusy || c.error || now - clipAt < CLIP_EVERY_MS) return;
+  clipBusy = true;
+  clipAt = now;
+  try {
+    for (const argv of c.reader ? [c.reader] : CLIP_READERS) {
+      let r;
+      // pbpaste writes in the locale's charset, and with none set it writes
+      // "?" for every character outside ASCII: ask for UTF-8.
+      try { r = await $.process.run(argv, { timeoutMs: 2_000, env: CLIP_ENV }); } catch { continue; }
+      if (r.exitCode !== 0 && !c.reader) continue;
+      c.reader = argv;
+      if (r.exitCode === 0 && addClip(c, r.stdout, now)) $.ui.invalidate("ui.render");
+      return;
+    }
+    c.error = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste).";
+    $.ui.invalidate("ui.render");
+  } finally {
+    clipBusy = false;
+  }
+}
+
+async function copyClip($, id, surface) {
+  const item = state.clipboard.items.find((x) => x.id === id);
+  if (item) await copySnippet($, item.text, surface);
+}
+
+// The terminal draws Clawd a frame per redraw: while the Pet room is on
+// show there, redraw as fast as its frames go. The desktop animates itself.
+let paneSurface = null;
+async function petLoop($) {
+  for (;;) {
+    const shown = paneSurface === "terminal" && state.paneShown && activeView() === "pet";
+    await $.clock.sleep(shown ? Math.max(100, petFrameMs()) : 1000);
+    if (state.ended) return;
+    if (shown) $.ui.invalidate("ui.render");
+  }
 }
 
 // What a built-in room's drawing changes with as time passes. Usage moves by
@@ -603,7 +777,32 @@ async function tick($) {
       const shown = view === "git" && state.paneShown;
       void refreshGit($, { ifOlderThan: shown ? GIT_SHOWN_MS : GIT_HIDDEN_MS });
     }
+    await roomsTick($);
   }
+}
+
+// Each second, for the mod's own rooms: the timer (its end, the status
+// line, the tab's badge), the clipboard, and Clawd's mood.
+let lastRoomsKey = "";
+let lastPetSave = 0;
+async function roomsTick($) {
+  const now = await $.clock.now();
+  const ended = tickFocus(state.focus, now);
+  if (ended) focusEnded($, ended, now);
+  const status = focusStatus(now);
+  if (status !== state.focusStatus) { state.focusStatus = status; $.ui.status(statusText()); }
+  if (state.sysRooms.includes("clipboard")) void readClipboard($, now);
+  const u = state.usage;
+  // Clawd keeps to the wall clock, as its drawing does.
+  const wall = Date.now();
+  const busy = u.activity.state !== "idle" || agentCounts(u).running > 0;
+  const noted = petTick(state.pet, { busy, failing: !!state.git?.pr?.checks?.fail, now: wall });
+  // Kept when something happened, and a minute at a time while you work.
+  if (noted || (busy && wall - lastPetSave > 60_000)) { lastPetSave = wall; savePet($); }
+  // Redraw when the badge or Clawd's mood changes (Clawd walks by the
+  // input box in every room).
+  const key = JSON.stringify([focusBadge(now)?.text ?? null, state.sysRooms.includes("pet") ? [petMood(wall), state.pet.log.length, state.pet.log[0]?.at] : null]);
+  if (key !== lastRoomsKey) { lastRoomsKey = key; $.ui.invalidate("ui.render"); }
 }
 
 // Runs a command body. Its answer and any error go to the transcript as a
@@ -620,7 +819,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|snippet|monitor|weather|news|stock|lofi | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -629,6 +828,7 @@ const COMMANDS = [
   { name: "chat-name", description: "squad-chat: change your display name", argumentHint: "<new name>" },
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
   { name: "lofi", description: "squad-chat: music in the background (lo-fi streams, YouTube, your files) through mpv, in the Lo-fi room", argumentHint: "play [name] | pause | next | prev | stop | vol <0-100> | add <url or path> | remove <name> | import" },
+  { name: "focus", description: "squad-chat: a Pomodoro timer in the Focus room, with a chime when focus or a break ends", argumentHint: "start | pause | skip | reset | <focus min> [break min]" },
   { name: "snippet", description: "squad-chat: save code you reuse (the selection, or Claude's last code block), then copy or share it from the Snippet room", argumentHint: "add <name> | rename <old> -> <new> | delete <name> | copy <name> | share <name> [#room]" },
 ];
 
@@ -650,7 +850,7 @@ export function register(on, options) {
     // A room that's new in this version gets a tab once, even for people who
     // chose their tabs before it existed. Taken away, it stays away.
     const offered = await $.store.get("roomsOffered");
-    const seen = Array.isArray(offered) ? offered : Array.isArray(savedRooms) ? [...SYS_ROOMS] : [...DEFAULT_ROOMS];
+    const seen = Array.isArray(offered) ? offered : Array.isArray(savedRooms) ? ["usage", "git", "agents"] : [...DEFAULT_ROOMS];
     const fresh = DEFAULT_ROOMS.filter((x) => !seen.includes(x));
     if (fresh.length) {
       state.sysRooms = [...state.sysRooms, ...fresh.filter((x) => !state.sysRooms.includes(x))];
@@ -661,6 +861,7 @@ export function register(on, options) {
     if (savedView === "chat" || (typeof savedView === "string" && ROOM_ID.test(savedView))) state.view = savedView;
     try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
     await restoreSessionUsage($);
+    await restoreRooms($);
     try { cwdCache = await $.session.cwd(); } catch { cwdCache = null; }
     try { state.usage.model = (await $.session.model()) || state.usage.model; } catch { /* the first turn tells */ }
     beat($, false);   // this session's own row in the Agents room, before any heartbeat goes out
@@ -669,6 +870,7 @@ export function register(on, options) {
       bridgeStarted = true;
       void runBridge($, options);
       tick($).catch(() => { /* unloaded mid-sleep */ });
+      petLoop($).catch(() => { /* unloaded mid-sleep */ });
     }
     return r;
   });
@@ -681,6 +883,16 @@ export function register(on, options) {
       if (view !== "chat" && !state.sysRooms.includes(view)) return say(`The ${view} room is hidden. Bring it back with /chat rooms +${view}.`);
       await setView($, view);
       return openPane($);
+    }
+    // "/chat band git": the band above the prompt shows Git, the pane stays shut.
+    const band = /^band\b\s*(\S*)$/i.exec(args);
+    if (band) {
+      const want = band[1].toLowerCase();
+      const list = bandRooms();
+      if (!want) return say(`The band shows ${activeView()}. /chat band <room> switches it: ${list.join(", ")}. ‹ › on the band do it too.`);
+      if (!list.includes(want)) return say(`No room called ${want} with a tab. There are ${list.join(", ")}.`);
+      await setView($, want);
+      return say(`The band shows ${want}.`);
     }
     const admin = chatAdmin(call, args, say, { saveRooms: (list) => saveSysRooms($, list) });
     if (admin) return admin;
@@ -705,6 +917,14 @@ export function register(on, options) {
   on("command.run", { command: "lofi" }, ($, e) => answer($, (call, say) => lofi(call, e.args, say, {
     setView: async (view) => { await setView($, view); await openPane($); },
   })));
+  on("command.run", { command: "focus" }, ($, e) => answer($, async (call, say) => {
+    const args = String(e.args ?? "").trim();
+    if (!state.sysRooms.includes("focus")) return say("The Focus room is hidden. Bring it back with /chat rooms +focus.");
+    if (args && !(await roomInput($, "focus", args))) return say("/focus takes start, pause, skip, reset, or the minutes: /focus 50 10.");
+    if (!args) { await setView($, "focus"); return openPane($); }
+    const f = state.focus;
+    say(f.phase === "idle" ? `Focus ${f.work} min, break ${f.rest} min.` : `${state.focusStatus} · ${f.work}/${f.rest} min`);
+  }));
   on("command.run", { command: "snippet" }, ($, e) => answer($, (call, say) => snippet(call, e.args, say, {
     sources: shareSources($),
     copy: (text) => copyText($, text, say),
@@ -715,6 +935,7 @@ export function register(on, options) {
     if (e.requestId !== PANE_ID) return next(e);
     const props = e.props ?? {};
     state.paneFocused = props.isFocused === true;
+    paneSurface = e.surface;
     if (state.paneFocused) void markRead($);
     if (!state.paneShown) { state.paneShown = true; syncRooms($); }
     // The pane draws lines and charts as Svg where a surface paints them; the
@@ -761,6 +982,16 @@ export function register(on, options) {
       onToggleBreakdown: () => toggleBreakdown($),
       onToggleSession: (id) => { if (!state.collapsed.delete(id)) state.collapsed.add(id); $.ui.invalidate("ui.render"); },
       onCycleFilter: () => { state.feedFilter = { all: "here", here: "errors", errors: "all" }[state.feedFilter]; $.ui.invalidate("ui.render"); },
+      onFocusStart: () => { void focusAct($, "start"); },
+      onFocusPause: () => { void focusAct($, "pause"); },
+      onFocusSkip: () => { void focusAct($, "skip"); },
+      onFocusReset: () => { void focusAct($, "reset"); },
+      onFocusAdjust: (which, dir) => { focusAdjust(state.focus, which, dir); void $.clock.now().then((now) => focusChanged($, now)); },
+      onClipCopy: (id, surface) => { void copyClip($, id, surface); },
+      onClipRemove: (id) => { removeClip(state.clipboard, id); $.ui.invalidate("ui.render"); },
+      onClipClear: () => { state.clipboard.items = []; $.ui.invalidate("ui.render"); },
+      onPetMode: (mode) => setPetMode($, mode),
+      onPetWalk: (walk) => { state.pet.walk = walk; savePet($); $.ui.invalidate("ui.render"); },
     });
   });
 
@@ -786,7 +1017,7 @@ export function register(on, options) {
     if (e.props?.hasSurvey || (activeView() === "chat" && !chatShown)) return next(e);
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
-    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openPane($); } });
+    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openPane($); }, onCycle: (dir) => { void cycleBand($, dir); } });
   });
 
   // "auto" do not disturb: a turn still running after LONG_TURN_MS goes quiet
