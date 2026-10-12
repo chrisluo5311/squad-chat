@@ -111,7 +111,7 @@ The full guide, with search, lives at **[chrisluo5311.github.io/squad-chat](http
 
 ### Prerequisites
 
-* Claude Code 2.1.287 or newer, in the terminal. The desktop app can't start the chat's background process yet.
+* Claude Code 2.1.292 or newer, in the terminal or the desktop app. On the desktop app the chat and every room are drawn with the app's own pieces.
 * Node 22 or newer on your `PATH`:
   ```sh
   node --version

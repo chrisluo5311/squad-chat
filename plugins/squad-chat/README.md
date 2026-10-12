@@ -20,7 +20,7 @@ claude plugin install squad-chat@squad-chat
 ```
 
 Requires:
-- Claude Code 2.1.287 or newer, in the terminal. The desktop app can't run the chat's background process yet.
+- Claude Code 2.1.292 or newer, in the terminal or the desktop app. On the desktop app the chat and every room are drawn with the app's own pieces.
 - Node 22 or newer on your `PATH` (`node --version`). squad-chat tells you if it's missing or too old.
 
 ## Connect to a server
