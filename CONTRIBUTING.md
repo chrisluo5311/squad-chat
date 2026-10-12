@@ -10,7 +10,7 @@ Thanks for wanting to help! Bug reports, ideas and pull requests are all welcome
 
 You'll need:
 
-* [Claude Code](https://claude.com/claude-code) 2.1.287 or newer
+* [Claude Code](https://claude.com/claude-code) 2.1.292 or newer
 * Node.js 22 or newer
 * [Docker](https://www.docker.com) and the [Supabase CLI](https://supabase.com/docs/guides/local-development), for the local server
 

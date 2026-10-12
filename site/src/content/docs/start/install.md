@@ -5,7 +5,7 @@ description: What you need, how to install squad-chat from its marketplace, upda
 
 ## Requirements
 
-- Claude Code 2.1.287 or newer, in the terminal. The desktop app can't start the chat's background process yet.
+- Claude Code 2.1.292 or newer, in the terminal or the desktop app. On the desktop app the chat and every room are drawn with the app's own pieces.
 - Node 22 or newer on your `PATH`. Check with `node --version`.
 - A server: one Supabase project per group of friends. Get its URL and key from whoever hosts it, or [host one yourself](/squad-chat/host/server/).
 - A terminal with truecolor, such as iTerm2, Ghostty, kitty or WezTerm.

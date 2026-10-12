@@ -7,7 +7,7 @@ Want to help? [CONTRIBUTING.md](https://github.com/chrisluo5311/squad-chat/blob/
 
 ## You'll need
 
-- [Claude Code](https://claude.com/claude-code) 2.1.287 or newer
+- [Claude Code](https://claude.com/claude-code) 2.1.292 or newer
 - Node.js 22 or newer
 - [Docker](https://www.docker.com) and the [Supabase CLI](https://supabase.com/docs/guides/local-development), for the local server
 
