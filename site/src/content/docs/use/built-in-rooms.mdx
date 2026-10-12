@@ -1,0 +1,127 @@
+---
+title: Built-in rooms
+description: The Usage, Git, Agents, Focus, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
+---
+
+Tabs that sit before your chat rooms. They need no server and no sign-in, and nothing in them reaches a chat room unless you share it.
+
+| Room | Shows | Tab |
+| --- | --- | --- |
+| [◔ Usage](#-usage) | Context, rate limits, spend, tool timings | on |
+| [⎇ Git](#-git) | Your branch, its PR and checks, Actions | on |
+| [⟡ Agents](#-agents) | Every Claude Code session and its subagents | on |
+| [◷ Focus](#-focus) | A Pomodoro timer with a streak | on |
+| [✿ Pet](#-pet) | Clawd, moving along with your session | on |
+| [⌘ Snippets](#-snippets) | Code you reuse, one click from the clipboard | on |
+| [▦ Monitor](#-monitor) | CPU, memory, network, battery | on |
+| [⧉ Clipboard](#-clipboard) | What you copied lately | `/chat rooms +clipboard` |
+| [☀ Weather](#-weather) | Now, 24 hours and the week | `/chat rooms +weather` |
+| [✦ Tech News](#-tech-news) | Hacker News and tech feeds | `/chat rooms +news` |
+| [$ Stocks](#-stocks) | Taiwan and US quotes | `/chat rooms +stock` |
+| [♫ Lo-fi](#-lo-fi) | Music while you work | `/chat rooms +lofi` |
+
+Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last five reach the web or your clipboard, so they wait until you add them. On the desktop app, **+** in the header adds one too.
+
+## ◔ Usage
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/usage.png" alt="The Usage room: context and the 5-hour and 7-day meters, spend with its chart and cache hits, each tool's p50 and p95, and an Explore subagent." /></figure>
+
+How this session uses Claude, live.
+
+- **Context, 5-hour, 7-day**: how full each is, and when it resets.
+- **Spend**: cost, the rate per hour, tokens and the cache.
+- **Tools and subagents**: each tool's p50, p95 and failures, and what each subagent does.
+
+## ⎇ Git
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/git.png" alt="The Git room: the branch and its changes, this branch's pull request, other open pull requests, the latest Actions runs, and issues and alerts." /></figure>
+
+Where your branch stands on GitHub, through the [`gh` CLI](https://cli.github.com).
+
+- **Branch**: ahead and behind, files changed, and a commit graph on the desktop.
+- **This PR**: checks as they run, reviews, whether it can merge.
+- **Toasts** when checks fail or pass, or a review comes in. `r` refreshes.
+
+## ⟡ Agents
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/agents.png" alt="The Agents room: sessions on this computer with their subagents as a tree, and the live feed of tool calls." /></figure>
+
+Every Claude Code session on this computer.
+
+- **Sessions**: folder, branch, model, and what each is doing now.
+- **Subagents** as a tree under the session that started them.
+- **Live feed** of tool calls from all of them.
+
+## ◷ Focus
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/focus.png" alt="The Focus room: a 50-minute round running with Pause, Break and reset, the lengths, and the streak." /></figure>
+
+A Pomodoro timer.
+
+- **▶ Start**, **⏸**, **⏭** and **↺**, with a chime at each end. Type `50 10` (or `/focus 50 10`) for your lengths.
+- **A streak** of the days you finished a round, drawn like GitHub's.
+- `🍅 18:42` in the status line while it runs.
+
+## ✿ Pet
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/pet.png" alt="The Pet room: Clawd with headphones, time together, the focus rounds today, the mood, the log and the mood picker." /></figure>
+
+Clawd's corner. Its mood follows the session: typing while Claude works, cheering a finished round, asleep after a quiet while.
+
+- **Today together** and a **bond** that levels up.
+- **Lately**: what Clawd noticed (never what anyone wrote).
+- **By the input box**: Clawd strolls, stops and goes, sits, or stays off.
+
+## ⌘ Snippets
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/snippet.png" alt="The Snippets room: three saved snippets, each with copy and share." /></figure>
+
+Code you reach for again and again.
+
+- `/snippet add` saves your selection, or Claude's last code block. `/snippet add <text>` saves text.
+- **⧉** copies, **⇪** shares to a chat room.
+- Kept in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you.
+
+## ▦ Monitor
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/monitor.png" alt="The Monitor room: CPU with load and temperature, memory and swap, GPU and power with the fans, and the network chart." /></figure>
+
+This computer as it runs, with no sudo: CPU, memory, GPU, network, disk and battery. Temperatures and power need [macmon](https://github.com/vladkens/macmon) on a Mac (`brew install macmon`). It toasts when something runs hot or nearly full. `/chat set monitor alerts off` stops that.
+
+## ⧉ Clipboard
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/clipboard.png" alt="The Clipboard room: four copied items, newest first, a Supabase key among them shown masked." /></figure>
+
+The last 30 things you copied, to copy again. Kept in memory only, gone when the session ends. Anything that looks like a key shows masked, and nothing here can be shared.
+
+## ☀ Weather
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/weather.png" alt="The Weather room: Taipei now, the next 24 hours, this week and sunrise and sunset." /></figure>
+
+Your cities from [Open-Meteo](https://open-meteo.com), no key: now, the next 24 hours, the week, sunrise and sunset. Type a city in the room's box to add it, ✕ drops one. `/chat set weather units imperial` switches units.
+
+## ✦ Tech News
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/news.png" alt="The Tech News room: Hacker News stories with their scores and comments, then the feeds." /></figure>
+
+[Hacker News](https://news.ycombinator.com) and tech feeds, newest first. **⧉** copies a link, **⇪** shares it. `/chat set news hn best` picks the list.
+
+## $ Stocks
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/stock.png" alt="The Stocks room: TAIEX, 2330, 0050, the S&P 500, Apple and NVIDIA, each with its change and the day's line." /></figure>
+
+A watchlist of Taiwan and US stocks, each with today's line. Set it with `/chat set stock watchlist TAIEX, 2330, AAPL` (up to 12). Prices may be delayed, and none of it is investment advice.
+
+## ♫ Lo-fi
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="The Lo-fi room: the player and its volume, and the stations." /></figure>
+
+Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`). Paste a link or a folder into the box to add your own. `p` plays or pauses, `n` skips. Nothing plays until you press play.
+
+## More rooms, sharing, hiding
+
+- **[The room store](/squad-chat/rooms/store/)**: `/chat store` lists rooms anyone wrote, `/chat install <id>` adds one. A room is one JSON file, so installing one never runs code.
+- **Share a snapshot**: **⇪ Share** under a room, or `/chat-share usage #room`, posts it as a card after a preview.
+- **Pick your tabs**: `/chat rooms usage,git`, `+clipboard`, `-snippet` or `none`.
+
+Every setting is in [Commands](/squad-chat/use/commands/). What each room reads is in [Privacy & security](/squad-chat/reference/privacy/#what-the-built-in-rooms-read).

@@ -75,6 +75,7 @@ export default defineConfig({
             { slug: "use/commands" },
             { slug: "use/built-in-rooms" },
             { slug: "use/layouts" },
+            { slug: "use/desktop" },
             { slug: "use/two-accounts" },
           ],
         },

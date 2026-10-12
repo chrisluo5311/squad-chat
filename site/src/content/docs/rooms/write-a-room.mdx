@@ -55,7 +55,7 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | `permissions.hosts` | Every host its providers may reach, up to 10. A provider can't reach anything else, and installing shows this list. |
 | `settings` | Up to 8 settings, changed with `/chat set <room> <setting> <value>`: `list` (`"item": "url"` for links, which must stay on the room's hosts, `"add": true` to take what's typed as more of it, and `min` and `max` for how many it holds), `enum` (`values`), `string`, `bool` or `int` (`min`, `max`), each with a `default`. |
 | `providers` | Up to 4: an `id` (used in the layout's paths), a `type`, `params` (a setting as `"$settings.<key>"`), and an `interval` (`visible` while the room is on show, `background` otherwise, at least `1s`). |
-| `layout` | `cards` (1-6), and optionally `inline`, `band`, `pills`, `snapshot`, `hint`, `placeholder` and `keys`. |
+| `layout` | `cards` (1-6), and optionally `inline`, `band`, `pills`, `snapshot`, `hint`, `placeholder`, `keys` and `add` (a list setting that what's typed in the room's box goes into, or `{ "action", "field" }`). |
 
 ## Providers
 
@@ -107,7 +107,7 @@ A room can toast when something crosses a line, once until it crosses back, and 
 
 ## Widgets
 
-A card has a `title`, an optional `meta` and `when` (show the card only while that path has data), and a `body`: one widget, or a list of up to 6.
+A card has a `title`, an optional `meta`, `badge` (a few words before the meta, colored by the path `badgeTone`) and `when` (show the card only while that path has data), a `body`: one widget, or a list of up to 6, and optionally a [`desktop`](#cards-on-the-desktop) body.
 
 | Widget | Fields |
 | --- | --- |
@@ -121,6 +121,23 @@ A card has a `title`, an optional `meta` and `when` (show the card only while th
 A table column is `width` cells wide (12 if unset). The one marked `grow` takes the space left, or else the last column when it has no `width`.
 
 Paths are plain dots into the providers' data, starting with the provider's `id`: `feeds.items`, `wx.first.name`. Templates put paths in braces: `"{feeds.count} posts"`. `keys` maps single keys typed in the room to actions: `{ "p": "pause" }`.
+
+## Cards on the desktop
+
+A card's `desktop` is a body the desktop app draws in place of `body`. The terminal keeps `body`. It takes the widgets above and these, drawn only there:
+
+| Widget | Fields |
+| --- | --- |
+| `stat` | `value` (a path), `right`, `color`: a number set large |
+| `bar` | `value` (a percent), `color` |
+| `chart` | `values` (a list of numbers), `values2`, `color`, `color2`, `max`, `caption` |
+| `grid` | `items`, `title`, and optionally `sub`, `value`, `change`, `colorFrom`, `line`, `icon`, `note`, `across`, `pick`, `pickTitle`, `drop`, `hint`, `empty`: items as tiles |
+| `forecast` | `values` (a line over the hours), `bars`, `marks`, `caption`, `color`, `color2` |
+| `strip` | `items`, `title`, and optionally `icon`, `value`, `sub`, `note`, `lit`: items as columns, the `lit` one outlined |
+| `sun` | `rise`, `set`, `value` (0-100 through the day), `sub`, `note`: an arc with the sun on it |
+| `media` | `title`, `sub`, `progress`, `elapsed`, `total`, `live`, `playing`, `empty`: what's playing |
+
+A `list` takes more fields there: `code` (the preview as a code block), `score` (a story as Hacker News shows it), `group` (rows under a chip per value), `open` (a link to open), `lit` with `pause` (the row playing), and `remove` (a ✕ that runs an action). `buttons` takes `split` and `level` to put a level between them ("− 60% +"). The Weather, Lo-fi, Tech News, Stocks, Monitor and Snippets rooms in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms) each have a `desktop` body to copy from.
 
 ## The band on the desktop
 

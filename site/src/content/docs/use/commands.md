@@ -34,7 +34,7 @@ description: Every squad-chat slash command, what it does, and examples.
 | `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
 | `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
 | `/chat-share to #room` | Send what's waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. |
-| `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+| `/chat-share usage` / `git` / `agents` / `focus` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 
 ### Snippets
 
@@ -66,9 +66,22 @@ description: Every squad-chat slash command, what it does, and examples.
 | `/chat install <id>` / `update [id]` / `uninstall <id>` | Install a room from the store (a look first, then again to install), bring installed ones up to date, or remove one |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. Some lists, as Weather's cities, add what's typed instead of replacing the list. |
 
+### Room settings
+
+| Command | What it does |
+| --- | --- |
+| `/chat set weather cities Osaka, Seoul` / `-Tokyo` | Add cities, or drop one |
+| `/chat set weather city Tokyo` / `units imperial` | The city shown below Now, and the units |
+| `/chat set news hn best` | The Hacker News list: `top`, `best`, `new` or `off` |
+| `/chat set news feeds -https://techcrunch.com/feed/` | Drop a feed (a feed has to come from one of the room's sites) |
+| `/chat set stock watchlist TAIEX, 2330, AAPL` / `+2454` / `-NVDA` | The watchlist, up to 12. A Taiwan code, `TAIEX`, or any Yahoo symbol such as `7203.T` |
+| `/chat set stock colors red-up` / `green-up` | One color rule for every market, instead of each market's own |
+| `/chat set stock move 3` | Toast when a stock moves 3% in a day (`0` stops it, 5 by default) |
+| `/chat set monitor cpu_temp 90` / `memory 90` / `alerts off` | Monitor's thresholds, or no toasts |
+
 ## In the pane
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the share preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes. In a room with settings, `/set <setting> <value>` changes one.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/focus`, `/clipboard`, `/pet`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the share preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player (`p` play or pause, `n` next, `b` back, `s` stop, `u` and `d` volume). In Focus, `start`, `pause`, `skip`, `reset` or `50 10` drive the timer, and in Pet a mood's name (`wave`, `sleepy`, `auto`) picks it. In a room with settings, `/set <setting> <value>` changes one.
 
 :::tip
 Type passcodes in the pane. It never touches the conversation, while a slash command's raw text stays in one bookkeeping line of the local transcript. See [Privacy & security](/squad-chat/reference/privacy/).

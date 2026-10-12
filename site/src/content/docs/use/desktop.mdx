@@ -1,0 +1,38 @@
+---
+title: Desktop app
+description: How squad-chat looks in the Claude Code desktop app, drawn with the app's own pieces.
+---
+
+import BandGallery from "../../../components/BandGallery.astro";
+
+In the Claude Code desktop app (2.1.292 or newer), the chat and every room are drawn with the app's own pieces: drawings, rounded pills and its buttons, in place of the terminal's glyphs. Everything works the same, and so do the commands.
+
+## The header
+
+- **Room icons** for the built-in rooms. **+** lists the ones without a tab and adds one.
+- **Your chats** on a line of their own. **＋ join** asks for a room's name, then its passcode.
+
+## Chat
+
+Bubbles like a phone's, yours on the right, friends as chips. The chat keeps its height and scrolls on its own: **▲** shows older messages, **↓ N newer** goes back down.
+
+## The band
+
+With the pane closed, the line above the prompt is a capsule of small drawings, one per figure, with a card on hover. **‹** and **›** switch rooms, as `/chat band <room>` does. Each room draws its own (the figures here are made up):
+
+<BandGallery />
+
+## Rooms
+
+Each room has a body made for the app. A few of the differences:
+
+| Room | On the desktop |
+| --- | --- |
+| Usage | Spend as three tiles, subagent counts set large |
+| Git | A commit graph like Fork's, links that open |
+| Agents | Each session on one line, a ring spinning while it works |
+| Pet | A vector Clawd that moves, and strolls by the input box |
+| Weather | A tile per city, a line for 24 hours, the sun's arc |
+| Snippets | Code blocks with Copy, Share and Delete |
+
+[Built-in rooms](/squad-chat/use/built-in-rooms/) has a picture of each.
