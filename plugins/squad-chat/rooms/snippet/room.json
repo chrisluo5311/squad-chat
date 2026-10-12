@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "snippet",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "Snippets",
   "icon": "⌘",
   "color": "amber",
@@ -46,6 +46,7 @@
       {"when": "list.latest", "color": "amber", "value": "{list.latest.name}", "tag": "{list.latest.lang}", "tip": ["Latest saved: {list.latest.name}"]}
     ],
     "band": "{list.count} snippets",
+    "snapshot": "⌘ {list.count} snippets saved",
     "hint": "⧉ copies · ⇪ shares · /snippet add|rename|delete",
     "placeholder": "Type or paste text, then add · /snippet delete #2 · /help"
   }

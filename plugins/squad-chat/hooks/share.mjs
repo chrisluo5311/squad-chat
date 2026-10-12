@@ -3,6 +3,7 @@
 // like it holds a secret.
 
 export const MAX_SNIPPET = 8000;
+export const MAX_TEXT = 500;   // a chat line, as the server takes it
 export const MAX_SNIPPET_LINES = 200;
 const LANG = /^[a-z0-9+#._-]{1,20}$/;
 
@@ -65,12 +66,24 @@ export function lineCount(body) {
   return String(body).split("\n").length;
 }
 
-// A built-in room's snapshot is a code snippet tagged with the room's name.
-export const SNAPSHOT_ICONS = { usage: "📊", git: "⎇", agents: "⟡" };
+// The built-in rooms whose snapshot is a card: a code snippet tagged with the
+// room's name, its first line the card's title. The other rooms share a line
+// of plain chat.
+export const SNAPSHOT_ICONS = { usage: "◔", git: "⎇", agents: "⟡", monitor: "▦" };
 
-// "diff · 3 files +42 −7", "code · ts · 12 lines", "📊 Usage · opus-5.5 · 1h12m".
+// A card snapshot's title and the lines under it, or null for any other snippet.
+export function snapshotCard({ kind, lang, body }) {
+  if (kind !== "code" || !SNAPSHOT_ICONS[lang]) return null;
+  const [head, ...rest] = String(body).split("\n");
+  return { title: `${SNAPSHOT_ICONS[lang]} ${head.slice(0, 60)}`, body: rest.join("\n") };
+}
+
+// "diff · 3 files +42 −7", "code · ts · 12 lines", "◔ Usage · opus-5.5 · 1h12m",
+// or a chat line's first line.
 export function snippetTitle({ kind, lang, body }) {
-  if (kind === "code" && SNAPSHOT_ICONS[lang]) return `${SNAPSHOT_ICONS[lang]} ${String(body).split("\n")[0].slice(0, 60)}`;
+  if (kind === "text") return String(body).split("\n")[0].slice(0, 60);
+  const card = snapshotCard({ kind, lang, body });
+  if (card) return card.title;
   if (kind === "diff") {
     const { files, added, removed } = diffStats(body);
     const where = files ? `${files} file${files === 1 ? "" : "s"} ` : "";

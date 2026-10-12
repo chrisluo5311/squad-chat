@@ -214,6 +214,8 @@ export default {
       updated: new Date(now).toTimeString().slice(0, 5),
       band: quotes.filter((q) => q.price != null).slice(0, 4).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(" · ") || "no quotes",
       note: "Prices may be delayed. Not investment advice.",
+      // The room's share, as one chat message.
+      share: `$ ${quotes.filter((q) => q.price != null).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(", ") || "no quotes"} (may be delayed)`,
       alerts,
     };
     cache.set(ctx.dataDir, { at: now, key, data });

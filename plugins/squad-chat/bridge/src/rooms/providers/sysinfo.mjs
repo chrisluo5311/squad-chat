@@ -316,6 +316,16 @@ export default {
       // 🌡 and ⚡ carry the emoji selector (U+FE0F): without it the terminal
       // gives 🌡 one cell, draws it in two, and it covers the space after it.
       band: [`CPU ${cpuPct}%`, memPct != null ? `mem ${memPct}%` : null, rx != null ? `🛜 ↓${net.rxText} ↑${net.txText}` : null, Number.isFinite(sen?.cpuTemp) ? `🌡\uFE0F ${celsius(sen.cpuTemp)}` : null, b ? `${b.state === "on battery" ? "▯" : "⚡\uFE0F"} ${b.pct}%` : null].filter(Boolean).join(" · "),
+      // The room's share: a card, a label and its figures on each line.
+      share: [
+        `Monitor · ${t.cores} cores`,
+        `CPU      ${cpuPct}%${load.length ? ` · load ${load[0].toFixed(2)}` : ""}${Number.isFinite(sen?.cpuTemp) ? ` · ${celsius(sen.cpuTemp)}` : ""}`,
+        m ? `Memory   ${memPct}% · ${bytes(m.used)} / ${bytes(m.total, 0)}` : null,
+        gpu?.pct != null ? `GPU      ${gpu.pct}%` : null,
+        d ? `Disk     ${pctOf(d.used, d.total)}% · ${bytes(d.free, 0)} free` : null,
+        rx != null ? `Network  ↓ ${net.rxText}  ↑ ${net.txText}` : null,
+        b ? `Battery  ${b.pct}% · ${b.state}` : null,
+      ].filter(Boolean).join("\n"),
       alerts,
     };
   },

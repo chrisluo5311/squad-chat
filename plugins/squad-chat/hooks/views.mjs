@@ -10,8 +10,8 @@
 // Band (pane not up): one line with an Open button.
 
 import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView, enabledRooms, roomIds } from "./state.mjs";
-import { theme, nameColor, glyph } from "./theme.mjs";
-import { snippetTitle, oneLine, displayLines } from "./share.mjs";
+import { theme, palette, nameColor, glyph } from "./theme.mjs";
+import { snippetTitle, snapshotCard, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
 import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge, sysBandDesktop, textW, hasSnapshot } from "./sysviews.mjs";
 import { petBeside } from "./pet.mjs";
@@ -90,7 +90,7 @@ function messageRows(list, width, dividerAt) {
       && Date.parse(m.at) - Date.parse(prev.at) < GROUP_GAP_MS;
     if (!sameGroup) rows.push({ kind: "head", key: `h${m.id}`, m, height: 2 });   // a blank row, then the header
     if (m.kind === "code" || m.kind === "diff") {
-      const lines = snippetLines(m.body, m.kind);
+      const lines = snippetLines(snippetParts(m).body, m.kind);
       const gap = sameGroup ? 1 : 0;   // a blank row from the message above
       rows.push({ kind: "snippet", key: `m${m.id}`, m, ...lines, gap, height: gap + 1 + lines.shown.length + (lines.more ? 1 : 0) });
     } else {
@@ -117,6 +117,16 @@ function withGroupTimes(rows) {
   return out;
 }
 
+// A room's card, shared: its room's color.
+const CARD_COLORS = { usage: theme.usage, git: theme.git, agents: theme.agents, monitor: palette.teal };
+
+// What a snippet draws: a title, and the lines under it. A room's card takes
+// its title from its first line and wears its room's color.
+function snippetParts(m) {
+  const card = snapshotCard(m);
+  return card ? { ...card, color: CARD_COLORS[m.lang] } : { title: `📎 ${snippetTitle(m)}`, body: m.body, color: null };
+}
+
 // A snippet shows its first lines, one terminal row each (never wrapped, so
 // its height is known), and how many more there are. Copy takes it all.
 const SNIPPET_ROWS = 8;
@@ -133,11 +143,29 @@ function diffColor(line) {
   return theme.theirText;
 }
 
-// The snippet's lines on a dark fill, diffs colored line by line.
-function snippetBody(els, { kind, shown, more }) {
+// A card's line: its label dimmed, a bar's fill in the room's color and its
+// track dimmed.
+function cardLine(els, key, line, color) {
+  const { Box, Text } = els;
+  const m = /^\S(?:.*?\S)?( {2,})/.exec(line);
+  const label = m && m[0].length <= 12 ? m[0] : "";
+  const bits = [
+    ...(label ? [{ text: label, color: theme.muted }] : []),
+    ...line.slice(label.length).split(/([━╸]+|─+)/).filter(Boolean)
+      .map((t) => ({ text: t, color: /^[━╸]/.test(t) ? color : t.startsWith("─") ? theme.muted : theme.theirText })),
+  ];
+  return Box({ key, flexDirection: "row", overflow: "hidden", children: bits.map((b, i) => (i === bits.length - 1
+    ? Box({ key: `b${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", color: b.color, children: b.text })] })
+    : Box({ key: `b${i}`, flexShrink: 0, children: [Text({ key: "t", color: b.color, children: b.text })] }))) });
+}
+
+// The snippet's lines on a dark fill, diffs colored line by line, a card's
+// labels and bars by its room.
+function snippetBody(els, { kind, shown, more, color = null }) {
   const { Text } = els;
   return [
-    ...shown.map((line, i) => Text({ key: `l${i}`, wrap: "truncate-end", color: kind === "diff" ? diffColor(line) : theme.theirText, children: line || " " })),
+    ...shown.map((line, i) => (color && line ? cardLine(els, `l${i}`, line, color)
+      : Text({ key: `l${i}`, wrap: "truncate-end", color: kind === "diff" ? diffColor(line) : theme.theirText, children: line || " " }))),
     ...(more ? [Text({ key: "more", color: theme.muted, children: `… ${more} more line${more === 1 ? "" : "s"}` })] : []),
   ];
 }
@@ -164,7 +192,7 @@ function fitRows(rows, capacity) {
     const own = rows[at - 1]?.kind === "head";
     const head = own ? rows[at - 1] : { kind: "head", key: `h${row.m.id}-cut`, m: row.m, height: 2 };
     const gap = own ? row.gap : 0;   // a header of its own sits right above it
-    const all = displayLines(row.m.body, row.m.kind);
+    const all = displayLines(snippetParts(row.m).body, row.m.kind);
     const lines = room - head.height - gap - 1;   // below its title
     const fit = all.length <= lines ? all.length : lines - 1;   // keep a row for "… more"
     if (fit < 2) return false;
@@ -184,15 +212,18 @@ function fitRows(rows, capacity) {
 function drawRow(els, row, width, onCopy) {
   const { Box, Text, Button } = els;
   switch (row.kind) {
-    case "snippet":
-      // Full width whoever sent it: code reads left to right.
-      return Box({ key: row.key, flexShrink: 0, flexDirection: "column", paddingX: 1, marginTop: row.gap, backgroundColor: theme.theirBubble, children: [
-        Box({ key: "head", flexDirection: "row", justifyContent: "space-between", gap: 1, children: [
-          Text({ key: "t", bold: true, color: theme.amber, wrap: "truncate-end", children: `📎 ${snippetTitle(row.m)}` }),
+    case "snippet": {
+      // Full width whoever sent it: code reads left to right. A room's card
+      // has its title on a bar of the room's color.
+      const parts = snippetParts(row.m);
+      return Box({ key: row.key, flexShrink: 0, flexDirection: "column", marginTop: row.gap, backgroundColor: theme.theirBubble, children: [
+        Box({ key: "head", flexDirection: "row", justifyContent: "space-between", gap: 1, paddingX: 1, ...(parts.color ? { backgroundColor: parts.color } : {}), children: [
+          Text({ key: "t", bold: true, color: parts.color ? theme.onAccent : theme.amber, wrap: "truncate-end", children: parts.title }),
           onCopy ? Button({ key: "copy", plain: true, label: "Copy", onPress: (press) => onCopy(row.m.body, press?.surface) }) : null,
         ].filter(Boolean) }),
-        ...snippetBody(els, { kind: row.m.kind, shown: row.shown, more: row.more }),
+        Box({ key: "body", flexDirection: "column", paddingX: 1, children: snippetBody(els, { kind: row.m.kind, shown: row.shown, more: row.more, color: parts.color }) }),
       ] });
+    }
     case "day":
       return Box({ key: row.key, flexShrink: 0, justifyContent: "center", children: [
         Text({ key: "t", color: theme.muted, children: `${glyph.rule.repeat(3)} ${row.text} ${glyph.rule.repeat(3)}` }),
@@ -764,18 +795,32 @@ function shareCard(els, handlers, width = 48) {
   const p = state.pendingShare;
   if (!p || Date.now() > p.until) return null;
   const { Box, Text, Button } = els;
-  const lines = snippetLines(p.body, p.kind, PREVIEW_ROWS);
   const targets = shareTargets(els, p, width, handlers);
+  // A line of chat shows as it will read, a card with its title bar, other
+  // snippets their first lines.
+  let preview, rows;
+  if (p.kind === "text") {
+    preview = Box({ key: "text", paddingX: 1, backgroundColor: theme.theirBubble, children: [Text({ key: "t", color: theme.theirText, children: p.body })] });
+    rows = rowsFor(p.body, width - 6);
+  } else {
+    const parts = snippetParts(p);
+    const lines = snippetLines(parts.body, p.kind, PREVIEW_ROWS);
+    preview = Box({ key: "code", flexDirection: "column", backgroundColor: theme.theirBubble, children: [
+      parts.color ? Box({ key: "head", paddingX: 1, backgroundColor: parts.color, children: [Text({ key: "t", bold: true, color: theme.onAccent, wrap: "truncate-end", children: parts.title })] }) : null,
+      Box({ key: "body", flexDirection: "column", paddingX: 1, children: snippetBody(els, { kind: p.kind, ...lines, color: parts.color }) }),
+    ].filter(Boolean) });
+    rows = (parts.color ? 1 : 0) + lines.shown.length + (lines.more ? 1 : 0);
+  }
   const children = [
-    Box({ key: "code", flexDirection: "column", paddingX: 1, backgroundColor: theme.theirBubble, children: snippetBody(els, { kind: p.kind, ...lines }) }),
+    preview,
     p.secret ? Text({ key: "secret", color: theme.warn, wrap: "truncate-end", children: `⚠ looks like it has ${p.secret}` }) : null,
     targets,
-    Box({ key: "actions", flexDirection: "row", gap: 2, children: [
+    Box({ key: "actions", flexDirection: "row", gap: 2, marginTop: 1, children: [
       Button({ key: "send", label: `Send to #${p.slug}`, variant: "primary", onPress: () => handlers.onShare?.("send") }),
       Button({ key: "cancel", label: "Cancel", onPress: () => handlers.onShare?.("cancel") }),
     ] }),
   ].filter(Boolean);
-  const height = 1 + 3 + lines.shown.length + (lines.more ? 1 : 0) + (p.secret ? 1 : 0) + (targets ? 1 : 0) + 1;   // the gap above it first
+  const height = 1 + 3 + rows + (p.secret ? 1 : 0) + (targets ? 1 : 0) + 1 + 1;   // the gap above it, and one above the buttons
   return { node: card(els, { key: "share", marginTop: 1, title: "SHARE?", titleColor: theme.amber, meta: snippetTitle(p), children }), height };
 }
 

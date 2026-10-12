@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "weather",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "Weather",
   "icon": "☀",
   "color": "sky",
@@ -90,6 +90,7 @@
       {"when": "wx.first.aqi", "draw": {"type": "dot"}, "colorFrom": "wx.first.aqiTone", "label": "AQI", "value": "{wx.first.aqi}", "tip": ["Air quality (US AQI) {wx.first.aqi}"]}
     ],
     "band": "{wx.first.icon} {wx.first.name} {wx.first.tempText} · {wx.first.rainText}",
+    "snapshot": "{wx.first.share}",
     "add": "cities",
     "hint": "type a city, then add · ✕ drops one · /set units imperial · r refreshes",
     "placeholder": "Type a city (Osaka, New York), then add · /set units imperial · /help"

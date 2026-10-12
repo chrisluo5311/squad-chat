@@ -19,7 +19,8 @@ import { gitAttention, ghStatusText } from "./github.mjs";
 import * as K from "./bandkit.mjs";
 import { capsule, draw, label as pLabel, value as pValue, sub as pSub, msg as pMsg } from "./bands.mjs";
 import { orderSessions, mergedFeed } from "./sessions.mjs";
-import { fnMeta, fnDock, fnInline, fnBandPieces, fnSnapshot } from "./fnviews.mjs";
+import { fnMeta, fnDock, fnInline, fnBandPieces, fnSnapshot, fnSnapshotLine } from "./fnviews.mjs";
+import { SNAPSHOT_ICONS } from "./share.mjs";
 import { FOCUS_META, focusDock, focusInline, focusBandPieces, focusBandDesk, focusBadge, focusSnapshot } from "./focus.mjs";
 import { CLIP_META, clipboardDock, clipboardInline, clipboardBandPieces, clipboardBandDesk } from "./clipboard.mjs";
 import { PET_META, petDock, petInline, petBandPieces, petBandDesk } from "./pet.mjs";
@@ -46,6 +47,14 @@ const OWN = {
 // Whether a room's Share posts a snapshot of it.
 export function hasSnapshot(view) {
   return !OWN[view] || !!OWN[view].snapshot;
+}
+
+// How a room's Share posts: "card" (a snippet the chat draws as the room's
+// card), "text" (a line of chat) or "code" (a room's cards, listed).
+export function snapshotKind(view) {
+  if (SNAPSHOT_ICONS[view]) return "card";
+  if (OWN[view] || fnSnapshotLine(view)) return "text";
+  return "code";
 }
 
 // A room's icon, label and color: built-in or function room.
@@ -1160,34 +1169,33 @@ export function sysBadge(view) {
 
 // ---------------------------------------------------------------- snapshots
 
+// The fill heavy and the track thin, so a card colors one and dims the other.
 const textBar = (pct, width) => {
   const { fill, track } = bar(pct, width);
-  return fill + track;
+  return fill + "─".repeat(track.length);
 };
 
 // A built-in room as plain text, for a snippet card in a chat room.
 export function snapshotText(view, now = Date.now()) {
   if (!SYS[view]) return fnSnapshot(view);
   if (OWN[view]) return OWN[view].snapshot?.(now) ?? "";
+  // A card: its title, then a label and its figures on each line.
   const W = 20;
+  const row = (label, text) => `${fit(clip(label, LABEL_W - 2), LABEL_W)}${text}`;
   const out = [];
   if (view === "usage") {
     const u = state.usage;
     out.push(`Usage · ${[shortModel(u.model), u.startedAt ? fmtSpan(now - u.startedAt) : null].filter(Boolean).join(" · ")}`);
-    if (u.context) out.push(`${fit("Context", LABEL_W)}${textBar(u.context.percent ?? 0, W)} ${fit(`${Math.round(u.context.percent ?? 0)}%`, 4, { right: true })}  ${fmtTokens(u.context.tokens)}/${fmtTokens(u.context.window)}`);
+    if (u.context) out.push(row("Context", `${textBar(u.context.percent ?? 0, W)} ${fit(`${Math.round(u.context.percent ?? 0)}%`, 4, { right: true })}  ${fmtTokens(u.context.tokens)}/${fmtTokens(u.context.window)}`));
     for (const l of limitWindows(u)) {
-      out.push(`${fit(limitName(l.kind), LABEL_W)}${textBar(l.percentUsed ?? 0, W)} ${fit(l.percentUsed == null ? "–" : `${Math.round(l.percentUsed)}%`, 4, { right: true })}`);
+      out.push(row(limitName(l.kind), `${textBar(l.percentUsed ?? 0, W)} ${fit(l.percentUsed == null ? "–" : `${Math.round(l.percentUsed)}%`, 4, { right: true })}${l.resetsAt ? `  ↻ ${resetLabel(l.resetsAt)}` : ""}`));
     }
     const cache = cacheRatio(u);
     const rate = burnRate(u, now);
-    out.push(`Spend    ${u.cost ? fmtUsd(u.cost.usd) : "–"}${rate != null ? ` (+${fmtUsd(rate)}/h)` : ""} · ${fmtTokens(totalTokens(u))} tokens · ${cache == null ? "–" : `${Math.round(cache)}%`} cache hits`);
-    const tools = toolRows(u).slice(0, 5);
-    if (tools.length) {
-      out.push(`${fit("Tools", 10)}${toolHeader()}`);
-      for (const t of tools) out.push(`  ${fit(t.name, 8)}${[t.p50, t.p95].map((v) => fit(fmtDur(v), 6, { right: true })).join("")}${fit(String(t.count), 7, { right: true })}${fit(String(t.errors), 6, { right: true })}`);
-    }
+    out.push(row("Spend", `${u.cost ? fmtUsd(u.cost.usd) : "–"}${rate != null ? ` (+${fmtUsd(rate)}/h)` : ""}`));
+    out.push(row("Tokens", `${fmtTokens(totalTokens(u))}${cache == null ? "" : ` · ${Math.round(cache)}% cache hits`}`));
     const { running, done } = agentCounts(u);
-    if (running || done) out.push(`Agents   ${running} running · ${done} done`);
+    if (running || done) out.push(row("Agents", `${running} running · ${done} done`));
   } else if (view === "git") {
     const g = state.git;
     const l = g.local;
@@ -1195,18 +1203,24 @@ export function snapshotText(view, now = Date.now()) {
     out.push(`${g.repo?.name || "repository"}${l ? ` · ⎇ ${l.branch} ${st.sync.map((p) => p.text).join("")} · ${st.tree.text}` : ""}`);
     if (g.pr) {
       const c = g.pr.checks;
-      out.push(`PR #${g.pr.number} ${prState(g.pr).text}: ${g.pr.title}`);
-      out.push(`  checks ✓${c.pass} ●${c.pending} ✗${c.fail} · ${mergePiece(g.pr).text}`);
+      out.push(row("PR", `#${g.pr.number} ${prState(g.pr).text} · ${mergePiece(g.pr).text}`));
+      out.push(row("", clip(g.pr.title, 60)));
+      out.push(row("Checks", `✓${c.pass} ●${c.pending} ✗${c.fail}`));
       const revs = g.pr.reviews.map((r) => `${r.state === "APPROVED" ? "✓" : "✗"} ${r.login}`).concat(g.pr.requested.map((x) => `● ${x}`));
-      if (revs.length) out.push(`  reviews ${revs.join("  ")}`);
-      out.push(`  ${g.pr.url}`);
+      if (revs.length) out.push(row("Reviews", revs.join("  ")));
+    } else {
+      const open = g.prs.slice(0, 3).map((p) => `#${p.number} ${prPill(p, g).text}`);
+      if (open.length) out.push(row("PRs", open.join(" · ")));
     }
-    for (const p of g.prs.filter((p) => p.number !== g.pr?.number).slice(0, 5)) out.push(`#${p.number} ${clip(p.title, 50)}  ${prPill(p, g).text}`);
-    for (const r of g.runs.slice(0, 3)) out.push(`${runGlyph(r, now).g} ${r.name} · ${r.branch} · ${r.status === "completed" ? age(r.updatedAt, now) : "running"}`);
+    const runs = g.runs.slice(0, 3).map((r) => `${runGlyph(r, now).g} ${r.name}`);
+    if (runs.length) out.push(row("Actions", runs.join(" · ")));
+    if (g.pr) out.push(row("", g.pr.url));
   } else {
-    for (const s of allSessions()) {
-      out.push(`${sessionBusy(s) ? "●" : "○"} ${s.project}${s.branch ? ` (${s.branch})` : ""} · ${shortModel(s.model)} · ${s.activity?.state ?? "idle"}${s.cost != null ? ` · ${fmtUsd(s.cost)}` : ""}`);
-      for (const a of s.agents ?? []) out.push(`   ${isEnded(a.status) ? (a.status === "completed" ? "✓" : "✗") : "◐"} ${a.type}: ${clip(a.description, 40)}${a.top ? ` (${a.top})` : ""}`);
+    const sessions = allSessions();
+    out.push(`Agents · ${sessions.length} session${sessions.length === 1 ? "" : "s"}`);
+    for (const s of sessions) {
+      out.push(row(s.project, `${sessionBusy(s) ? "●" : "○"} ${s.activity?.state ?? "idle"} · ${shortModel(s.model)}${s.cost != null ? ` · ${fmtUsd(s.cost)}` : ""}`));
+      for (const a of s.agents ?? []) out.push(`  ${isEnded(a.status) ? (a.status === "completed" ? "✓" : "✗") : "◐"} ${a.type}: ${clip(a.description, 40)}`);
     }
   }
   return out.join("\n");

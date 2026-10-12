@@ -23573,7 +23573,9 @@ async function city(name, units, ctx) {
     hourLine,
     sun,
     sunLine: sun ? `\u2600 ${sun.rise} \u2192 ${sun.set}${sun.length ? ` \xB7 ${sun.length}` : ""}${sun.uvText ? ` \xB7 ${sun.uvText}` : ""}` : "",
-    days
+    days,
+    // The room's share, as one chat message.
+    share: `\u2600 ${p.name}: ${icon} ${temp}${deg}, ${String(desc).toLowerCase()}${days[0] ? `, ${days[0].hiText} / ${days[0].loText} today, ${days[0].rainPct} chance of rain` : ""}.${days[1] ? ` ${days[1].day} ${days[1].icon} ${days[1].hiText} / ${days[1].loText}.` : ""}`
   };
 }
 var open_meteo_default = {
@@ -23653,7 +23655,11 @@ ${url}${url === discuss ? "" : `
 ${discuss}`}`
       };
     });
-    return { items, count: items.length, list };
+    const top = items[0];
+    const share = top ? `\u2726 ${top.title}
+\u25B2 ${top.score} \xB7 ${top.comments} comments on Hacker News
+${top.url}` : "";
+    return { items, count: items.length, list, share };
   }
 };
 
@@ -24006,6 +24012,16 @@ var sysinfo_default = {
       // 🌡 and ⚡ carry the emoji selector (U+FE0F): without it the terminal
       // gives 🌡 one cell, draws it in two, and it covers the space after it.
       band: [`CPU ${cpuPct}%`, memPct != null ? `mem ${memPct}%` : null, rx != null ? `\u{1F6DC} \u2193${net.rxText} \u2191${net.txText}` : null, Number.isFinite(sen?.cpuTemp) ? `\u{1F321}\uFE0F ${celsius(sen.cpuTemp)}` : null, b ? `${b.state === "on battery" ? "\u25AF" : "\u26A1\uFE0F"} ${b.pct}%` : null].filter(Boolean).join(" \xB7 "),
+      // The room's share: a card, a label and its figures on each line.
+      share: [
+        `Monitor \xB7 ${t.cores} cores`,
+        `CPU      ${cpuPct}%${load2.length ? ` \xB7 load ${load2[0].toFixed(2)}` : ""}${Number.isFinite(sen?.cpuTemp) ? ` \xB7 ${celsius(sen.cpuTemp)}` : ""}`,
+        m ? `Memory   ${memPct}% \xB7 ${bytes(m.used)} / ${bytes(m.total, 0)}` : null,
+        gpu?.pct != null ? `GPU      ${gpu.pct}%` : null,
+        d ? `Disk     ${pctOf(d.used, d.total)}% \xB7 ${bytes(d.free, 0)} free` : null,
+        rx != null ? `Network  \u2193 ${net.rxText}  \u2191 ${net.txText}` : null,
+        b ? `Battery  ${b.pct}% \xB7 ${b.state}` : null
+      ].filter(Boolean).join("\n"),
       alerts
     };
   }
@@ -24184,6 +24200,8 @@ var quotes_default = {
       updated: new Date(now).toTimeString().slice(0, 5),
       band: quotes.filter((q) => q.price != null).slice(0, 4).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(" \xB7 ") || "no quotes",
       note: "Prices may be delayed. Not investment advice.",
+      // The room's share, as one chat message.
+      share: `$ ${quotes.filter((q) => q.price != null).map((q) => `${q.symbol} ${q.priceText} ${q.arrow}${q.pctText.replace(/^[+-]/, "")}`).join(", ") || "no quotes"} (may be delayed)`,
       alerts
     };
     cache.set(ctx.dataDir, { at: now, key, data });
