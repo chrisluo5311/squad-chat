@@ -198,6 +198,18 @@ function drawRow(els, row, width, onCopy) {
         Text({ key: "t", color: theme.muted, children: `${glyph.rule.repeat(3)} ${row.text} ${glyph.rule.repeat(3)}` }),
       ] });
     case "new":
+      // The terminal counts its columns for the rule. The desktop's font is
+      // proportional, where a count of "─" ran past the row and wrapped, so
+      // there the rule is a drawn line that stretches to the room left.
+      if (els.Svg) {
+        const W = 1000;
+        return Box({ key: row.key, flexShrink: 0, flexDirection: "row", alignItems: "center", columnGap: 1, children: [
+          Text({ key: "t", color: theme.accent, bold: true, children: "new" }),
+          Box({ key: "r", flexGrow: 1, width: 0, minWidth: 1, overflow: "hidden", children: [
+            els.Svg({ key: "line", alt: "new messages", height: 2, source: `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="2" viewBox="0 0 ${W} 2" preserveAspectRatio="none"><rect width="${W}" height="2" fill="${theme.accent}"/></svg>` }),
+          ] }),
+        ] });
+      }
       return Box({ key: row.key, flexShrink: 0, flexDirection: "row", children: [
         Text({ key: "t", color: theme.accent, bold: true, children: "new " }),
         Text({ key: "r", color: theme.accent, children: glyph.rule.repeat(Math.max(4, width - 4)) }),
@@ -249,18 +261,21 @@ function drawRow(els, row, width, onCopy) {
 // A rounded card, full width: a bold label and right-aligned meta on its
 // first row. `grow` makes it take the pane's spare height, its content kept
 // at the bottom (a chat reads upward from the input).
-function card(els, { key, title, titleColor, meta, metaColor, children, grow = false, marginTop = 0 }) {
+function card(els, { key, title, titleColor, meta, metaColor, metaNode, children, grow = false, marginTop = 0 }) {
   const { Box, Text } = els;
   const head = Box({ key: "head", flexDirection: "row", justifyContent: "space-between", gap: 1, children: [
     Text({ key: "title", bold: true, color: titleColor, wrap: "truncate-end", children: title }),
-    meta ? Text({ key: "meta", color: metaColor ?? theme.muted, children: meta }) : null,
+    metaNode ?? (meta ? Text({ key: "meta", color: metaColor ?? theme.muted, children: meta }) : null),
   ].filter(Boolean) });
+  // A growing card takes the height left and no more (minHeight 0: left to
+  // its content, it would grow past the pane and make the pane scroll), its
+  // newest rows at the bottom and the oldest cut off at the top.
   const body = grow
-    ? [Box({ key: "body", flexDirection: "column", flexGrow: 1, justifyContent: "flex-end", overflow: "hidden", children })]
+    ? [Box({ key: "body", flexDirection: "column", flexGrow: 1, flexShrink: 1, minHeight: 0, justifyContent: "flex-end", overflow: "hidden", children })]
     : children;
   return Box({
     key, flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1, marginTop,
-    flexGrow: grow ? 1 : 0, flexShrink: grow ? 1 : 0, children: [head, ...body],
+    flexGrow: grow ? 1 : 0, flexShrink: grow ? 1 : 0, ...(grow ? { minHeight: 0 } : {}), children: [head, ...body],
   });
 }
 
@@ -513,15 +528,18 @@ function inputBox(els, mode, { onSubmit, onInput }, focused, surface, columns = 
   ].filter(Boolean) });
 }
 
+// The hints under the box keep their row: a cut ("truncate-end") text can
+// otherwise be squeezed by the column as the chat card shrinks, and the
+// desktop drew it cut off at the bottom.
 function hints(els, text) {
-  const { Text } = els;
-  return Text({ key: "hints", color: theme.muted, wrap: "truncate-end", children: text });
+  const { Box, Text } = els;
+  return Box({ key: "hints", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: text })] });
 }
 
 // "sam is typing…", in the row the key hints use, so nothing moves.
 function typingLine(els, text) {
-  const { Text } = els;
-  return Text({ key: "hints", color: theme.muted, italic: true, wrap: "truncate-end", children: `${glyph.typing} ${text}` });
+  const { Box, Text } = els;
+  return Box({ key: "hints", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, italic: true, wrap: "truncate-end", children: `${glyph.typing} ${text}` })] });
 }
 
 function notice(els) {
@@ -653,14 +671,30 @@ function dockView(els, props, handlers) {
     const capacity = Math.max(3, bodyRows - used - tail - 1 - 3 - 1);
     const here = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
     const list = roomMessages();
-    const fitted = fitRows(messageRows(list, width - 4, state.dividerAt?.get(room.id) ?? 0), capacity);
+    // Scrolled up (the wheel over the chat, or ▲): the newest `back` stay
+    // below the window. The desktop's rows are taller than the cells counted
+    // here: it gets more than fit, and the card cuts the oldest off at its top.
+    if (state.chatScroll.room !== room.id) state.chatScroll = { room: room.id, back: 0 };
+    const back = Math.min(state.chatScroll.back, Math.max(0, list.length - 1));
+    const upTo = back ? list.slice(0, list.length - back) : list;
+    const fitted = fitRows(messageRows(upTo, width - 4, state.dividerAt?.get(room.id) ?? 0), els.Svg ? capacity * 3 : capacity);
+    // How many are above the window: counted on the terminal. The desktop's
+    // card cuts its top off unseen, so there ▲ shows while anything at all
+    // is above the newest drawn, uncounted.
+    const firstShown = fitted.find((r) => r.m)?.m.id;
+    const older = els.Svg ? (upTo.length > 1 ? -1 : 0) : Math.max(0, list.findIndex((m) => m.id === firstShown));
     const rows = els.Svg ? withGroupTimes(fitted) : fitted;
     const body = list.length
       ? rows.map((r) => drawRow(els, r, width - 4, handlers.onCopy))   // inside the card's border and padding
       : [Text({ key: "empty", color: theme.muted, children: "No messages yet. Say hi!" })];
+    // ▲ shows older messages, ↓ goes back to the newest; who's here after them.
+    const metaNode = Box({ key: "meta", flexDirection: "row", alignItems: "center", columnGap: 1, flexShrink: 0, children: [
+      older ? els.Button({ key: "chat-older", plain: true, dimColor: true, label: older > 0 ? `▲ ${older} older` : "▲ older", onPress: () => handlers.onChatScroll?.(1) }) : null,
+      back ? els.Button({ key: "chat-newest", plain: true, label: `↓ ${back} newer`, onPress: () => handlers.onChatScroll?.(0) }) : null,
+      Text({ key: "here", color: here ? theme.online : theme.muted, children: here ? `${here} here` : "just you" }),
+    ].filter(Boolean) });
     parts.push(card(els, {
-      key: "room", title: `#${room.slug}`, titleColor: theme.accent, marginTop: 1,
-      meta: here ? `${here} here` : "just you", metaColor: here ? theme.online : theme.muted,
+      key: "room", title: `#${room.slug}`, titleColor: theme.accent, marginTop: 1, metaNode,
       children: body, grow: true,
     }));
     if (pending) parts.push(pending.node);
@@ -694,7 +728,7 @@ const SYS_HINTS = {
 function sysHints(els, view, handlers) {
   const { Box, Text, Button } = els;
   const share = hasSnapshot(view);
-  return Box({ key: "hints", flexDirection: "row", gap: 1, children: [
+  return Box({ key: "hints", flexDirection: "row", gap: 1, flexShrink: 0, children: [
     share ? Box({ key: "share", flexShrink: 0, children: [
       Button({ key: "share-snapshot", plain: true, label: "⇪ Share", onPress: () => handlers.onShare?.(view) }),
     ] }) : null,

@@ -770,16 +770,6 @@ function sessionsCard(els, handlers, maxRows, now) {
 }
 
 // What a session is doing, as a chip's words and color.
-function sessionState(s, now) {
-  const a = s.activity ?? { state: "idle" };
-  const live = liveAgents(s);
-  const since = a.since ? now - a.since : 0;
-  if (a.state === "tool") return { text: `working · ${a.tool} ${fmtDur(since)}`, color: theme.amber };
-  if (a.state === "thinking") return { text: `thinking ${fmtDur(since)}`, color: theme.agents };
-  if (live) return { text: `waiting on ${live} agent${live === 1 ? "" : "s"}`, color: theme.agents };
-  return { text: `idle${a.since ? ` ${age(a.since, now)}` : ""}`, color: theme.muted };
-}
-
 // One branch of a subagent tree, as tall as its row so the lines meet: the
 // trunk down (all the way, or to the elbow on the last), and the elbow.
 const TREE_ROW = 22;
@@ -799,22 +789,47 @@ function agentRing(els, key, now) {
   return els.Svg({ key, source: K.svg(14, 14, body), alt: "running", width: 14, height: 14 });
 }
 
+// A session at work on the desktop: a ring that spins by itself (CSS in the
+// drawing, so the row isn't redrawn for it), in place of the dot.
+function sessionSpinner(els, key, color) {
+  const body = `<style>g{transform-origin:7px 7px;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}</style>`
+    + `<circle cx="7" cy="7" r="5" stroke="rgba(127,127,127,0.3)" stroke-width="2" fill="none"/>`
+    + `<g><path d="M7 2 A5 5 0 0 1 12 7" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round"/></g>`;
+  return els.Svg({ key, source: K.svg(14, 14, body), alt: "working", width: 14, height: 14 });
+}
+
+// What a session is doing, for its row on the desktop: the tool or the
+// state in color, then how long, dim. Idle reads "idle 16m", dim.
+function sessionDoing(s, now) {
+  const a = s.activity ?? { state: "idle" };
+  const live = liveAgents(s);
+  const since = a.since ? fmtDur(now - a.since) : null;
+  if (a.state === "tool") return { what: a.tool, color: theme.amber, time: since };
+  if (a.state === "thinking") return { what: "thinking", color: theme.amber, time: since };
+  if (live) return { what: `${live} agent${live === 1 ? "" : "s"}`, color: theme.agents, time: null };
+  return { what: `idle${a.since ? ` ${age(a.since, now)}` : ""}`, color: theme.muted, time: null, idle: true };
+}
+
 function sessionBlockDesk(els, s, handlers, now, maxAgents) {
   const { Box, Text, Button } = els;
   const here = s.id === state.sessionId;
-  const color = nameColor(s.id);
-  const st = sessionState(s, now);
   const folded = state.collapsed.has(s.id);
   const agents = s.agents ?? [];
   const live = liveAgents(s);
+  // One line, whatever the width: what it's doing keeps its size, and the
+  // folder's name and then the branch give way (cut with "…").
+  const doing = sessionDoing(s, now);
+  const keep = (key, node) => Box({ key, flexShrink: 0, children: [node] });
+  const give = (key, node, shrink = 1) => Box({ key, flexShrink: shrink, minWidth: 0, overflow: "hidden", children: [node] });
   const nodes = [Box({ key: `s-${s.id}`, flexDirection: "row", alignItems: "center", columnGap: 1, children: [
-    Text({ key: "dot", color: sessionBusy(s) ? color : theme.muted, children: "●" }),
-    Text({ key: "p", bold: true, wrap: "truncate-end", children: s.project }),
-    here ? Text({ key: "here", color: theme.muted, children: "here" }) : null,
-    chip(els, "st", st.text, st.color),
+    keep("dot", sessionBusy(s) ? sessionSpinner(els, "spin", doing.color) : Text({ key: "t", color: theme.muted, children: "●" })),
+    give("p", Text({ key: "t", bold: true, wrap: "truncate-end", children: s.project })),
+    here ? keep("here", Text({ key: "t", color: theme.muted, children: "here" })) : null,
+    keep("doing", Text({ key: "t", bold: !doing.idle, color: doing.color, children: doing.what })),
+    doing.time ? keep("time", Text({ key: "t", color: theme.muted, children: doing.time })) : null,
     Box({ key: "push", flexGrow: 1, minWidth: 1 }),
-    s.branch ? Text({ key: "br", color: theme.muted, wrap: "truncate-end", children: s.branch }) : null,
-    Text({ key: "m", color: theme.muted, children: shortModel(s.model) }),
+    s.branch ? give("br", Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: s.branch }), 2) : null,
+    keep("m", Text({ key: "t", color: theme.muted, children: shortModel(s.model) })),
     agents.length ? Button({ key: "fold", plain: true, dimColor: true, label: folded ? `▸ ${live || agents.length}` : "▾", onPress: () => handlers.onToggleSession?.(s.id) }) : null,
   ].filter(Boolean) })];
   if (!folded) {
