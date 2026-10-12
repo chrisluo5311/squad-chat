@@ -106,18 +106,25 @@ export function cells(pct, color, { n = 5 } = {}) {
   return { source: svg(n * 5.5, 14, body), width: n * 5.5, height: 14 };
 }
 
-// Dots that breathe while alive (SMIL, so the Svg needs isInteractive), rings
-// once done, red rings when failed.
+// The moving drawings move by CSS inside the SVG, which runs where it's
+// drawn as a plain image. SMIL needed isInteractive, a frame of its own,
+// and the desktop built that frame again on every redraw (a second, while
+// anything ran): the drawing went blank for an instant each time.
+const css = (rules) => `<style>[class]{transform-box:fill-box}${rules}</style>`;
+
+// Dots that breathe while alive, rings once done, red rings when failed.
 export function dots(list, color, { max = 6 } = {}) {
   const shown = list.slice(0, max);
   const width = Math.max(8, shown.length * 9);
+  const live = list.includes("live");
   const body = shown.map((s, i) => {
     const x = i * 9 + 4.5;
-    if (s === "live") return `<circle cx="${x}" cy="7" r="3.4" fill="${color}"><animate attributeName="opacity" values="1;0.3;1" dur="1.6s" begin="${(i * 0.25).toFixed(2)}s" repeatCount="indefinite"/></circle>`;
+    if (s === "live") return `<circle class="b" cx="${x}" cy="7" r="3.4" fill="${color}" style="animation-delay:${(i * 0.25).toFixed(2)}s"/>`;
     if (s === "idle") return `<circle cx="${x}" cy="7" r="3.4" fill="${color}" fill-opacity="0.35"/>`;
     return `<circle cx="${x}" cy="7" r="2.9" fill="none" stroke="${s === "failed" ? theme.error : color}" stroke-width="1.4"/>`;
   }).join("");
-  return { source: svg(width, 14, body), width, height: 14, isInteractive: list.includes("live") };
+  const style = live ? css(".b{animation:b 1.6s ease-in-out infinite}@keyframes b{50%{opacity:.3}}") : "";
+  return { source: svg(width, 14, style + body), width, height: 14 };
 }
 
 // Faces, overlapping: each a circle in its person's color with an initial.
@@ -134,8 +141,9 @@ export function faces(people, { max = 4 } = {}) {
 
 // Three dots bouncing in turn: someone typing.
 export function typing(color) {
-  const body = [0, 1, 2].map((i) => `<circle cx="${3 + i * 6}" cy="7" r="2" fill="${color}"><animate attributeName="cy" values="7;4;7" dur="1s" begin="${(i * 0.15).toFixed(2)}s" repeatCount="indefinite"/></circle>`).join("");
-  return { source: svg(16, 12, body), width: 16, height: 12, isInteractive: true };
+  const style = css(".t{animation:t 1s ease-in-out infinite}@keyframes t{50%{transform:translateY(-3px)}}");
+  const body = [0, 1, 2].map((i) => `<circle class="t" cx="${3 + i * 6}" cy="7" r="2" fill="${color}" style="animation-delay:${(i * 0.15).toFixed(2)}s"/>`).join("");
+  return { source: svg(16, 12, style + body), width: 16, height: 12 };
 }
 
 // An equalizer: bars dancing while playing, low and still when paused.
@@ -144,12 +152,14 @@ export function equalizer(color, playing) {
   const body = hs.map((h, i) => {
     const x = i * 4;
     if (!playing) return `<rect x="${x}" y="11" width="2.6" height="3" rx="1" fill="${color}" fill-opacity="0.6"/>`;
-    const vals = [h, 3, h * 0.6, 13, h].map((v) => Math.max(2, Math.min(13, v)));
-    return `<rect x="${x}" y="${14 - h}" width="2.6" height="${h}" rx="1" fill="${color}">` +
-      `<animate attributeName="height" values="${vals.join(";")}" dur="${(0.9 + i * 0.13).toFixed(2)}s" repeatCount="indefinite"/>` +
-      `<animate attributeName="y" values="${vals.map((v) => 14 - v).join(";")}" dur="${(0.9 + i * 0.13).toFixed(2)}s" repeatCount="indefinite"/></rect>`;
+    // A full-height bar scaled from its foot: the heights each bar runs through.
+    const vals = [h, 3, h * 0.6, 13, h].map((v) => Math.max(2, Math.min(13, v)) / 13);
+    const frames = vals.map((v, k) => `${k * 25}%{transform:scaleY(${v.toFixed(2)})}`).join("");
+    return `<style>@keyframes e${i}{${frames}}</style>`
+      + `<rect class="e" x="${x}" y="1" width="2.6" height="13" rx="1" fill="${color}" style="animation:e${i} ${(0.9 + i * 0.13).toFixed(2)}s linear infinite"/>`;
   }).join("");
-  return { source: svg(19, 14, body), width: 19, height: 14, isInteractive: playing };
+  const style = playing ? css(".e{transform-origin:50% 100%}") : "";
+  return { source: svg(19, 14, style + body), width: 19, height: 14 };
 }
 
 // A thin progress line with a knob.
