@@ -138,9 +138,9 @@ export function usageSections(now, columns = 100) {
 
 // Null before any figure, so the caller keeps its text line ("waiting for
 // the first reply").
-export function usageBandDesktop(els, props, { onOpen }, now = Date.now()) {
+export function usageBandDesktop(els, props, { onOpen, onCycle }, now = Date.now()) {
   const columns = props.bodyColumns || 100;
   const sections = usageSections(now, columns);
   if (!sections.length) return null;
-  return capsule(els, { room: "◔ Usage", color: theme.usage, sections, onOpen, columns });
+  return capsule(els, { room: "◔ Usage", color: theme.usage, sections, onOpen, onCycle, columns });
 }

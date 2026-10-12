@@ -46,6 +46,8 @@ The Usage and Agents rooms read this session's own figures from Claude Code: con
 
 To show other sessions, each session keeps a small heartbeat file in `/tmp/squad-chat-<uid>/sessions/`, readable only by you: the folder's name, branch, model, what it's doing, and the last few tool calls with a few words each (a command, a file's name, a search pattern). Anything that looks like a secret is masked. No prompts, replies or tool output go in. A heartbeat is removed when its session ends.
 
+The Clipboard room is off until you add it. With a tab, it reads the clipboard every 2 seconds (`pbpaste`, `wl-paste` or `xclip`) and keeps the last 30 items in that session's memory only. Nothing is written to disk or sent anywhere, items that look like a secret are drawn masked, and the room can't be shared to a chat.
+
 Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. The Snippets room never touches the network.
 
 ## What Monitor runs

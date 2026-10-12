@@ -63,8 +63,10 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a built-in room |
-| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `all` or `none`, or `+name` / `-name`). Weather, Tech News, Stocks and Lo-fi are off until you add them. |
+| `/chat usage` / `git` / `agents` / `focus` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a built-in room |
+| `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
+| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks and Lo-fi are off until you add them. |
+| `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | The Focus room's Pomodoro timer, with a chime when focus or a break ends |
 | `/chat store` / `install <id>` / `update [id]` / `uninstall <id>` | Rooms from the room store: list, install (a look first), update, remove |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo` |
 | `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to a chat room |
@@ -85,7 +87,7 @@ The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/lofi
 - **Where your data lives:**
   - Messages live in your squad's own Supabase database and are deleted after 30 days. Whoever hosts it can read it, like any database admin.
   - Only members of a room can read it. You become a member only with the room's passcode, and access is enforced in the database.
-- **The built-in rooms** read this session's figures from Claude Code, and `git` and `gh` in its folder as you. Nothing is sent anywhere. Each session keeps a small heartbeat in `/tmp/squad-chat-<uid>/sessions/`, readable only by you (folder name, branch, model, recent tool names with a few words each, secrets masked, never prompts or output), so the Agents room can show every session.
+- **The built-in rooms** read this session's figures from Claude Code, and `git` and `gh` in its folder as you. Nothing is sent anywhere. Each session keeps a small heartbeat in `/tmp/squad-chat-<uid>/sessions/`, readable only by you (folder name, branch, model, recent tool names with a few words each, secrets masked, never prompts or output), so the Agents room can show every session. The Clipboard room, once you add it, reads the clipboard every 2 seconds and keeps the last 30 items in this session's memory only, masks anything that looks like a secret, and never shares them.
 - **On your computer:** your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you. `/chat-logout` removes it.
 - **What others see:** your display name: the name you picked, or the part of your email before the `@` (`ann@example.com` → `ann`). Friends see it, plus whether you're online. They never see your email.
 

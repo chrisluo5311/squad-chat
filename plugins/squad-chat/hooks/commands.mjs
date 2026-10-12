@@ -8,7 +8,7 @@
 
 import { state, currentRoom, activeView, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { lastCodeBlock, looksLikeDiff, snippetTitle, findSecret, tooBig, displayLines } from "./share.mjs";
-import { snapshotText } from "./sysviews.mjs";
+import { snapshotText, hasSnapshot } from "./sysviews.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
 // sign-in codes, room passcodes, snippets.
@@ -347,7 +347,9 @@ export async function share(call, args, say, sources) {
   if (!room) return say("Join a room first: /room <name> <passcode>");
 
   let snippet;
-  if (roomIds().includes(verb)) {
+  if (roomIds().includes(verb) && !hasSnapshot(verb)) {
+    return say(`The ${verb} room has nothing to share${verb === "clipboard" ? ": what you copied stays on this computer" : ""}.`);
+  } else if (roomIds().includes(verb)) {
     snippet = { kind: "code", lang: verb.slice(0, 20), body: snapshotText(verb) };
   } else if (verb === "diff") {
     const body = String(await sources.diff(rest.join(" ")) ?? "").replace(/\n$/, "");
@@ -581,18 +583,20 @@ function showView(view, say, setView) {
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /chat · /logout · anything else is a message";
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /clipboard · /pet · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
 // `refreshGit()` fetches the Git room again, `refreshRoom(id)` a function
 // room, `copy(text)` puts text on the clipboard, `saveRooms(list)` saves
-// which rooms have tabs.
-export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit, refreshRoom, copy, saveRooms } = {}) {
+// which rooms have tabs, `roomInput(view, text)` takes words typed in a
+// built-in room of the mod's (Focus's "start" or "50 10"), true if it did.
+export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit, refreshRoom, copy, saveRooms, roomInput } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
   const view = activeView();
   if (view === "git" && /^r(efresh)?$/i.test(text)) return refreshGit?.();
+  if (!text.startsWith("/") && await roomInput?.(view, text)) return;
   if (isFnRoom(view) && /^r(efresh)?$/i.test(text)) return refreshRoom?.(view);
   // A room's own keys: "p" in Lo-fi plays or pauses.
   const key = isFnRoom(view) && text.length === 1 ? state.fn.get(view).manifest.layout.keys?.[text.toLowerCase()] : null;
@@ -611,7 +615,11 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
   if (m) {
     const [, cmd, args] = m;
     switch (cmd) {
-      case "usage": case "git": case "agents": return showView(cmd, say, setView);
+      case "usage": case "git": case "agents": case "clipboard": case "pet": return showView(cmd, say, setView);
+      case "focus":
+        // "/focus 50 10" or "/focus start" does it without leaving the room on show.
+        if (args.trim()) return (await roomInput?.("focus", args.trim())) ? undefined : say("/focus takes start, pause, skip, reset, or the minutes: /focus 50 10.");
+        return showView(cmd, say, setView);
       case "chat": {
         // "/chat git" typed here does what it does at the prompt.
         const [sub, ...more] = args.trim().toLowerCase().split(/\s+/).filter(Boolean);

@@ -20,12 +20,33 @@ import * as K from "./bandkit.mjs";
 import { capsule, draw, label as pLabel, value as pValue, sub as pSub, msg as pMsg } from "./bands.mjs";
 import { orderSessions, mergedFeed } from "./sessions.mjs";
 import { fnMeta, fnDock, fnInline, fnBandPieces, fnSnapshot } from "./fnviews.mjs";
+import { FOCUS_META, focusDock, focusInline, focusBandPieces, focusBandDesk, focusBadge, focusSnapshot } from "./focus.mjs";
+import { CLIP_META, clipboardDock, clipboardInline, clipboardBandPieces, clipboardBandDesk } from "./clipboard.mjs";
+import { PET_META, petDock, petInline, petBandPieces, petBandDesk } from "./pet.mjs";
 
 export const SYS = {
   usage: { icon: "◔", label: "Usage", color: theme.usage },
   git: { icon: "⎇", label: "Git", color: theme.git },
   agents: { icon: "⟡", label: "Agents", color: theme.agents },
+  focus: FOCUS_META,
+  clipboard: CLIP_META,
+  pet: PET_META,
 };
+
+// The built-in rooms that live in modules of their own: each draws its
+// docked cards, its inline lines, its band (a line of text, and the
+// desktop's capsule as { color, sections }), and may badge its tab or share
+// a snapshot (Clipboard and Pet have nothing to share).
+const OWN = {
+  focus: { dock: focusDock, inline: focusInline, band: focusBandPieces, desk: focusBandDesk, badge: focusBadge, snapshot: focusSnapshot },
+  clipboard: { dock: clipboardDock, inline: clipboardInline, band: clipboardBandPieces, desk: clipboardBandDesk },
+  pet: { dock: petDock, inline: petInline, band: petBandPieces, desk: petBandDesk },
+};
+
+// Whether a room's Share posts a snapshot of it.
+export function hasSnapshot(view) {
+  return !OWN[view] || !!OWN[view].snapshot;
+}
 
 // A room's icon, label and color: built-in or function room.
 export function roomMeta(id) {
@@ -876,6 +897,7 @@ function agentsDock(els, w, capacity, handlers, now) {
 export function sysDock(els, view, width, capacity, handlers, now = Date.now()) {
   const w = Math.max(20, width - 4);   // inside a card's border and padding
   if (!SYS[view]) return fnDock(els, view, w, capacity, handlers);
+  if (OWN[view]) return OWN[view].dock(els, w, capacity, handlers, now);
   if (view === "usage") return usageDock(els, w, capacity, handlers, now);
   if (view === "git") return gitDock(els, w, capacity, handlers, now);
   return agentsDock(els, w, capacity, handlers, now);
@@ -886,6 +908,7 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
   const { Text } = els;
   const w = Math.max(20, width);
   if (!SYS[view]) return fnInline(els, view, w, handlers);
+  if (OWN[view]) return OWN[view].inline(els, w, handlers, now);
   const meta = SYS[view];
   const head = (text, right) => line(els, "head", [
     { text: `${meta.icon} ${meta.label}`, bold: true, color: meta.color },
@@ -966,6 +989,7 @@ export function forecast(pct) {
 // and the spend once there is some.
 export function sysBandPieces(view, width = 0) {
   if (!SYS[view]) return fnBandPieces(view);
+  if (OWN[view]) return OWN[view].band();
   const sep = { text: " · ", color: theme.muted };
   const join = (list) => list.filter(Boolean).flatMap((p, i) => (i ? [sep, ...p] : p));
   const figure = (label, pct) => [{ text: `${label} `, color: theme.muted }, { text: `${Math.round(pct)}%`, color: level(pct), bold: true }];
@@ -1092,11 +1116,15 @@ function agentSections(now) {
 }
 
 // Git and Agents on the desktop, as a capsule.
-export function sysBandDesktop(view, els, { onOpen, columns = 0 }, now = Date.now()) {
+export function sysBandDesktop(view, els, { onOpen, onCycle, columns = 0 }, now = Date.now()) {
   const meta = SYS[view];
+  if (OWN[view]) {
+    const { color, sections } = OWN[view].desk(now);
+    return capsule(els, { room: `${meta.icon} ${meta.label}`, color, sections, onOpen, onCycle, columns });
+  }
   if (!meta || view === "usage") return null;
   const sections = view === "git" ? gitSections() : agentSections(now);
-  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen, columns });
+  return capsule(els, { room: `${meta.icon} ${meta.label}`, color: meta.color, sections, onOpen, onCycle, columns });
 }
 
 // The same as plain text.
@@ -1106,6 +1134,7 @@ export function sysBandText(view) {
 
 // A tab's badge: what's worth a glance from another room.
 export function sysBadge(view) {
+  if (OWN[view]) return OWN[view].badge?.() ?? null;
   if (view === "git" && gitAttention(state.git)) return { text: "●", color: theme.error };
   if (view === "agents") {
     const n = allSessions().reduce((k, s) => k + (s.agents ?? []).filter((a) => !isEnded(a.status)).length, 0);
@@ -1125,6 +1154,7 @@ const textBar = (pct, width) => {
 // A built-in room as plain text, for a snippet card in a chat room.
 export function snapshotText(view, now = Date.now()) {
   if (!SYS[view]) return fnSnapshot(view);
+  if (OWN[view]) return OWN[view].snapshot?.(now) ?? "";
   const W = 20;
   const out = [];
   if (view === "usage") {

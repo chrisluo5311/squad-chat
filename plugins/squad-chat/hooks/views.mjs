@@ -13,10 +13,11 @@ import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText,
 import { theme, nameColor, glyph } from "./theme.mjs";
 import { snippetTitle, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
-import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge, sysBandDesktop, textW } from "./sysviews.mjs";
+import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge, sysBandDesktop, textW, hasSnapshot } from "./sysviews.mjs";
+import { petBeside } from "./pet.mjs";
 import { fnHint, fnPlaceholder, fnBandDesktop, fnMeta, fnAdds } from "./fnviews.mjs";
 import * as K from "./bandkit.mjs";
-import { capsule, draw, value as pValue, sub as pSub, msg as pMsg, chip as pChip } from "./bands.mjs";
+import { capsule, cycleButtons, draw, value as pValue, sub as pSub, msg as pMsg, chip as pChip } from "./bands.mjs";
 import { usageBandDesktop } from "./usageband.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
@@ -493,18 +494,22 @@ function friendsCard(els, width) {
 // desktop's field draws its own focus, and a tree that changed with focus
 // there made the box blink as focus moved, so it stays one color and the
 // field waits for a click instead of taking the focus on every draw. The
-// desktop draws its field at a width of its own, so the room the frame has
-// past it says where help is.
-function inputBox(els, mode, { onSubmit, onInput }, focused, surface) {
+// desktop draws its field at a width of its own, and Clawd sits in the room
+// the frame has past it when the Pet room has a tab.
+function inputBox(els, mode, { onSubmit, onInput }, focused, surface, columns = 0) {
   const { Box, Text, Input } = els;
   const terminal = surface !== "desktop";
   return Box({ key: "compose-box", flexDirection: "row", alignItems: "center", marginTop: 1, flexShrink: 0, borderStyle: "round", borderColor: terminal && !focused ? theme.border : theme.accent, paddingX: 1, children: [
     Text({ key: "prompt", color: theme.accent, bold: true, children: `${glyph.prompt} ` }),
-    Box({ key: "field", flexGrow: terminal ? 1 : 0, minWidth: 0, children: [
+    // The desktop's field keeps its own width: Clawd's track takes what's left.
+    Box({ key: "field", flexGrow: terminal ? 1 : 0, ...(terminal ? {} : { flexShrink: 0 }), minWidth: 0, children: [
       Input({ key: "compose", placeholder: mode.placeholder, submitLabel: mode.label, value: state.draft ?? "", ...(terminal ? { autoFocus: true } : {}), onInput, onSubmit }),
     ] }),
-    terminal ? null : Box({ key: "push", flexGrow: 1, minWidth: 1 }),
-    terminal ? null : Text({ key: "help", color: theme.muted, children: "/help" }),
+    // Clawd walks the room after the field, or sits at its end.
+    ...(terminal ? [] : (() => {
+      const clawd = petBeside(els, { columns });
+      return [clawd.fills ? null : Box({ key: "push", flexGrow: 1, minWidth: 1 }), clawd.row];
+    })()),
   ].filter(Boolean) });
 }
 
@@ -529,6 +534,9 @@ const SYS_INPUT = {
   usage: { placeholder: "/git · /agents · /share usage [#room] · /help", label: "run" },
   git: { placeholder: "r to refresh · /share git [#room] · /help", label: "run" },
   agents: { placeholder: "/usage · /git · /share agents [#room] · /help", label: "run" },
+  focus: { placeholder: "start · pause · skip · reset · 50 10 sets the minutes", label: "run" },
+  clipboard: { placeholder: "clear · /help", label: "run" },
+  pet: { placeholder: "auto, or a mood: vibe typing wave cheer sleepy …", label: "run" },
 };
 function inputMode() {
   const view = activeView();
@@ -631,7 +639,7 @@ function dockView(els, props, handlers) {
     parts.push(Box({ key: "spacer", flexGrow: 1 }));
     if (pending) parts.push(pending.node);
     if (n) parts.push(n);
-    parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface));
+    parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface, props.bodyColumns));
     parts.push(sysHints(els, view, handlers));
   } else if (state.auth === "signed_in" && room) {
     const friends = friendsCard(els, width);
@@ -657,14 +665,14 @@ function dockView(els, props, handlers) {
     }));
     if (pending) parts.push(pending.node);
     if (n) parts.push(n);
-    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface));
+    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface, props.bodyColumns));
     const typing = typingText(room.id);
     parts.push(typing ? typingLine(els, typing) : hints(els, "enter send · esc back · /room · /who · /help"));
   } else {
     parts.push(setupCard(els, width));
     const n = notice(els);
     if (n) parts.push(n);
-    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface));
+    if (mode) parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface, props.bodyColumns));
     if (mode) parts.push(hints(els, state.auth === "signed_in" ? "you can type /room right here" : "enter to continue · esc back"));
   }
 
@@ -676,18 +684,22 @@ const SYS_HINTS = {
   usage: "Context ▸ breaks it down",
   git: "↻ or r refreshes · ⧉ copies a link",
   agents: "▾ folds a session · all ▾ filters the feed",
+  focus: "a chime when focus or a break ends",
+  clipboard: "⧉ copies again · kept in memory, never shared",
+  pet: "Clawd follows what goes on, or keeps one mood",
 };
 
 // A built-in room's hints, after a Share button that posts its snapshot
 // (the preview card picks the room).
 function sysHints(els, view, handlers) {
   const { Box, Text, Button } = els;
+  const share = hasSnapshot(view);
   return Box({ key: "hints", flexDirection: "row", gap: 1, children: [
-    Box({ key: "share", flexShrink: 0, children: [
+    share ? Box({ key: "share", flexShrink: 0, children: [
       Button({ key: "share-snapshot", plain: true, label: "⇪ Share", onPress: () => handlers.onShare?.(view) }),
-    ] }),
-    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `· ${(els.Svg && view === "git" ? "↻ or r refreshes · ↗ opens a link" : SYS_HINTS[view]) ?? fnHint(view)}` }),
-  ] });
+    ] }) : null,
+    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `${share ? "· " : ""}${(els.Svg && view === "git" ? "↻ or r refreshes · ↗ opens a link" : SYS_HINTS[view]) ?? fnHint(view)}` }),
+  ].filter(Boolean) });
 }
 
 // The rooms a waiting snippet can go to, the chosen one lit. Rooms that
@@ -805,7 +817,7 @@ function inlineView(els, props, handlers) {
 
 // The chat room on the desktop: faces of who's online, what's new, and the
 // latest message (or who's typing).
-function chatBandDesktop(els, { onOpen, columns }) {
+function chatBandDesktop(els, { onOpen, onCycle, columns }) {
   const room = currentRoom();
   const others = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id);
   const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
@@ -839,19 +851,19 @@ function chatBandDesktop(els, { onOpen, columns }) {
       sections.push({ key: "msg", color: who, grow: true, parts: [pValue(displayName(last), who), pMsg(oneLine(last))] });
     }
   }
-  return capsule(els, { room: `${glyph.brand} #${room.slug}`, color: theme.accent, sections, onOpen, columns });
+  return capsule(els, { room: `${glyph.brand} #${room.slug}`, color: theme.accent, sections, onOpen, onCycle, columns });
 }
 
 // One line above the prompt while the pane can't be seen (terminal too
 // narrow, or the pane closed): room, who's online, unread, the latest message.
 // The desktop draws it as a capsule of small drawings (bands.mjs).
-export function bandView(els, props, { onOpen }) {
+export function bandView(els, props, { onOpen, onCycle }) {
   const { Box, Text, Button } = els;
   const view = activeView();
   if (props.surface === "desktop" && els.Svg) {
-    const fit = { onOpen, columns: props.bodyColumns || 100 };
+    const fit = { onOpen, onCycle, columns: props.bodyColumns || 100 };
     const desk = view === "chat" ? chatBandDesktop(els, fit)
-      : view === "usage" ? usageBandDesktop(els, props, { onOpen })
+      : view === "usage" ? usageBandDesktop(els, props, { onOpen, onCycle })
         : fnMeta(view) ? fnBandDesktop(view, els, fit)
           : sysBandDesktop(view, els, fit);
     if (desk) return desk;
@@ -865,7 +877,8 @@ export function bandView(els, props, { onOpen }) {
         Box({ key: "msg", flexDirection: "row", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: sysBandPieces(view, Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16)).map((p, i) => (
           Box({ key: `p${i}`, flexShrink: 0, children: [Text({ key: "t", color: p.color, bold: p.bold, children: p.text })] }))) }),
       ] }),
-      Box({ key: "open-box", flexShrink: 0, marginLeft: 1, children: [
+      Box({ key: "open-box", flexDirection: "row", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [
+        ...cycleButtons(els, onCycle),
         Button({ key: "open", label: "Open", variant: "primary", onPress: onOpen }),
       ] }),
     ] });
@@ -902,7 +915,8 @@ export function bandView(els, props, { onOpen }) {
   }
   return Box({ flexDirection: "row", children: [
     Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: bits }),
-    Box({ key: "open-box", flexShrink: 0, marginLeft: 1, children: [
+    Box({ key: "open-box", flexDirection: "row", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [
+      ...cycleButtons(els, onCycle),
       Button({ key: "open", label: "Open", variant: "primary", onPress: onOpen }),
     ] }),
   ] });
