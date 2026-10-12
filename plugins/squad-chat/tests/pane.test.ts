@@ -325,6 +325,14 @@ test('a "new" line marks where you had read up to, under a date label', SLOW, as
   expect(await ui.find({ type: 'Text', text: 'new ' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Today/ })).toBeDefined()
   await ui.unmount()
+  // The desktop's font is proportional: the rule is a line drawn to the room
+  // left, never a count of "─" that runs past the row and wraps.
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Text', text: 'new' })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: 'new messages' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /─{4}/ })).toBeUndefined()
+  await desk.unmount()
 })
 
 test('room tabs switch rooms when pressed', SLOW, async ($, on) => {
@@ -2602,5 +2610,79 @@ test('a submit that changes the room\'s buttons puts the keyboard back in the bo
   // The pane takes the keyboard again once the new buttons are drawn (the
   // ring then goes to the box), so the next words don't fall through to Claude.
   expect(seen.opened.slice(before)).toEqual(['squad-chat'])
+  await ui.unmount()
+})
+
+test('desktop: the box empties after a message is sent, and the pane leaves the focus alone', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  const opened = seen.opened.length
+  await ui.input({ key: 'compose', text: 'hi', kind: 'change' })   // typing draws nothing
+  await ui.input({ key: 'compose', text: 'hi' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: 'hi', room: LOBBY.id } })
+  // The text sent is drawn once, then "": a change the field takes, so it empties.
+  expect((await ui.find({ type: 'Input', key: 'compose' }))!.props.value).toBe('hi')
+  await bridge.clock.advance(200)
+  expect((await ui.find({ type: 'Input', key: 'compose' }))!.props.value).toBe('')
+  expect(seen.opened.length).toBe(opened)
+  await ui.unmount()
+})
+
+test('desktop: the chat card keeps its height as messages pile up, the oldest cut off at its top', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...Array.from({ length: 60 }, (_, i) => msg(i + 1, i % 2 ? 'me' : 'bob', `message ${i + 1}`)))
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  const room = await ui.find({ type: 'Box', key: 'room' })
+  expect(room!.props.minHeight).toBe(0)                      // shrinks to the room left, never grows the pane
+  const body = await ui.find({ type: 'Box', key: 'body' })
+  expect(body!.props).toMatchObject({ minHeight: 0, overflow: 'hidden', justifyContent: 'flex-end' })
+  expect(await ui.find({ type: 'Text', text: 'message 60' })).toBeDefined()   // the newest is there
+  // The hints under the box keep their row as the card shrinks: squeezed, the desktop drew them cut off.
+  expect((await ui.find({ type: 'Box', key: 'hints' }))!.props.flexShrink).toBe(0)
+  await ui.unmount()
+})
+
+test('the chat scrolls on its own: ▲ shows older messages, a new one leaves the view put, ↓ and sending go back to the newest', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...Array.from({ length: 40 }, (_, i) => msg(i + 1, i % 2 ? 'me' : 'bob', `message ${i + 1}`)))
+  await settle()
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface, props: props('dock') })
+    // The terminal counts what's above; the desktop, whose card cuts its top
+    // off unseen, shows ▲ while anything is above at all.
+    const older = await ui.find({ type: 'Button', key: 'chat-older' })
+    expect(older!.props.label).toMatch(surface === 'terminal' ? /^▲ \d+ older$/ : /^▲ older$/)
+    expect(await ui.find({ type: 'Text', text: 'message 40' })).toBeDefined()
+    const step = surface === 'terminal' ? 5 : 3
+    await ui.press({ key: 'chat-older' })
+    expect(await ui.find({ type: 'Text', text: 'message 40' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: `message ${40 - step}` })).toBeDefined()
+    expect((await ui.find({ type: 'Button', key: 'chat-newest' }))!.props.label).toBe(`↓ ${step} newer`)
+    await ui.press({ key: 'chat-newest' })
+    expect(await ui.find({ type: 'Text', text: 'message 40' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'chat-newest' })).toBeUndefined()
+    await ui.unmount()
+  }
+  // Scrolled up, a message coming in doesn't move the view; sending goes back down.
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await ui.press({ key: 'chat-older' })
+  bridge.emit(news(1, msg(41, 'bob', 'message 41')))
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'message 35' })).toBeDefined()
+  expect((await ui.find({ type: 'Button', key: 'chat-newest' }))!.props.label).toBe('↓ 6 newer')
+  await ui.input({ key: 'compose', text: 'back down' })
+  await bridge.clock.advance(200)
+  expect(await ui.find({ type: 'Button', key: 'chat-newest' })).toBeUndefined()
   await ui.unmount()
 })

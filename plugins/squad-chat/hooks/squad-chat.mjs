@@ -109,6 +109,8 @@ async function runBridge($, options) {
           }
           if (applyEvent(event)) {
             // Someone else wrote: Clawd waves, and notes who and where (never what).
+            // A message that comes in while the chat is scrolled up leaves the view where it is.
+            if (event.type === "message" && !event.backfill && event.message?.room === state.chatScroll.room && state.chatScroll.back > 0) state.chatScroll.back += 1;
             if (event.type === "message" && event.counted && !event.message?.mine) {
               state.pet.waveAt = Date.now();
               petNote(state.pet, "👋", `${event.message.user} wrote in #${event.message.slug}`);
@@ -383,13 +385,36 @@ function typingPing($, value) {
   callBridge($, "/typing", { room: state.current }).catch(() => { /* a missed ping only hides a hint */ });
 }
 
+// Empty the box after a submit. A field holds what's typed until the hook
+// draws another value, and typing doesn't redraw (it would flicker), so the
+// value last drawn is often "" already and drawing "" again changes nothing:
+// the desktop kept the words sent. So the text sent is drawn first, then "".
+function clearBox($, sent) {
+  state.draft = String(sent ?? "");
+  $.ui.invalidate("ui.render");
+  void (async () => {
+    await $.clock.sleep(120);
+    if (state.draft === String(sent ?? "")) { state.draft = ""; $.ui.invalidate("ui.render"); }
+  })().catch(() => { state.draft = ""; });
+}
+
+// The chat's own scroll: `by` messages older (+) or newer (-), or 0 for the
+// newest.
+function scrollChat($, by) {
+  const c = state.chatScroll;
+  const max = Math.max(0, roomMessages().length - 1);
+  const back = by === 0 ? 0 : Math.min(max, Math.max(0, c.back + by));
+  if (back === c.back) return;
+  c.back = back;
+  $.ui.invalidate("ui.render");
+}
+
 async function submitFromPane($, value) {
   const say = (text) => { state.notice = text; $.ui.invalidate("ui.render"); };
   const before = { current: state.current, count: state.rooms.length, view: state.view };
-  state.draft = "";
+  clearBox($, value);
   state.notice = "";
   lastTypingPing = 0;
-  $.ui.invalidate("ui.render");
   try {
     await paneInput((path, body) => callBridge($, path, body), value, say, {
       setDnd: (mode) => setDnd($, mode),
@@ -402,17 +427,19 @@ async function submitFromPane($, value) {
       roomInput: (view, text) => roomInput($, view, text),
     });
     state.dividerAt.clear();   // they've replied: everything above is read
+    state.chatScroll.back = 0;   // and they see what they just sent
     await markRead($);         // they're looking at the room they just wrote in
   } catch (err) {
     say(err?.message ?? String(err));
   }
   if (/^\/room\b/.test(String(value).trim()) || state.view !== before.view) {
     try { await keepFocusAcrossRoomChange($, before); } catch { /* the box is one click away */ }
-  } else {
+  } else if (paneSurface === "terminal") {
     // What's typed can add or take away buttons in the room (Focus's "start"
-    // brings ⏭ and ↺), and a pane whose buttons change loses the keyboard to
-    // the prompt, where the next words would go to Claude: once the new tree
-    // is drawn, the box takes it back.
+    // brings ⏭ and ↺), and on the terminal a pane whose buttons change loses
+    // the keyboard to the prompt, where the next words would go to Claude:
+    // once the new tree is drawn, the box takes it back. The desktop's field
+    // takes the keyboard by a click, and is left as the person left it.
     focusAfterDraw($, "compose");
   }
 }
@@ -981,6 +1008,8 @@ export function register(on, options) {
       onRefresh: () => { void refreshGit($); },
       onToggleBreakdown: () => toggleBreakdown($),
       onToggleSession: (id) => { if (!state.collapsed.delete(id)) state.collapsed.add(id); $.ui.invalidate("ui.render"); },
+      // The desktop's messages are tall: three a press there, five on the terminal.
+      onChatScroll: (dir) => scrollChat($, dir === 0 ? 0 : dir * (paneSurface === "terminal" ? 5 : 3)),
       onCycleFilter: () => { state.feedFilter = { all: "here", here: "errors", errors: "all" }[state.feedFilter]; $.ui.invalidate("ui.render"); },
       onFocusStart: () => { void focusAct($, "start"); },
       onFocusPause: () => { void focusAct($, "pause"); },
@@ -998,6 +1027,13 @@ export function register(on, options) {
   // The wheel or the scroll keys over a room's cards move them in their
   // window. The chat and a room that fits leave the pane to the engine.
   on("ui.scroll", { component: "Pane" }, ($, e, next) => {
+    // Over the chat: a message a wheel tick (more for a page key), older
+    // toward the top, and the pane itself stays put.
+    if (e.requestId === PANE_ID && activeView() === "chat" && currentRoom()) {
+      const step = Math.sign(e.by) * Math.max(1, Math.round(Math.abs(e.by) / 2));
+      scrollChat($, -step);
+      return {};
+    }
     const scroll = state.dockScroll;
     if (e.requestId !== PANE_ID || activeView() === "chat" || scroll.view !== activeView() || !scroll.max) return next(e);
     // A card at a time, or as many as the rows asked for pass (a page key).
