@@ -2261,6 +2261,25 @@ test('desktop band: Agents with a dot per session', SLOW, async ($, on) => {
   await ui.unmount()
 })
 
+test('desktop band: what moves, moves by CSS in a plain drawing, never in a frame rebuilt on each redraw', SLOW, async ($, on) => {
+  recordUi(on)
+  on('session.id', () => ({ value: 'sess-here' }))
+  const bridge = fakeBridge(on, { store: { view: 'agents' } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit({ type: 'sessions', sessions: [{ id: 'other', pid: 2, project: 'api', branch: 'main', model: 'claude-opus-5-5', activity: { state: 'tool', tool: 'Bash', since: Date.now() }, agents: [] }] })
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  const svgs = await ui.findAll({ type: 'Svg' })
+  expect(svgs.length).toBeGreaterThan(0)
+  for (const d of svgs) {
+    expect(d.props.isInteractive).toBeUndefined()
+    expect(d.props.source).not.toMatch(/<animate/)
+  }
+  expect(svgs.some((d: any) => /animation:b /.test(d.props.source))).toBe(true)   // the busy session's dot breathes
+  await ui.unmount()
+})
+
 test('desktop band: a function room draws its pills, and one without any shows its band line', SLOW, async ($, on) => {
   recordUi(on)
   const pills = [
