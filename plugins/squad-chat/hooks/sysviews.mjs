@@ -10,7 +10,7 @@ import { theme, level, nameColor } from "./theme.mjs";
 import {
   cells, clip, fit, fmtTokens, fmtUsd, fmtDur, fmtSpan, relTime, age, resetLabel,
   bar, barNode, stretchBar, sparkline, meter, tiles, line, col, stackCards, card, CARD_GAP, LABEL_W,
-  bigNumber, lineChart,
+  bigNumber, lineChart, xml,
 } from "./widgets.mjs";
 import {
   totalTokens, cacheRatio, burnRate, limitWindows, spendSeries, toolRows, agentTree, agentCounts, isEnded, topTool,
@@ -639,7 +639,6 @@ function clipW(str, px) {
   }
   return `${out}…`;
 }
-const xml = (s) => String(s).replace(/[<>&"]/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[ch]);
 function commitTime(ms, now) {
   const d = new Date(ms);
   const n = new Date(now);

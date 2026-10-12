@@ -83,13 +83,14 @@ function sectionCells(s) {
 }
 
 // The sections that fit in `columns` beside the room's name and the Open
-// button, the first always: the ones at the end go first, as a drawing
-// would otherwise run under the button.
+// button (and ‹ › before it, with `cycle`), the first always: the ones at
+// the end go first, as a drawing would otherwise run under the buttons.
 const OPEN_CELLS = 10;
-export function fitSections(sections, room, columns) {
+export const CYCLE_CELLS = 4;
+export function fitSections(sections, room, columns, { cycle = false } = {}) {
   const list = sections.filter(Boolean);
   if (!columns) return list;
-  let room_left = Math.floor(columns * 0.92) - OPEN_CELLS - (cells(room) + 2) - 2;
+  let room_left = Math.floor(columns * 0.92) - OPEN_CELLS - (cycle ? CYCLE_CELLS : 0) - (cells(room) + 2) - 2;
   const out = [];
   for (const s of list) {
     const need = sectionCells(s);
@@ -106,7 +107,7 @@ export function fitSections(sections, room, columns) {
 export function capsule(els, { room, color, sections, onOpen, onCycle, columns = 0 }) {
   const { Box, Text, Button } = els;
   const children = [Box({ key: "bs-room", flexShrink: 0, paddingX: 1, children: [Text({ key: "t", bold: true, color, children: room })] })];
-  for (const s of fitSections(sections, room, columns)) {
+  for (const s of fitSections(sections, room, columns, { cycle: !!onCycle })) {
     children.push(Box({ key: `bs-sep-${s.key}`, flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: "│" })] }));
     children.push(section(els, s));
   }
