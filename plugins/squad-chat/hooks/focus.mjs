@@ -8,7 +8,7 @@
 
 import { state } from "./state.mjs";
 import { theme } from "./theme.mjs";
-import { line, card, stackCards, meter, fit, LABEL_W } from "./widgets.mjs";
+import { line, card, stackCards, meter } from "./widgets.mjs";
 import * as K from "./bandkit.mjs";
 import { draw, value, sub } from "./bands.mjs";
 
@@ -450,6 +450,11 @@ export function focusBadge(now = Date.now()) {
 
 export function focusSnapshot(now = Date.now()) {
   const f = state.focus;
-  const head = f.phase === "idle" ? `Focus · ready (${f.work} / ${f.rest} min)` : `Focus · ${clock(remaining(f, now))} of ${Math.round(spanMs(f) / 60_000)} min ${phaseWord(f)}${f.paused ? ", paused" : ""}`;
-  return [head, `${fit("Today", LABEL_W)}${f.done} round${f.done === 1 ? "" : "s"} · ${spent(f.focusedMs)} focused`].join("\n");
+  const left = clock(remaining(f, now));
+  const head = f.phase === "idle" ? `Ready to focus (${f.work} / ${f.rest} min).`
+    : f.phase === "break" ? `On a break, ${left} left${f.paused ? ", paused" : ""}.`
+    : `Focusing, ${left} to go of ${Math.round(spanMs(f) / 60_000)} min${f.paused ? ", paused" : ""}.`;
+  const today = f.done ? `${f.done} round${f.done === 1 ? "" : "s"} today, ${spent(f.focusedMs)} focused.` : "No rounds yet today.";
+  const { current } = streaks(f, now);
+  return `◷ ${head} ${today}${current ? ` 🔥 ${current}-day streak.` : ""}`;
 }

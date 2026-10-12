@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "news",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "Tech News",
   "icon": "✦",
   "color": "lilac",
@@ -44,6 +44,7 @@
       {"when": "hn.items.0", "color": "sand", "sub": "{hn.items.0.comments} comments · {hn.items.0.age}"}
     ],
     "band": "▲ {hn.items.0.title}",
+    "snapshot": "{hn.share}",
     "hint": "↗ opens the link · ⧉ copies it · ⇪ shares it · r refreshes",
     "placeholder": "/set hn best · /set feeds +https://… · r · /help"
   }

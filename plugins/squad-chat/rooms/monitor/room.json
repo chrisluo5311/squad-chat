@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "monitor",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "Monitor",
   "icon": "▦",
   "color": "teal",
@@ -96,6 +96,7 @@
       {"when": "sys.battery", "draw": {"type": "battery", "value": "sys.battery.pct", "flag": "sys.battery.charging"}, "colorFrom": "sys.battery.tone", "value": "{sys.battery.pct}%", "tip": ["Battery {sys.battery.pct}%", "{sys.battery.detail}"]}
     ],
     "band": "{sys.band}",
+    "snapshot": "{sys.share}",
     "hint": "/set cpu_temp 90 · /set alerts off · /chat set monitor",
     "placeholder": "/set memory 90 · /set alerts on · /help"
   }

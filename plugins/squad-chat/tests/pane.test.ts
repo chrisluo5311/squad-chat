@@ -1102,7 +1102,7 @@ test('/chat-share usage posts a snapshot of the room as a card', SLOW, async ($,
   await settle()
   await $.session.measure({ context: { tokens: 50_000, window: 200_000, percent: 25 }, rateLimits: [], cost: { usd: 1.5 }, changed: ['context', 'cost'] })
   await $.command.run({ command: 'chat-share', args: 'usage' })
-  expect(logs.some((l) => /^Ready to share to #lobby: 📊 Usage/.test(l))).toBe(true)
+  expect(logs.some((l) => /^Ready to share to #lobby: ◔ Usage/.test(l))).toBe(true)
   await $.command.run({ command: 'chat-share', args: 'send' })
   const sent = bridge.calls.at(-1)
   expect(sent?.path).toBe('/send')
@@ -1111,6 +1111,37 @@ test('/chat-share usage posts a snapshot of the room as a card', SLOW, async ($,
   expect(sent?.body.text).toMatch(/^Usage/)
   expect(sent?.body.text).toMatch(/Context\s+━+/)
   expect(sent?.body.text).toMatch(/\$1\.50/)
+})
+
+test('a room card shows its title on a bar of the room\'s color, its bars filled in that color', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(msg(1, 'bob', 'Usage · opus-5.5 · 1h10m\nContext   ━━━━━━──────────────  34%  336k/1.0M\nSpend     $11.56', { kind: 'code', lang: 'usage' }))
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: '◔ Usage · opus-5.5 · 1h10m' })).toBeDefined()
+  expect((await ui.findAll({ type: 'Box', key: 'head' })).some((b: any) => b.props.backgroundColor === '#7FB6E2')).toBe(true)
+  expect((await ui.find({ type: 'Text', text: '━━━━━━' }))?.props.color).toBe('#7FB6E2')
+  expect(await ui.find({ type: 'Text', text: 'Context   ' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/chat-share focus posts one line of chat, not a snippet', SLOW, async ($, on) => {
+  const logs: string[] = []
+  on('ui.log', (_$: any, e: any) => { logs.push(e.text ?? e); return { value: undefined } })
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  await $.command.run({ command: 'chat-share', args: 'focus' })
+  expect(logs.some((l) => /^Ready to share to #lobby: ◷ Ready to focus/.test(l))).toBe(true)
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  const sent = bridge.calls.at(-1)
+  expect(sent?.path).toBe('/send')
+  expect(sent?.body.kind).toBe('text')
+  expect(sent?.body.lang).toBeUndefined()
+  expect(sent?.body.text).toMatch(/^◷ Ready to focus \(\d+ \/ \d+ min\)\. No rounds yet today\.$/)
 })
 
 test('/chat rooms picks which built-in rooms have tabs', SLOW, async ($, on) => {

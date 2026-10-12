@@ -45,6 +45,9 @@ export default {
         share: `${s.title}\n${url}${url === discuss ? "" : `\n${discuss}`}`,
       };
     });
-    return { items, count: items.length, list };
+    const top = items[0];
+    // The room's share, as one chat message: the top story.
+    const share = top ? `✦ ${top.title}\n▲ ${top.score} · ${top.comments} comments on Hacker News\n${top.url}` : "";
+    return { items, count: items.length, list, share };
   },
 };

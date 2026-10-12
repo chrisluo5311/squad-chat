@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "stock",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "Stocks",
   "icon": "$",
   "color": "rose",
@@ -62,6 +62,7 @@
       {"when": "q.pinned", "draw": {"type": "area", "value": "q.pinned.line"}, "colorFrom": "q.pinned.color", "label": "{q.pinned.symbol}", "sub": "{q.pinned.priceText}", "value": "{q.pinned.arrow}{q.pinned.pctText}", "tip": ["{q.pinned.symbol} {q.pinned.name}", "{q.pinned.priceText} ({q.pinned.changeText}, {q.pinned.pctText})", "volume {q.pinned.volText}", "⚲ on a tile pins another"]}
     ],
     "band": "{q.band}",
+    "snapshot": "{q.share}",
     "add": "watchlist",
     "hint": "⚲ pins one to the band · ✕ takes one out · /set move 3 · r",
     "placeholder": "Type a symbol (TSLA, 2330), then add · /set move 3 · /help"

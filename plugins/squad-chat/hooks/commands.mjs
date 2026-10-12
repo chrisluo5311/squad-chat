@@ -7,8 +7,8 @@
 // the model), the pane's notice line for the input box.
 
 import { state, currentRoom, activeView, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
-import { lastCodeBlock, looksLikeDiff, snippetTitle, findSecret, tooBig, displayLines } from "./share.mjs";
-import { snapshotText, hasSnapshot } from "./sysviews.mjs";
+import { lastCodeBlock, looksLikeDiff, snippetTitle, findSecret, tooBig, displayLines, MAX_TEXT } from "./share.mjs";
+import { snapshotText, hasSnapshot, snapshotKind } from "./sysviews.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
 // sign-in codes, room passcodes, snippets.
@@ -350,7 +350,12 @@ export async function share(call, args, say, sources) {
   if (roomIds().includes(verb) && !hasSnapshot(verb)) {
     return say(`The ${verb} room has nothing to share${verb === "clipboard" ? ": what you copied stays on this computer" : ""}.`);
   } else if (roomIds().includes(verb)) {
-    snippet = { kind: "code", lang: verb.slice(0, 20), body: snapshotText(verb) };
+    // A card goes as a snippet tagged with the room, a line as plain chat.
+    const body = snapshotText(verb).trimEnd();
+    if (!body.trim()) return say(`The ${verb} room has nothing to share yet.`);
+    snippet = snapshotKind(verb) === "text"
+      ? { kind: "text", body: body.length > MAX_TEXT ? `${body.slice(0, MAX_TEXT - 1)}…` : body }
+      : { kind: "code", lang: verb.slice(0, 20), body };
   } else if (verb === "diff") {
     const body = String(await sources.diff(rest.join(" ")) ?? "").replace(/\n$/, "");
     if (!body.trim()) return say(rest.length ? `No uncommitted changes in ${rest.join(" ")}.` : "No uncommitted changes to share.");

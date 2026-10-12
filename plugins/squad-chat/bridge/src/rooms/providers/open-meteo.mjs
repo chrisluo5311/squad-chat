@@ -155,6 +155,8 @@ async function city(name, units, ctx) {
     sun,
     sunLine: sun ? `☀ ${sun.rise} → ${sun.set}${sun.length ? ` · ${sun.length}` : ""}${sun.uvText ? ` · ${sun.uvText}` : ""}` : "",
     days,
+    // The room's share, as one chat message.
+    share: `☀ ${p.name}: ${icon} ${temp}${deg}, ${String(desc).toLowerCase()}${days[0] ? `, ${days[0].hiText} / ${days[0].loText} today, ${days[0].rainPct} chance of rain` : ""}.${days[1] ? ` ${days[1].day} ${days[1].icon} ${days[1].hiText} / ${days[1].loText}.` : ""}`,
   };
 }
 

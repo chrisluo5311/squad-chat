@@ -803,6 +803,12 @@ function widgetText(b, data) {
   return [fillText(b.text, data)].filter(Boolean);
 }
 
+// Whether a function room writes its own snapshot (a line of chat), rather
+// than its cards listed as a snippet.
+export function fnSnapshotLine(id) {
+  return !!roomState(id).room?.manifest.layout.snapshot;
+}
+
 // A function room as plain text, for a snippet card in a chat room.
 export function fnSnapshot(id) {
   const { room, data, loaded } = roomState(id);
