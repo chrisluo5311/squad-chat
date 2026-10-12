@@ -538,7 +538,9 @@ async function cycleBand($, dir) {
   const list = bandRooms();
   if (!list.length) return;
   const at = list.indexOf(activeView());
-  await setView($, list[(Math.max(0, at) + dir + list.length) % list.length]);
+  // From a view not in the list, › goes to the first and ‹ to the last.
+  const next = at < 0 ? (dir > 0 ? 0 : list.length - 1) : (at + dir + list.length) % list.length;
+  await setView($, list[next]);
 }
 
 async function saveSysRooms($, list) {
@@ -667,6 +669,25 @@ async function saveFocus($) {
   }
 }
 
+// The lengths and today's count are every session's, and another session
+// may have saved since this one read them: read them again before a change,
+// so one session's save doesn't undo another's.
+async function syncFocus($, now) {
+  try {
+    restoreFocus(state.focus, await $.store.get("focus"), null, now);
+  } catch (err) {
+    $.ui.log(`squad-chat: could not read the timer's settings: ${err?.message ?? err}`, { to: "debug" });
+  }
+}
+
+// A change to the timer, on the settings as they are now.
+async function changeFocus($, fn) {
+  const now = await $.clock.now();
+  await syncFocus($, now);
+  fn(state.focus, now);
+  focusChanged($, now);
+}
+
 // The timer changed: show it, keep it.
 function focusChanged($, now) {
   state.focusStatus = focusStatus(now);
@@ -684,9 +705,7 @@ const FOCUS_DO = {
   reset: focusReset,
 };
 async function focusAct($, verb) {
-  const now = await $.clock.now();
-  FOCUS_DO[verb](state.focus, now);
-  focusChanged($, now);
+  await changeFocus($, (f, now) => FOCUS_DO[verb](f, now));
 }
 
 // A phase ran out: the chime, a toast (a timer you set rings even while
@@ -710,10 +729,12 @@ async function roomInput($, view, text) {
   const word = text.trim().toLowerCase();
   if (view === "focus") {
     if (Object.hasOwn(FOCUS_DO, word)) { await focusAct($, word); return true; }
-    if (setLengths(state.focus, word)) { focusChanged($, await $.clock.now()); return true; }
+    const now = await $.clock.now();
+    await syncFocus($, now);
+    if (setLengths(state.focus, word)) { focusChanged($, now); return true; }
     return false;
   }
-  if (view === "clipboard" && word === "clear") { state.clipboard.items = []; $.ui.invalidate("ui.render"); return true; }
+  if (view === "clipboard" && word === "clear") { clearClips($); return true; }
   if (view === "pet" && (word === "auto" || MOODS.includes(word))) { setPetMode($, word); return true; }
   return false;
 }
@@ -731,12 +752,16 @@ function setPetMode($, mode) {
 // The clipboard, read every couple of seconds while the room has a tab.
 // The first reader that runs is kept; when none does, the room says so.
 const CLIP_EVERY_MS = 2_000;
+const CLIP_RETRY_MS = 30_000;   // while no reader works: tried again this often
+// A reader that ran but had nothing to give: wl-paste and xclip exit 1 until
+// something is copied.
+const CLIP_EMPTY = /nothing is copied|no selection|not available/i;
 const CLIP_ENV = { LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" };
 let clipBusy = false;
 let clipAt = 0;
 async function readClipboard($, now) {
   const c = state.clipboard;
-  if (clipBusy || c.error || now - clipAt < CLIP_EVERY_MS) return;
+  if (clipBusy || now - clipAt < (c.error ? CLIP_RETRY_MS : CLIP_EVERY_MS)) return;
   clipBusy = true;
   clipAt = now;
   try {
@@ -745,16 +770,25 @@ async function readClipboard($, now) {
       // pbpaste writes in the locale's charset, and with none set it writes
       // "?" for every character outside ASCII: ask for UTF-8.
       try { r = await $.process.run(argv, { timeoutMs: 2_000, env: CLIP_ENV }); } catch { continue; }
-      if (r.exitCode !== 0 && !c.reader) continue;
+      const empty = r.exitCode !== 0 && CLIP_EMPTY.test(String(r.stderr ?? ""));
+      if (r.exitCode !== 0 && !empty && !c.reader) continue;
       c.reader = argv;
+      if (c.error) { c.error = ""; $.ui.invalidate("ui.render"); }
       if (r.exitCode === 0 && addClip(c, r.stdout, now)) $.ui.invalidate("ui.render");
       return;
     }
-    c.error = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste).";
-    $.ui.invalidate("ui.render");
+    if (!c.error) {
+      c.error = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste).";
+      $.ui.invalidate("ui.render");
+    }
   } finally {
     clipBusy = false;
   }
+}
+
+function clearClips($) {
+  state.clipboard.items = [];
+  $.ui.invalidate("ui.render");
 }
 
 async function copyClip($, id, surface) {
@@ -814,6 +848,8 @@ let lastRoomsKey = "";
 let lastPetSave = 0;
 async function roomsTick($) {
   const now = await $.clock.now();
+  // A round about to count: on today's count as every session has it.
+  if (isRunning(state.focus) && now >= state.focus.endsAt) await syncFocus($, now);
   const ended = tickFocus(state.focus, now);
   if (ended) focusEnded($, ended, now);
   const status = focusStatus(now);
@@ -823,7 +859,9 @@ async function roomsTick($) {
   // Clawd keeps to the wall clock, as its drawing does.
   const wall = Date.now();
   const busy = u.activity.state !== "idle" || agentCounts(u).running > 0;
-  const noted = petTick(state.pet, { busy, failing: !!state.git?.pr?.checks?.fail, now: wall });
+  // The checks count once the Git room has looked (null until then).
+  const failing = state.git?.status === "ok" ? !!state.git.pr?.checks?.fail : null;
+  const noted = petTick(state.pet, { busy, failing, now: wall });
   // Kept when something happened, and a minute at a time while you work.
   if (noted || (busy && wall - lastPetSave > 60_000)) { lastPetSave = wall; savePet($); }
   // Redraw when the badge or Clawd's mood changes (Clawd walks by the
@@ -1015,10 +1053,10 @@ export function register(on, options) {
       onFocusPause: () => { void focusAct($, "pause"); },
       onFocusSkip: () => { void focusAct($, "skip"); },
       onFocusReset: () => { void focusAct($, "reset"); },
-      onFocusAdjust: (which, dir) => { focusAdjust(state.focus, which, dir); void $.clock.now().then((now) => focusChanged($, now)); },
+      onFocusAdjust: (which, dir) => { void changeFocus($, (f) => focusAdjust(f, which, dir)); },
       onClipCopy: (id, surface) => { void copyClip($, id, surface); },
       onClipRemove: (id) => { removeClip(state.clipboard, id); $.ui.invalidate("ui.render"); },
-      onClipClear: () => { state.clipboard.items = []; $.ui.invalidate("ui.render"); },
+      onClipClear: () => clearClips($),
       onPetMode: (mode) => setPetMode($, mode),
       onPetWalk: (walk) => { state.pet.walk = walk; savePet($); $.ui.invalidate("ui.render"); },
     });

@@ -13,7 +13,8 @@
 
 import { state } from "./state.mjs";
 import { theme } from "./theme.mjs";
-import { card, stackCards, stretchBar, clip } from "./widgets.mjs";
+import { card, stackCards, stretchBar, clip, xml } from "./widgets.mjs";
+import { dayOf, spent as span } from "./focus.mjs";
 import { PALETTE, STICKERS } from "./petframes.mjs";
 import { clawdSvg, cornerSvg, walkSvg } from "./clawdsvg.mjs";
 import { draw, chip } from "./bands.mjs";
@@ -59,7 +60,7 @@ export function createPet() {
     xpMs: 0,           // time together not yet turned into xp
     log: [],           // [{ at, icon, text }], newest first
     lastMood: "",
-    failing: false,    // this branch's checks were failing at the last look
+    failing: false,    // this branch's checks were failing at the last look (kept, so a reload doesn't note it again)
   };
 }
 
@@ -83,14 +84,11 @@ export function petRound(p, at = Date.now()) {
   petNote(p, "🎉", "Finished a focus round", at);
 }
 
-const dayOf = (ms) => {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
 // Once a second: time together, a stretch of work ending, checks turning
-// red, dozing off. `busy` is whether this session works now. True when
-// something worth keeping changed.
+// red, dozing off. `busy` is whether this session works now; `failing` is
+// null while the checks aren't known yet (before the Git room's first
+// fetch), which leaves what was last seen. True when something worth
+// keeping changed.
 export function petTick(p, { busy, failing, now = Date.now(), step = 1000 }) {
   let changed = false;
   const day = dayOf(now);
@@ -106,8 +104,10 @@ export function petTick(p, { busy, failing, now = Date.now(), step = 1000 }) {
     if (worked >= WORKED_NOTE_MS) { petNote(p, "⌨️", `Worked with Claude for ${span(worked)}`, now); changed = true; }
     p.busySince = 0;
   }
-  if (failing && !p.failing) { petNote(p, "😵", "Checks failed on this branch", now); changed = true; }
-  p.failing = !!failing;
+  if (failing != null) {
+    if (failing && !p.failing) { petNote(p, "😵", "Checks failed on this branch", now); changed = true; }
+    if (p.failing !== !!failing) { p.failing = !!failing; changed = true; }
+  }
   const mood = petMood(now);
   if (mood !== p.lastMood) {
     if (mood === "sleepy" && p.mode === "auto" && p.lastMood) { petNote(p, "💤", "Dozed off", now); changed = true; }
@@ -118,7 +118,7 @@ export function petTick(p, { busy, failing, now = Date.now(), step = 1000 }) {
 
 // What's kept in $.store: the choices, the bond, today's time and the log.
 export function petSaved(p) {
-  return { mode: p.mode, walk: p.walk, xp: p.xp, xpMs: p.xpMs, day: p.day, togetherMs: p.togetherMs, log: p.log };
+  return { mode: p.mode, walk: p.walk, xp: p.xp, xpMs: p.xpMs, day: p.day, togetherMs: p.togetherMs, log: p.log, failing: p.failing };
 }
 export function restorePet(p, saved) {
   if (!saved || typeof saved !== "object") return;
@@ -126,6 +126,7 @@ export function restorePet(p, saved) {
   if (WALKS.some((w) => w.id === saved.walk)) p.walk = saved.walk;
   else if (saved.walk === "edge") p.walk = "stroll";   // the top edge is gone
   else if (saved.beside === false) p.walk = "off";   // kept before Clawd walked
+  if (typeof saved.failing === "boolean") p.failing = saved.failing;
   if (Number.isFinite(saved.xp)) p.xp = Math.max(0, saved.xp | 0);
   if (Number.isFinite(saved.xpMs)) p.xpMs = Math.max(0, saved.xpMs);
   if (typeof saved.day === "string") { p.day = saved.day; p.togetherMs = Math.max(0, Number(saved.togetherMs) || 0); }
@@ -133,11 +134,6 @@ export function restorePet(p, saved) {
     p.log = saved.log.filter((x) => x && Number.isFinite(x.at) && typeof x.text === "string").slice(0, LOG_KEEP)
       .map((x) => ({ at: x.at, icon: String(x.icon ?? "").slice(0, 4), text: x.text.slice(0, 80) }));
   }
-}
-
-function span(ms) {
-  const m = Math.round(ms / 60_000);
-  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 }
 
 // ---------------------------------------------------------------- pixel frames (the terminal)
@@ -259,9 +255,8 @@ function logCard(els, w, now, max) {
   else if (els.Svg) {
     // Drawn, so the lines can be set smaller than the pane's text.
     const lh = 17, H = items.length * lh;
-    const esc = (t) => t.replace(/[<&>]/g, "");
     const lines = items.map((x, i) => `<text x="0" y="${i * lh + 12}" font-size="11.5" fill="#9A968F">${when(x.at, now)}</text>`
-      + `<text x="40" y="${i * lh + 12}" font-size="11.5" fill="#BDB8B0">${esc(`${x.icon} ${clip(x.text, 56)}`)}</text>`).join("");
+      + `<text x="40" y="${i * lh + 12}" font-size="11.5" fill="#BDB8B0">${xml(`${x.icon} ${clip(x.text, 56)}`)}</text>`).join("");
     rows = [els.Svg({ key: "log", source: `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="${H}" viewBox="0 0 420 ${H}" font-family="-apple-system, system-ui, sans-serif">${lines}</svg>`, alt: items.map((x) => x.text).join(" · "), width: 420, height: H })];
   } else {
     rows = items.map((x, i) => Text({ key: `l${i}`, color: theme.muted, wrap: "truncate-end", children: `${when(x.at, now)}  ${x.icon} ${x.text}` }));

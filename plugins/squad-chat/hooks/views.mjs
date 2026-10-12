@@ -17,7 +17,7 @@ import { roomMeta, sysDock, sysInline, sysBandPieces, sysBadge, sysBandDesktop, 
 import { petBeside } from "./pet.mjs";
 import { fnHint, fnPlaceholder, fnBandDesktop, fnMeta, fnAdds } from "./fnviews.mjs";
 import * as K from "./bandkit.mjs";
-import { capsule, cycleButtons, draw, value as pValue, sub as pSub, msg as pMsg, chip as pChip } from "./bands.mjs";
+import { capsule, cycleButtons, CYCLE_CELLS, draw, value as pValue, sub as pSub, msg as pMsg, chip as pChip } from "./bands.mjs";
 import { usageBandDesktop } from "./usageband.mjs";
 
 const GROUP_GAP_MS = 5 * 60_000;   // same sender within 5 minutes: one group
@@ -908,7 +908,7 @@ export function bandView(els, props, { onOpen, onCycle }) {
       Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: [
         Box({ key: "room", flexShrink: 0, children: [Text({ key: "t", bold: true, color: meta.color, children: `${meta.icon} ${meta.label}` })] }),
         Box({ key: "sep", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: glyph.bar })] }),
-        Box({ key: "msg", flexDirection: "row", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: sysBandPieces(view, Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16)).map((p, i) => (
+        Box({ key: "msg", flexDirection: "row", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: sysBandPieces(view, Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16 - (onCycle ? CYCLE_CELLS : 0))).map((p, i) => (
           Box({ key: `p${i}`, flexShrink: 0, children: [Text({ key: "t", color: p.color, bold: p.bold, children: p.text })] }))) }),
       ] }),
       Box({ key: "open-box", flexDirection: "row", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [

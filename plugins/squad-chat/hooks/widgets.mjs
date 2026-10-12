@@ -36,6 +36,9 @@ export function rowsFor(text, width) {
   return Math.max(1, rows);
 }
 
+// Text set inside an SVG drawing, escaped.
+export const xml = (s) => String(s).replace(/[<>&"]/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[ch]);
+
 // Cut to `width` cells, with "…" when anything was cut.
 export function clip(str, width) {
   str = String(str ?? "");

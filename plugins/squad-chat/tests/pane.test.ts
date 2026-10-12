@@ -259,7 +259,7 @@ test('band: on the desktop, Usage is a capsule of drawings with a card per figur
   await $.turn.complete({ turnId: 't2', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
   await settle()
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 110 } })   // room for ‹ › beside Open
   expect(await ui.find({ type: 'Text', text: '◔ Usage' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '77k' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '▲ +5k' })).toBeDefined()           // what the last prompt added
@@ -2515,7 +2515,7 @@ test('desktop band: Focus shows the phase and its time, the streak with this wee
   const bridge = fakeBridge(on, { store: { view: 'focus', focus: { work: 25, rest: 5, day: day(0), done: 0, focusedMs: 0, history } } })
   await bridge.start($)
   await settle()
-  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 110 } })   // room for ‹ › beside Open
   expect(await ui.find({ type: 'Text', text: '◷ Focus' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Ready' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '🔥 2 days' })).toBeDefined()
@@ -2523,7 +2523,7 @@ test('desktop band: Focus shows the phase and its time, the streak with this wee
   expect(await ui.find({ type: 'Text', text: '25 / 5 min' })).toBeDefined()
   await ui.unmount()
   await $.command.run({ command: 'focus', args: 'start' })
-  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 110 } })
   expect(await ui.find({ type: 'Text', text: '🍅 Focus' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ends \d\d:\d\d$/ })).toBeDefined()
   expect(await svgAlt(ui, /% through$/)).toBeDefined()
@@ -2546,6 +2546,26 @@ test('desktop band: Clipboard shows how many and the newest one', SLOW, async ($
   expect(await ui.find({ type: 'Text', text: '1' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'copied' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '中文也行' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Clipboard: wl-paste with nothing copied yet is a reader that works, not a missing one', SLOW, async ($, on) => {
+  recordUi(on)
+  let copied = ''
+  const bridge = fakeBridge(on, {
+    store: { view: 'clipboard', sysRooms: ['clipboard'], roomsOffered: ['usage', 'git', 'agents', 'focus', 'pet', 'snippet', 'monitor'] },
+    run: (argv) => argv[0] === 'pbpaste' ? { exitCode: 127, stderr: 'not found' }
+      : argv[0] === 'wl-paste' ? (copied ? { exitCode: 0, stdout: copied } : { exitCode: 1, stderr: 'Nothing is copied' })
+        : argv[0] === 'xclip' ? { exitCode: 127, stderr: 'not found' } : null,
+  })
+  await bridge.start($)
+  await settle()
+  await bridge.clock.advance(3_000)
+  copied = 'hello from wayland'
+  await bridge.clock.advance(3_000)
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: /install wl-clipboard/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'hello from wayland' })).toBeDefined()
   await ui.unmount()
 })
 

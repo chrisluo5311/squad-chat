@@ -25,6 +25,7 @@ export function createFocus() {
     phase: "idle",     // idle | focus | break
     endsAt: 0,         // while running: when the phase ends (ms)
     left: 0,           // while paused: what was left (ms)
+    span: 0,           // while running: the phase's length when it began (ms)
     paused: false,
     day: "",           // the local day `done` and `focusedMs` count
     done: 0,           // focus rounds finished today
@@ -51,14 +52,28 @@ function daysBefore(now, n) {
   return dayOf(d.getTime());
 }
 
+// The day after "2026-10-12" (noon again, for DST).
+function dayAfter(day) {
+  const [y, m, d] = day.split("-").map(Number);
+  return dayOf(new Date(y, m - 1, d + 1, 12).getTime());
+}
+
 // Days in a row with a finished round, up to today (or yesterday, when
-// today has none yet), and the longest run kept.
+// today has none yet), and the longest run kept. Walks only the days that
+// had a round, as the band asks for it every second.
 export function streaks(f, now) {
-  const has = (n) => (f.history[daysBefore(now, n)] ?? 0) > 0;
+  const oldest = daysBefore(now, KEEP_DAYS);
+  const days = Object.keys(f.history).filter((day) => day >= oldest && f.history[day] > 0).sort();
+  const had = new Set(days);
+  const has = (n) => had.has(daysBefore(now, n));
   let current = 0;
   for (let n = has(0) ? 0 : 1; has(n); n++) current++;
-  let best = 0, run = 0;
-  for (let n = KEEP_DAYS; n >= 0; n--) { run = has(n) ? run + 1 : 0; best = Math.max(best, run); }
+  let best = 0, run = 0, prev = "";
+  for (const day of days) {
+    run = prev && dayAfter(prev) === day ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = day;
+  }
   return { current, best };
 }
 
@@ -68,6 +83,8 @@ function rollDay(f, now) {
 }
 
 const phaseMs = (f, phase = f.phase) => (phase === "break" ? f.rest : f.work) * 60_000;
+// The running phase's own length: −/+ meanwhile is for the next one.
+const spanMs = (f) => f.span || phaseMs(f);
 
 export function isRunning(f) {
   return f.phase !== "idle" && !f.paused;
@@ -83,7 +100,7 @@ export function remaining(f, now) {
 // How far through the phase, 0 to 1.
 export function progress(f, now) {
   if (f.phase === "idle") return 0;
-  return Math.min(1, Math.max(0, 1 - remaining(f, now) / phaseMs(f)));
+  return Math.min(1, Math.max(0, 1 - remaining(f, now) / spanMs(f)));
 }
 
 // "18:42", or "1:05:00" past an hour.
@@ -98,7 +115,7 @@ export function clock(ms) {
 export function start(f, now) {
   rollDay(f, now);
   if (f.paused) { f.paused = false; f.endsAt = now + f.left; f.left = 0; return; }
-  if (f.phase === "idle") { f.phase = "focus"; f.endsAt = now + phaseMs(f); }
+  if (f.phase === "idle") { f.phase = "focus"; f.span = phaseMs(f); f.endsAt = now + f.span; }
 }
 
 export function pause(f, now) {
@@ -113,6 +130,7 @@ export function reset(f) {
   f.paused = false;
   f.endsAt = 0;
   f.left = 0;
+  f.span = 0;
 }
 
 // The phase is over: a focus round counts and its break starts; a break
@@ -123,7 +141,7 @@ function finish(f, now, { counted }) {
     rollDay(f, now);
     if (counted) {
       f.done += 1;
-      f.focusedMs += phaseMs(f, "focus");
+      f.focusedMs += spanMs(f);
       f.cheerAt = now;
       f.history[f.day] = (f.history[f.day] ?? 0) + 1;
       const oldest = daysBefore(now, KEEP_DAYS);
@@ -131,7 +149,8 @@ function finish(f, now, { counted }) {
     }
     f.phase = "break";
     f.paused = false;
-    f.endsAt = now + phaseMs(f, "break");
+    f.span = phaseMs(f, "break");
+    f.endsAt = now + f.span;
     f.left = 0;
   } else reset(f);
   return ended;
@@ -171,8 +190,12 @@ export function focusSettings(f) {
   return { work: f.work, rest: f.rest, day: f.day, done: f.done, focusedMs: f.focusedMs, history: f.history };
 }
 export function focusTimer(f) {
-  return { phase: f.phase, endsAt: f.endsAt, left: f.left, paused: f.paused };
+  return { phase: f.phase, endsAt: f.endsAt, left: f.left, paused: f.paused, span: f.span };
 }
+
+// A running phase whose end passed this long ago ran out while no session
+// was there to see it: it isn't counted or chimed for, only let go.
+const STALE_MS = 60_000;
 export function restoreFocus(f, settings, timer, now) {
   if (settings && typeof settings === "object") {
     if (Number.isFinite(settings.work)) f.work = Math.min(WORK.max, Math.max(WORK.min, settings.work));
@@ -183,10 +206,15 @@ export function restoreFocus(f, settings, timer, now) {
     }
   }
   if (timer && ["focus", "break"].includes(timer.phase)) {
-    f.phase = timer.phase;
-    f.paused = timer.paused === true;
-    f.endsAt = Number(timer.endsAt) || 0;
-    f.left = Number(timer.left) || 0;
+    const paused = timer.paused === true;
+    const endsAt = Number(timer.endsAt) || 0;
+    if (paused || now - endsAt < STALE_MS) {
+      f.phase = timer.phase;
+      f.paused = paused;
+      f.endsAt = endsAt;
+      f.left = Number(timer.left) || 0;
+      f.span = Number(timer.span) || 0;
+    }
   }
   rollDay(f, now);
 }
@@ -195,7 +223,7 @@ export function restoreFocus(f, settings, timer, now) {
 
 const phaseWord = (f) => (f.phase === "break" ? "break" : f.phase === "focus" ? "focus" : "ready");
 const phaseColor = (f) => (f.phase === "break" ? BREAK_COLOR : FOCUS_META.color);
-const spent = (ms) => {
+export const spent = (ms) => {
   const m = Math.round(ms / 60_000);
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 };
@@ -237,7 +265,7 @@ function timerCard(els, f, w, handlers, now) {
       { text: clock(remaining(f, now)), bold: true, color: f.paused ? theme.muted : color },
       { text: `  ${phaseWord(f)}${f.paused ? " · paused" : ""}`, color: theme.muted, grow: true },
     ]));
-    rows.push(meter(els, { key: "bar", label: f.phase === "break" ? "Break" : "Focus", pct: progress(f, now) * 100, width: w, color, right: `${f.phase === "break" ? f.rest : f.work} min` }));
+    rows.push(meter(els, { key: "bar", label: f.phase === "break" ? "Break" : "Focus", pct: progress(f, now) * 100, width: w, color, right: `${Math.round(spanMs(f) / 60_000)} min` }));
   }
   rows.push(controls(els, f, handlers));
   const meta = f.done ? `${f.done} done today` : "none done today";
@@ -422,6 +450,6 @@ export function focusBadge(now = Date.now()) {
 
 export function focusSnapshot(now = Date.now()) {
   const f = state.focus;
-  const head = f.phase === "idle" ? `Focus · ready (${f.work} / ${f.rest} min)` : `Focus · ${clock(remaining(f, now))} of ${f.phase === "break" ? f.rest : f.work} min ${phaseWord(f)}${f.paused ? ", paused" : ""}`;
+  const head = f.phase === "idle" ? `Focus · ready (${f.work} / ${f.rest} min)` : `Focus · ${clock(remaining(f, now))} of ${Math.round(spanMs(f) / 60_000)} min ${phaseWord(f)}${f.paused ? ", paused" : ""}`;
   return [head, `${fit("Today", LABEL_W)}${f.done} round${f.done === 1 ? "" : "s"} · ${spent(f.focusedMs)} focused`].join("\n");
 }
