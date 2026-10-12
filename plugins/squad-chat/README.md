@@ -39,7 +39,7 @@ echo '{"supabase_url":"https://abcd1234.supabase.co","supabase_key":"sb_publisha
 3. Create a room and give the passcode to your friends: type `/room our-team some-passcode` in the pane. Friends join with the same line.
 4. Chat: type in the pane and press Enter. Esc goes back to the prompt.
 
-Before your chat rooms, three built-in tabs need no server or sign-in: **Usage** (context, rate limits, cost, cache hits, tool timings, subagents), **Git** (your branch, pull requests, reviews, Actions, issues, through the `gh` CLI) and **Agents** (every Claude Code session on this computer, its subagents and a live tool feed).
+Before your chat rooms, built-in tabs need no server or sign-in: **Usage** (context, rate limits, cost, tool timings), **Git** (your branch, its PR and checks, through the `gh` CLI), **Agents** (every Claude Code session and its subagents), **Focus** (a Pomodoro timer), **Pet** (Clawd), **Snippets** and **Monitor**. Clipboard, Weather, Tech News, Stocks and Lo-fi wait until you add them with `/chat rooms +clipboard` and the like. [The docs](https://chrisluo5311.github.io/squad-chat/use/built-in-rooms/) show each one.
 
 In a terminal 110 columns wide or more (fullscreen), the pane docks on the right. In a narrower one it sits above the prompt. While the pane is closed, a line above the prompt shows the room, who's online and what's unread, with an **Open** button.
 

@@ -267,6 +267,22 @@ starlight-toc a[aria-current="true"]:focus {
   text-align: center;
 }
 
+/* A room's pane, beside its few lines of text. */
+.sl-markdown-content figure.shot.pane {
+  max-width: 22rem;
+  margin: 1rem auto 1.5rem;
+}
+@media (min-width: 50rem) {
+  .sl-markdown-content figure.shot.pane {
+    float: right;
+    width: 44%;
+    margin: 0.25rem 0 1.5rem 1.75rem;
+  }
+  .sl-markdown-content:has(figure.shot.pane) :is(h2, .sl-heading-wrapper) {
+    clear: both;
+  }
+}
+
 /* Prev / next */
 .pagination-links a {
   border-radius: 0.625rem;
