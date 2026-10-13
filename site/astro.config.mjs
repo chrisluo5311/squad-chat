@@ -10,7 +10,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "squad-chat",
-      description: "Claude's cooking. Chat with your squad. Friends online, right beside your Claude Code session.",
+      description: "The all-in-one Claude Code plugin. Talk with your squad, share code, and keep live rooms next to your session.",
       logo: { src: "./src/assets/logo.svg" },
       favicon: "/favicon.svg",
       social: [
