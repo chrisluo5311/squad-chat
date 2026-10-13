@@ -1381,12 +1381,12 @@ test('/chat rooms takes function rooms too, and +name or -name', SLOW, async ($,
   bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...snippetsLoaded())
   await settle()
   await $.command.run({ command: 'chat', args: 'rooms -snippet' })
-  expect(logs.at(-1)).toBe('Rooms with tabs: usage, git, agents, focus, pet.')
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, git, agents, focus, habits, pet.')
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: [], shown: null })
   await $.command.run({ command: 'chat', args: 'rooms +snippet -git' })
-  expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, focus, pet, snippet.')
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, focus, habits, pet, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms weather' })
-  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, clipboard, pet, snippet.')
+  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, habits, clipboard, pet, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms snippet' })
   expect(logs.at(-1)).toBe('Rooms with tabs: snippet.')
 })
@@ -1401,8 +1401,8 @@ test('a room new in this version gets a tab once, even for people who chose thei
   expect(await ui.find({ key: 'sys-snippet' })).toBeDefined()
   expect(await ui.find({ key: 'sys-agents' })).toBeUndefined()   // still their choice
   await ui.unmount()
-  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'focus', 'pet', 'snippet', 'monitor'])
-  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'pet', 'snippet', 'monitor'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'focus', 'habits', 'pet', 'snippet', 'monitor'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'pet', 'snippet', 'monitor'])
 })
 
 test('a room added later gets its tab once too, and a room taken away stays away', SLOW, async ($, on) => {
@@ -1411,8 +1411,8 @@ test('a room added later gets its tab once too, and a room taken away stays away
   const bridge = fakeBridge(on, { store })
   await bridge.start($)
   await settle()
-  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'pet', 'monitor'])
-  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'focus', 'pet', 'monitor'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'pet', 'monitor'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'focus', 'habits', 'pet', 'monitor'])
 })
 
 test('tabs that would wrap show the rooms not on show as their icon', SLOW, async ($, on) => {
@@ -1649,7 +1649,7 @@ test('Weather and Tech News stay off until asked for, and say where they reach',
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet'], shown: null })
   await $.command.run({ command: 'chat', args: 'rooms +weather +news' })
   expect(logs.slice(-3)).toEqual([
-    'Rooms with tabs: usage, git, agents, focus, pet, snippet, weather, news.',
+    'Rooms with tabs: usage, git, agents, focus, habits, pet, snippet, weather, news.',
     'Weather reaches api.open-meteo.com, geocoding-api.open-meteo.com, air-quality-api.open-meteo.com.',
     'Tech News reaches hacker-news.firebaseio.com, www.ithome.com.tw, www.theverge.com, feeds.arstechnica.com, techcrunch.com.',
   ])
@@ -2240,7 +2240,7 @@ test('/chat update lists what is due, asks first when hosts change; /chat uninst
   await $.command.run({ command: 'chat', args: 'uninstall us-tech' })
   expect(bridge.calls.at(-1)).toEqual({ path: '/store/uninstall', body: { id: 'us-tech' } })
   expect(logs.at(-1)).toBe('Uninstalled US Tech Stocks.')
-  expect(store.sysRooms).toEqual(['usage', 'focus', 'pet'])
+  expect(store.sysRooms).toEqual(['usage', 'focus', 'habits', 'pet'])
 })
 
 // ---------------------------------------------------------------- desktop bands
@@ -2537,6 +2537,139 @@ test('Focus room: a streak of days with a finished round, drawn as a grid', SLOW
   expect(await term.find({ type: 'Text', text: 'STREAK' })).toBeDefined()
   expect((await term.findAll({ type: 'Text', text: '■ ' })).length).toBe(8)
   await term.unmount()
+})
+
+test('Habits room: goals added by typing, checked off, counted, renamed and removed', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  recordUi(on)
+  const store: Record<string, unknown> = {}
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await ui.press({ key: 'sys-habits' })
+  expect(await ui.find({ type: 'Text', text: 'No habits yet.' })).toBeDefined()
+  expect((await ui.find({ type: 'Input' }) as any)?.props.submitLabel).toBe('add')
+  await ui.input({ key: 'compose', text: 'Read 30 min' })                  // what's typed is a new habit
+  await ui.input({ key: 'compose', text: 'add Water x8' })
+  expect((store.habits as any).goals).toEqual([{ id: 'h1', name: 'Read 30 min', target: 1 }, { id: 'h2', name: 'Water', target: 8 }])
+  expect(await ui.find({ type: 'Text', text: 'READ 30 MIN' })).toBeDefined()
+  await ui.press({ key: 'habit-h1-do' })
+  expect((store.habits as any).history.h1).toEqual({ [today]: 1 })
+  expect(await ui.find({ type: 'Text', text: '🔥 1 day' })).toBeDefined()
+  expect(await svgAlt(ui, /^Read 30 min: 1 day done in the last \d+ weeks$/)).toBeDefined()
+  expect(await ui.find({ type: 'Svg', alt: 'Missed or done' })).toBeDefined()
+  expect(await ui.find({ type: 'Svg', alt: 'Less to more' })).toBeDefined()   // Water counts
+  for (let i = 0; i < 3; i++) await ui.press({ key: 'habit-h2-do' })
+  expect(await ui.find({ type: 'Text', text: '3/8' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'done water' })
+  expect((store.habits as any).history.h2[today]).toBe(4)
+  await ui.press({ key: 'habit-h2-less' })
+  expect((store.habits as any).history.h2[today]).toBe(3)
+  await ui.press({ key: 'habit-h1-do' })                                   // ✓ again takes it back
+  expect((store.habits as any).history.h1).toEqual({})
+  await ui.input({ key: 'compose', text: 'rename read -> Read 20 min' })
+  expect((store.habits as any).goals[0].name).toBe('Read 20 min')
+  await ui.input({ key: 'compose', text: 'add water' })
+  expect(await ui.find({ type: 'Text', text: "There's already a habit called Water." })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'Ｒｅａｄ ２０ ｍｉｎ。' })              // full-width, as an IME types it, and a stop
+  expect(await ui.find({ type: 'Text', text: "There's already a habit called Read 20 min." })).toBeDefined()
+  expect((store.habits as any).goals).toHaveLength(2)
+  await ui.input({ key: 'compose', text: 'Check email' })                   // a verb that doesn't fit is part of the name
+  await ui.input({ key: 'compose', text: 'remove 1' })
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water', 'Check email'])
+  await ui.press({ key: 'habit-h2-do' })                                    // a day for Water, to see it come back
+  await ui.press({ key: 'habit-h2-delete' })                                // ✕ deletes it and its days
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Check email'])
+  expect((store.habits as any).history.h2).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Removed Water and its streak.' })).toBeDefined()
+  await ui.press({ key: 'notice-undo' })                                    // Cancel puts it back where it was
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water', 'Check email'])
+  expect((store.habits as any).history.h2[today]).toBe(4)
+  expect(await ui.find({ type: 'Text', text: 'Water is back.' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
+  await ui.press({ key: 'habit-h3-delete' })
+  expect(await ui.find({ type: 'Button', key: 'notice-undo', label: 'Cancel' })).toBeDefined()
+  await bridge.clock.advance(10_000)                                        // left alone, it goes after 10 seconds
+  expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Removed Check email and its streak.' })).toBeUndefined()
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water'])
+  expect(await ui.find({ type: 'Button', key: 'share-snapshot' })).toBeDefined()
+  await $.command.run({ command: 'habit', args: 'done water' })
+  expect(logs.at(-1)).toBe('Water: 5/8 today.')
+  await $.command.run({ command: 'habit', args: 'later' })
+  expect(logs.at(-1)).toMatch(/^\/habit takes add <name>/)
+  await ui.unmount()
+})
+
+test('Habits room: a streak a goal, drawn as GitHub draws contributions', SLOW, async ($, on) => {
+  recordUi(on)
+  const day = (n: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  // Yesterday and the two days before, then a gap, then five days in a row.
+  const h1 = Object.fromEntries([1, 2, 3, 10, 11, 12, 13, 14].map((n) => [day(n), 1]))
+  const goals = [{ id: 'h1', name: 'Meditate', target: 1 }, { id: 'h2', name: 'Run', target: 1 }]
+  const bridge = fakeBridge(on, { store: { habits: { goals, history: { h1 } } } })
+  await bridge.start($)
+  await settle()
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await desk.press({ key: 'sys-habits' })
+  expect(await desk.find({ type: 'Text', text: '🔥 3 days' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'best 5' })).toBeDefined()
+  const grid = await svgAlt(desk, /^Meditate: 8 days done in the last \d+ weeks$/)
+  expect(grid!.props.source).toMatch(/<text[^>]*>[A-Z][a-z]{2}<\/text>/)    // month names along the top
+  expect(grid!.props.source).toMatch(/>Mon<\/text>.*>Wed<\/text>.*>Fri<\/text>/)
+  expect(grid!.props.source).toMatch(/stroke="#ECE7E1"/)                    // today, ringed
+  await desk.unmount()
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 50 } } })
+  expect(await term.find({ type: 'Text', text: 'MEDITATE' })).toBeDefined()
+  expect((await term.findAll({ type: 'Text', text: '■ ' })).length).toBe(8)
+  await term.unmount()
+})
+
+test('Habits bands and Share: done today, the longest streak, and what is left', SLOW, async ($, on) => {
+  recordUi(on)
+  const logs = recordLogs(on)
+  const day = (n: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  const goals = [{ id: 'h1', name: 'Meditate', target: 1 }, { id: 'h2', name: 'Water', target: 8 }, { id: 'h3', name: 'Run', target: 1 }]
+  const history = { h1: { [day(0)]: 1, [day(1)]: 1, [day(2)]: 1 }, h2: { [day(0)]: 5, [day(1)]: 8 } }
+  const bridge = fakeBridge(on, { store: { view: 'habits', habits: { goals, history } } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: '✓ Habits' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓ 1/3' })).toBeDefined()
+  expect(await ui.find({ type: 'Svg', alt: '1 of 3 done today' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '🔥 3' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Meditate' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2 left: Water 5/8 · Run' })).toBeDefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '1/3 today' })).toBeDefined()   // after the room's own name, not again
+  expect(await ui.find({ type: 'Text', text: '🔥 Meditate 3 · Water 1' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'chat-share', args: 'habits' })
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  const sent = bridge.calls.at(-1)
+  expect(sent?.body.kind).toBe('text')
+  expect(sent?.body.text).toBe('✓ 1 of 3 habits done today. 🔥 Meditate 3 days, Water 1 day. Left: Water 5/8, Run.')
+  expect(logs.length).toBeGreaterThan(0)
+})
+
+test('Habits bands with twelve habits: the terminal says how many more, the desktop cuts what is left short', SLOW, async ($, on) => {
+  recordUi(on)
+  const names = ['Meditate', 'Read', 'Water', 'Run', 'Stretch', 'Journal', 'No sugar', 'Duolingo', 'Floss', 'Walk 8k steps', 'Call family', 'Tidy desk']
+  const goals = names.map((name, i) => ({ id: `h${i + 1}`, name, target: 1 }))
+  const bridge = fakeBridge(on, { store: { view: 'habits', habits: { goals, history: {} } } })
+  await bridge.start($)
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...bandProps, bodyColumns: 80 } })
+  expect(await ui.find({ type: 'Text', text: /^left: Meditate, Read, .*\+\d+ more$/ })).toBeDefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 120 } })
+  expect(await ui.find({ type: 'Text', text: /^12 left: Meditate · Read · / })).toBeDefined()   // kept, and cut to fit
+  await ui.unmount()
 })
 
 test('desktop band: Focus shows the phase and its time, the streak with this week, and what comes next', SLOW, async ($, on) => {

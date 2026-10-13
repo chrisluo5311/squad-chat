@@ -588,20 +588,20 @@ function showView(view, say, setView) {
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /clipboard · /pet · /chat · /logout · anything else is a message";
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /habit add|done|undo|remove|rename · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /habit · /clipboard · /pet · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
 // `refreshGit()` fetches the Git room again, `refreshRoom(id)` a function
 // room, `copy(text)` puts text on the clipboard, `saveRooms(list)` saves
-// which rooms have tabs, `roomInput(view, text)` takes words typed in a
+// which rooms have tabs, `roomInput(view, text, say)` takes words typed in a
 // built-in room of the mod's (Focus's "start" or "50 10"), true if it did.
 export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit, refreshRoom, copy, saveRooms, roomInput } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
   const view = activeView();
   if (view === "git" && /^r(efresh)?$/i.test(text)) return refreshGit?.();
-  if (!text.startsWith("/") && await roomInput?.(view, text)) return;
+  if (!text.startsWith("/") && await roomInput?.(view, text, say, { typed: true })) return;
   if (isFnRoom(view) && /^r(efresh)?$/i.test(text)) return refreshRoom?.(view);
   // A room's own keys: "p" in Lo-fi plays or pauses.
   const key = isFnRoom(view) && text.length === 1 ? state.fn.get(view).manifest.layout.keys?.[text.toLowerCase()] : null;
@@ -625,6 +625,10 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
         // "/focus 50 10" or "/focus start" does it without leaving the room on show.
         if (args.trim()) return (await roomInput?.("focus", args.trim())) ? undefined : say("/focus takes start, pause, skip, reset, or the minutes: /focus 50 10.");
         return showView(cmd, say, setView);
+      case "habit": case "habits":
+        // "/habit add Run" does it without leaving the room on show.
+        if (args.trim()) return (await roomInput?.("habits", args.trim(), say)) ? undefined : say("/habit takes add <name>, done <name>, undo <name>, remove <name> or rename <old> -> <new>.");
+        return showView("habits", say, setView);
       case "chat": {
         // "/chat git" typed here does what it does at the prompt.
         const [sub, ...more] = args.trim().toLowerCase().split(/\s+/).filter(Boolean);

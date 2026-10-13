@@ -48,7 +48,7 @@ To show other sessions, each session keeps a small heartbeat file in `/tmp/squad
 
 The Clipboard room is off until you add it. With a tab, it reads the clipboard every 2 seconds (`pbpaste`, `wl-paste` or `xclip`) and keeps the last 30 items in that session's memory only. Nothing is written to disk or sent anywhere, items that look like a secret are drawn masked, and the room can't be shared to a chat.
 
-Focus keeps its lengths and the days you finished a round, and Pet its mood, bond and a short log (who wrote in which room, never what), in Claude Code's plugin store on this computer.
+Focus keeps its lengths and the days you finished a round, Habits your habits and how many times you did each a day for the last year, and Pet its mood, bond and a short log (who wrote in which room, never what), in Claude Code's plugin store on this computer.
 
 Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. The Snippets room never touches the network.
 
@@ -71,7 +71,7 @@ The bridge holds each room to its own sites, so a room can't reach anywhere else
 
 Lo-fi's streams don't go through the bridge's fetch, since mpv fetches them itself. Its stations are still held to the room's hosts, both when a room is checked and again before one plays, so a store room can't use the player to reach a host it doesn't name. What you add yourself with `/lofi add` plays from wherever it is. Files and folders you add stay where they are, and the list of them is kept in `room-data/lofi/list.json`. mpv runs only after you press play, and stops when the session ends.
 
-Only `/chat-share usage|git|agents|focus|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
+Only `/chat-share usage|git|agents|focus|habits|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
 
 ## The room store
 

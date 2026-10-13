@@ -45,7 +45,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const KEEP_DAYS = 371;   // 53 weeks
 
 // The day `n` days before `now`'s (noon, so a DST change can't skip one).
-function daysBefore(now, n) {
+export function daysBefore(now, n) {
   const d = new Date(now);
   d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() - n);
@@ -53,7 +53,7 @@ function daysBefore(now, n) {
 }
 
 // The day after "2026-10-12" (noon again, for DST).
-function dayAfter(day) {
+export function dayAfter(day) {
   const [y, m, d] = day.split("-").map(Number);
   return dayOf(new Date(y, m - 1, d + 1, 12).getTime());
 }

@@ -22,6 +22,7 @@ import { orderSessions, mergedFeed } from "./sessions.mjs";
 import { fnMeta, fnDock, fnInline, fnBandPieces, fnSnapshot, fnSnapshotLine } from "./fnviews.mjs";
 import { SNAPSHOT_ICONS } from "./share.mjs";
 import { FOCUS_META, focusDock, focusInline, focusBandPieces, focusBandDesk, focusBadge, focusSnapshot } from "./focus.mjs";
+import { HABITS_META, habitsDock, habitsInline, habitsBandPieces, habitsBandDesk, habitsBadge, habitsSnapshot } from "./habits.mjs";
 import { CLIP_META, clipboardDock, clipboardInline, clipboardBandPieces, clipboardBandDesk } from "./clipboard.mjs";
 import { PET_META, petDock, petInline, petBandPieces, petBandDesk } from "./pet.mjs";
 
@@ -30,6 +31,7 @@ export const SYS = {
   git: { icon: "⎇", label: "Git", color: theme.git },
   agents: { icon: "⟡", label: "Agents", color: theme.agents },
   focus: FOCUS_META,
+  habits: HABITS_META,
   clipboard: CLIP_META,
   pet: PET_META,
 };
@@ -40,6 +42,7 @@ export const SYS = {
 // a snapshot (Clipboard and Pet have nothing to share).
 const OWN = {
   focus: { dock: focusDock, inline: focusInline, band: focusBandPieces, desk: focusBandDesk, badge: focusBadge, snapshot: focusSnapshot },
+  habits: { dock: habitsDock, inline: habitsInline, band: habitsBandPieces, desk: habitsBandDesk, badge: habitsBadge, snapshot: habitsSnapshot },
   clipboard: { dock: clipboardDock, inline: clipboardInline, band: clipboardBandPieces, desk: clipboardBandDesk },
   pet: { dock: petDock, inline: petInline, band: petBandPieces, desk: petBandDesk },
 };
@@ -1012,7 +1015,7 @@ export function forecast(pct) {
 // and the spend once there is some.
 export function sysBandPieces(view, width = 0) {
   if (!SYS[view]) return fnBandPieces(view);
-  if (OWN[view]) return OWN[view].band();
+  if (OWN[view]) return OWN[view].band(width);
   const sep = { text: " · ", color: theme.muted };
   const join = (list) => list.filter(Boolean).flatMap((p, i) => (i ? [sep, ...p] : p));
   const figure = (label, pct) => [{ text: `${label} `, color: theme.muted }, { text: `${Math.round(pct)}%`, color: level(pct), bold: true }];

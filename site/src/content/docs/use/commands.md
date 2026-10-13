@@ -34,7 +34,7 @@ description: Every squad-chat slash command, what it does, and examples.
 | `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
 | `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
 | `/chat-share to #room` | Send what's waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. |
-| `/chat-share usage` / `git` / `agents` / `focus` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+| `/chat-share usage` / `git` / `agents` / `focus` / `habits` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 
 ### Snippets
 
@@ -58,10 +58,11 @@ description: Every squad-chat slash command, what it does, and examples.
 | --- | --- |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `focus` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
+| `/chat usage` / `git` / `agents` / `focus` / `habits` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `habits`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | Drive the Focus room's timer from the prompt. `/focus` alone opens the room. |
+| `/habit add <name> [x<times>]` / `done <name>` / `undo <name>` / `remove <name>` / `rename <old> -> <new>` | Set up and check off the Habits room's goals from the prompt. `/habit` alone opens the room. |
 | `/chat store [words]` | The rooms in the [room store](/squad-chat/rooms/store/), and which you have |
 | `/chat install <id>` / `update [id]` / `uninstall <id>` | Install a room from the store (a look first, then again to install), bring installed ones up to date, or remove one |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. Some lists, as Weather's cities, add what's typed instead of replacing the list. |
@@ -81,7 +82,7 @@ description: Every squad-chat slash command, what it does, and examples.
 
 ## In the pane
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/focus`, `/clipboard`, `/pet`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the share preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player (`p` play or pause, `n` next, `b` back, `s` stop, `u` and `d` volume). In Focus, `start`, `pause`, `skip`, `reset` or `50 10` drive the timer, and in Pet a mood's name (`wave`, `sleepy`, `auto`) picks it. In a room with settings, `/set <setting> <value>` changes one.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/focus`, `/habit`, `/clipboard`, `/pet`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the share preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player (`p` play or pause, `n` next, `b` back, `s` stop, `u` and `d` volume). In Focus, `start`, `pause`, `skip`, `reset` or `50 10` drive the timer. In Habits, what you type is a new habit (`Read 30 min`, or `Water x8` for 8 times a day), and `remove`, `rename` and `undo` change them. In Pet a mood's name (`wave`, `sleepy`, `auto`) picks it. In a room with settings, `/set <setting> <value>` changes one.
 
 :::tip
 Type passcodes in the pane. It never touches the conversation, while a slash command's raw text stays in one bookkeeping line of the local transcript. See [Privacy & security](/squad-chat/reference/privacy/).

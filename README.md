@@ -88,7 +88,7 @@ squad-chat puts a group chat next to your Claude Code conversation. You keep wor
 * **Your own server.** Each group of friends runs its own free Supabase project. There is no central service and no account with us.
 * **Private rooms.** Rooms are joined with a passcode, and the database only shows a room's messages to its members.
 * **Survives bad networks.** After a dropped connection, a closed laptop or a crashed process, it reconnects by itself and fetches exactly the messages you missed.
-* **Built-in rooms for your session.** Next to the chat rooms, the Usage, Git and Agents tabs show context fill, cost, rate limits and tool timings, your pull requests and CI, and every Claude Code session's subagents as they work. Focus is a Pomodoro timer with a chime, Clipboard keeps what you copied lately, and Pet is Clawd, moving along with your session. They need no server and no sign-in.
+* **Built-in rooms for your session.** Next to the chat rooms, the Usage, Git and Agents tabs show context fill, cost, rate limits and tool timings, your pull requests and CI, and every Claude Code session's subagents as they work. Focus is a Pomodoro timer with a chime, Habits checks off your daily habits with a streak each, Clipboard keeps what you copied lately, and Pet is Clawd, moving along with your session. They need no server and no sign-in.
 * **Fits any terminal.** Docked beside the transcript in a wide terminal, compact above the prompt in a narrow one, and a one-line summary when the pane is closed.
 
 It is a Claude Code mod: a plugin of function hooks, plus a small Node process that holds the connection to Supabase. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit.
@@ -221,6 +221,7 @@ Tabs before your chat rooms. They need no server and no sign-in, and nothing in 
 | ⎇ Git | Your branch, its PR and checks, Actions | on |
 | ⟡ Agents | Every Claude Code session and its subagents | on |
 | ◷ Focus | A Pomodoro timer with a streak | on |
+| ✓ Habits | Daily habits, each with its streak | on |
 | ✿ Pet | Clawd, moving along with your session | on |
 | ⌘ Snippets | Code you reuse, one click from the clipboard | on |
 | ▦ Monitor | CPU, memory, network, battery | on |
@@ -260,11 +261,12 @@ Open one with its tab or `/chat <room>`. **⇪ Share** (or `/chat-share usage #r
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `focus` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
+| `/chat usage` / `git` / `agents` / `focus` / `habits` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](#built-in-rooms). `/chat chat` goes back to the chat. |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `habits`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | Drive the Focus room's timer from the prompt. `/focus` alone opens the room. |
-| `/chat-share usage` / `git` / `agents` / `focus` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+| `/habit add <name> [x<times>]` / `done <name>` / `undo <name>` / `remove <name>` / `rename <old> -> <new>` | Set up and check off the Habits room's goals from the prompt. `/habit` alone opens the room. |
+| `/chat-share usage` / `git` / `agents` / `focus` / `habits` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 | `/chat store [words]` | The rooms in the [room store](https://chrisluo5311.github.io/squad-chat/rooms/store/), and which you have |
 | `/chat install <id>` / `update [id]` / `uninstall <id>` | Install a room from the store (a look first, then again to install), bring installed ones up to date, or remove one |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Tokyo`. A list also takes `+one` and `-one`, and `default` puts a setting back. Some lists, as Weather's cities, add what's typed instead of replacing the list. |
@@ -275,7 +277,7 @@ Open one with its tab or `/chat <room>`. **⇪ Share** (or `/chat-share usage #r
 | `/lofi play [name]` / `pause` / `next` / `prev` / `stop` / `vol <0-100>` | Drive the Lo-fi room's player from the prompt |
 | `/lofi add <url, file or folder> [# name]` / `remove <name>` / `import` | Add to the Lo-fi room's list, take one off, or bring in Pixel Play's playlist |
 
-The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/focus`, `/clipboard`, `/pet`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player. In Focus, `start`, `pause`, `skip`, `reset` or `50 10` drive the timer, and in Pet a mood's name (`wave`, `sleepy`, `auto`) picks it. Type passcodes there: it never touches the conversation.
+The pane's input box takes `/room`, `/who`, `/name`, `/dnd`, `/share`, `/snippet`, `/lofi`, `/set`, `/usage`, `/git`, `/agents`, `/focus`, `/habit`, `/clipboard`, `/pet`, `/chat` (with `rooms`, `set`, `store`, `install`, `update` and `uninstall`), `/logout` and `/help` too, where the preview lets you pick the room and has **Send** and **Cancel** buttons. In the Git room and the function rooms, `r` refreshes, and in Lo-fi single keys drive the player. In Focus, `start`, `pause`, `skip`, `reset` or `50 10` drive the timer. In Habits, what you type is a new habit (`Read 30 min`, or `Water x8` for 8 times a day), and `remove`, `rename` and `undo` change them. In Pet a mood's name (`wave`, `sleepy`, `auto`) picks it. Type passcodes there: it never touches the conversation.
 
 #### Examples
 

@@ -1,6 +1,6 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Focus, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Focus, Habits, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
 ---
 
 Tabs that sit before your chat rooms. They need no server and no sign-in, and nothing in them reaches a chat room unless you share it.
@@ -11,6 +11,7 @@ Tabs that sit before your chat rooms. They need no server and no sign-in, and no
 | [⎇ Git](#-git) | Your branch, its PR and checks, Actions | on |
 | [⟡ Agents](#-agents) | Every Claude Code session and its subagents | on |
 | [◷ Focus](#-focus) | A Pomodoro timer with a streak | on |
+| [✓ Habits](#-habits) | Daily habits, each with its streak | on |
 | [✿ Pet](#-pet) | Clawd, moving along with your session | on |
 | [⌘ Snippets](#-snippets) | Code you reuse, one click from the clipboard | on |
 | [▦ Monitor](#-monitor) | CPU, memory, network, battery | on |
@@ -61,6 +62,15 @@ A Pomodoro timer.
 - **▶ Start**, **⏸**, **⏭** and **↺**, with a chime at each end. Type `50 10` (or `/focus 50 10`) for your lengths.
 - **A streak** of the days you finished a round, drawn like GitHub's.
 - `🍅 18:42` in the status line while it runs.
+
+## ✓ Habits
+
+Habits you keep every day, up to 12.
+
+- **Add one** by typing it in the room's box and pressing **add**: `Read 30 min`, or `Water x8` for one you do 8 times a day. `remove Run`, `rename Read -> Read 20 min` and `undo Water` change them, and `/habit` does it all from the prompt.
+- **✓** checks a habit off for today (again takes it back), and **+1** and **−** count one you do more than once. **✕** on a card deletes the habit and its streak.
+- **A streak** for each habit, drawn like GitHub's: the months, Mon, Wed and Fri, today ringed, and a shade for how many times on a counted one.
+- **The band** shows how many are done today, the longest streak running and what's left. The tab counts what's left from other rooms.
 
 ## ✿ Pet
 

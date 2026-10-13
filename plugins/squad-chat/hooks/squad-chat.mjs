@@ -10,7 +10,7 @@
 //   fnviews.mjs   function rooms, drawn from the manifests the bridge loads
 //   metrics.mjs   this session's numbers, github.mjs the Git room's data,
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
-//   focus.mjs, clipboard.mjs, pet.mjs   the Focus, Clipboard and Pet rooms
+//   focus.mjs, habits.mjs, clipboard.mjs, pet.mjs   the Focus, Habits, Clipboard and Pet rooms
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
@@ -19,14 +19,17 @@ import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restore
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
 import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge } from "./focus.mjs";
+import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggleHabit, deleteHabit, undeleteHabit } from "./habits.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
 
 state.focus = createFocus();
+state.habits = createHabits();
 state.clipboard = createClipboard();
 state.pet = createPet();
 
 const PANE_ID = "squad-chat";
+const UNDO_MS = 10_000;   // how long Cancel stays beside "Removed …"
 
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
@@ -424,7 +427,7 @@ async function submitFromPane($, value) {
       refreshRoom: (id) => refreshRoom($, id),
       copy: (text) => copyText($, text, say),
       saveRooms: (list) => saveSysRooms($, list),
-      roomInput: (view, text) => roomInput($, view, text),
+      roomInput: (view, text, say, opts) => roomInput($, view, text, say, opts),
     });
     state.dividerAt.clear();   // they've replied: everything above is read
     state.chatScroll.back = 0;   // and they see what they just sent
@@ -648,6 +651,7 @@ async function restoreRooms($) {
     const now = await $.clock.now();
     const timer = state.sessionId ? await $.store.get(FOCUS_TIMER_PREFIX + state.sessionId) : null;
     restoreFocus(state.focus, await $.store.get("focus"), timer, now);
+    restoreHabits(state.habits, await $.store.get("habits"));
     restorePet(state.pet, await $.store.get("pet"));
     state.pet.lastBusyAt = Date.now();
     state.focusStatus = focusStatus(now);
@@ -723,10 +727,34 @@ function focusEnded($, ended, now) {
   focusChanged($, now);
 }
 
+// The Habits room's goals and days are every session's: read again before
+// a change, so one session's save doesn't undo another's, then kept.
+async function changeHabits($, fn) {
+  // The wall clock, as the drawing has it: a day is the calendar's.
+  const now = Date.now();
+  try { restoreHabits(state.habits, await $.store.get("habits")); } catch (err) {
+    $.ui.log(`squad-chat: could not read the habits: ${err?.message ?? err}`, { to: "debug" });
+  }
+  const said = fn(state.habits, now);
+  afterChange($);
+  try { await $.store.set("habits", habitsSaved(state.habits)); } catch (err) {
+    $.ui.log(`squad-chat: could not save the habits: ${err?.message ?? err}`, { to: "debug" });
+  }
+  return said;
+}
+
 // Words typed in a room of the mod's own: Focus's start, pause, skip, reset
-// or minutes; Clipboard's clear; Pet's moods. True when taken.
-async function roomInput($, view, text) {
+// or minutes; Habits' add, done, undo, remove, rename or a habit's name;
+// Clipboard's clear; Pet's moods. True when taken; `say` answers. `typed`
+// is the room's own box, where a new habit needs no "add".
+async function roomInput($, view, text, say = () => {}, { typed = false } = {}) {
   const word = text.trim().toLowerCase();
+  if (view === "habits") {
+    const said = await changeHabits($, (h, now) => habitWords(h, text, now, { typed }));
+    if (said == null) return false;
+    say(said);
+    return true;
+  }
   if (view === "focus") {
     if (Object.hasOwn(FOCUS_DO, word)) { await focusAct($, word); return true; }
     const now = await $.clock.now();
@@ -884,7 +912,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -894,6 +922,7 @@ const COMMANDS = [
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
   { name: "lofi", description: "squad-chat: music in the background (lo-fi streams, YouTube, your files) through mpv, in the Lo-fi room", argumentHint: "play [name] | pause | next | prev | stop | vol <0-100> | add <url or path> | remove <name> | import" },
   { name: "focus", description: "squad-chat: a Pomodoro timer in the Focus room, with a chime when focus or a break ends", argumentHint: "start | pause | skip | reset | <focus min> [break min]" },
+  { name: "habit", description: "squad-chat: daily habits in the Habits room, each with its streak", argumentHint: "add <name> [x<times a day>] | done <name> | undo <name> | remove <name> | rename <old> -> <new>" },
   { name: "snippet", description: "squad-chat: save code you reuse (the selection, or Claude's last code block), then copy or share it from the Snippet room", argumentHint: "add <name> | rename <old> -> <new> | delete <name> | copy <name> | share <name> [#room]" },
 ];
 
@@ -990,6 +1019,12 @@ export function register(on, options) {
     const f = state.focus;
     say(f.phase === "idle" ? `Focus ${f.work} min, break ${f.rest} min.` : `${state.focusStatus} · ${f.work}/${f.rest} min`);
   }));
+  on("command.run", { command: "habit" }, ($, e) => answer($, async (call, say) => {
+    const args = String(e.args ?? "").trim();
+    if (!state.sysRooms.includes("habits")) return say("The Habits room is hidden. Bring it back with /chat rooms +habits.");
+    if (!args) { await setView($, "habits"); return openPane($); }
+    if (!(await roomInput($, "habits", args, say))) say("/habit takes add <name>, done <name>, undo <name>, remove <name> or rename <old> -> <new>.");
+  }));
   on("command.run", { command: "snippet" }, ($, e) => answer($, (call, say) => snippet(call, e.args, say, {
     sources: shareSources($),
     copy: (text) => copyText($, text, say),
@@ -1054,6 +1089,30 @@ export function register(on, options) {
       onFocusSkip: () => { void focusAct($, "skip"); },
       onFocusReset: () => { void focusAct($, "reset"); },
       onFocusAdjust: (which, dir) => { void changeFocus($, (f) => focusAdjust(f, which, dir)); },
+      onHabitToggle: (id) => { void changeHabits($, (h, now) => { toggleHabit(h, id, now); }); },
+      // ✕ deletes at once; Cancel beside the notice puts it back for 10 seconds.
+      onHabitDelete: (id) => {
+        void changeHabits($, (h) => {
+          const done = deleteHabit(h, id);
+          if (!done) return;
+          const undo = { text: done.said, label: "Cancel", until: Date.now() + UNDO_MS, kept: done.kept };
+          state.notice = done.said;
+          state.undo = undo;
+          $.clock.sleep(UNDO_MS).then(() => {
+            if (state.undo !== undo) return;
+            state.undo = null;
+            if (state.notice === undo.text) state.notice = "";
+            $.ui.invalidate("ui.render");
+          }).catch(() => {});
+        });
+      },
+      onUndo: () => {
+        const undo = state.undo;
+        if (!undo || Date.now() >= undo.until) return;
+        state.undo = null;
+        void changeHabits($, (h) => { state.notice = undeleteHabit(h, undo.kept); });
+      },
+      onHabitMark: (id, dir) => { if (dir) void changeHabits($, (h, now) => { markHabit(h, id, dir, now); }); },
       onClipCopy: (id, surface) => { void copyClip($, id, surface); },
       onClipRemove: (id) => { removeClip(state.clipboard, id); $.ui.invalidate("ui.render"); },
       onClipClear: () => clearClips($),

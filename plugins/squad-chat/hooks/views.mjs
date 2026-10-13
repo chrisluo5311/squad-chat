@@ -573,9 +573,18 @@ function typingLine(els, text) {
   return Box({ key: "hints", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, italic: true, wrap: "truncate-end", children: `${glyph.typing} ${text}` })] });
 }
 
-function notice(els) {
-  const { Text } = els;
-  return state.notice ? Text({ key: "notice", color: theme.warn, wrap: "wrap", children: state.notice }) : null;
+// The notice, and beside it the button that takes back what it says was
+// done (a habit deleted: Cancel), while that can still be taken back.
+function notice(els, handlers) {
+  const { Box, Text, Button } = els;
+  if (!state.notice) return null;
+  const text = Text({ key: "notice", color: theme.warn, wrap: "wrap", children: state.notice });
+  const undo = state.undo;
+  if (!handlers || !undo || undo.text !== state.notice || Date.now() >= undo.until) return text;
+  return Box({ key: "notice-row", flexDirection: "row", alignItems: "center", columnGap: 1, children: [
+    Box({ key: "t", flexShrink: 1, minWidth: 0, children: [text] }),
+    Button({ key: "notice-undo", label: undo.label, onPress: () => handlers.onUndo?.() }),
+  ] });
 }
 
 // What the input box is for right now.
@@ -584,6 +593,7 @@ const SYS_INPUT = {
   git: { placeholder: "r to refresh · /share git [#room] · /help", label: "run" },
   agents: { placeholder: "/usage · /git · /share agents [#room] · /help", label: "run" },
   focus: { placeholder: "start · pause · skip · reset · 50 10 sets the minutes", label: "run" },
+  habits: { placeholder: "a new habit: Read 30 min, or Water x8 for 8 times a day", label: "add" },
   clipboard: { placeholder: "clear · /help", label: "run" },
   pet: { placeholder: "auto, or a mood: vibe typing wave cheer sleepy …", label: "run" },
 };
@@ -670,7 +680,7 @@ function dockView(els, props, handlers) {
   }
 
   if (view !== "chat") {
-    const n = notice(els);
+    const n = notice(els, handlers);
     const pending = shareCard(els, handlers, width);
     const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
     // The desktop scrolls the pane itself (its own bar, the wheel and the
@@ -750,6 +760,7 @@ const SYS_HINTS = {
   git: "↻ or r refreshes · ⧉ copies a link",
   agents: "▾ folds a session · all ▾ filters the feed",
   focus: "a chime when focus or a break ends",
+  habits: "✓ checks off today · ✕ deletes · rename <old> -> <new>",
   clipboard: "⧉ copies again · kept in memory, never shared",
   pet: "Clawd follows what goes on, or keeps one mood",
 };
