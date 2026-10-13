@@ -19,9 +19,9 @@
 <h1 align="center">squad-chat</h1>
 
 <p align="center">
-  <strong>Claude's cooking. Chat with your squad.</strong>
+  <strong>The all-in-one Claude Code plugin. Talk with your squad.</strong>
   <br />
-  Friends online, right beside your Claude Code session. Zero tokens, zero leaks to Claude.
+  Share code and keep live rooms (usage, git, weather, lo-fi and more) next to your session. Zero tokens, zero leaks to Claude.
   <br />
   <a href="https://chrisluo5311.github.io/squad-chat/"><strong>Read the docs »</strong></a>
   <br />
