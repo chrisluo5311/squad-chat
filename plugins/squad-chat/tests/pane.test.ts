@@ -1381,12 +1381,12 @@ test('/chat rooms takes function rooms too, and +name or -name', SLOW, async ($,
   bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...snippetsLoaded())
   await settle()
   await $.command.run({ command: 'chat', args: 'rooms -snippet' })
-  expect(logs.at(-1)).toBe('Rooms with tabs: usage, git, agents, focus, habits, pet.')
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, git, agents, focus, habits, toolbox, pet.')
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: [], shown: null })
   await $.command.run({ command: 'chat', args: 'rooms +snippet -git' })
-  expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, focus, habits, pet, snippet.')
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, focus, habits, toolbox, pet, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms weather' })
-  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, habits, clipboard, pet, snippet.')
+  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, habits, toolbox, clipboard, pet, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms snippet' })
   expect(logs.at(-1)).toBe('Rooms with tabs: snippet.')
 })
@@ -1401,8 +1401,8 @@ test('a room new in this version gets a tab once, even for people who chose thei
   expect(await ui.find({ key: 'sys-snippet' })).toBeDefined()
   expect(await ui.find({ key: 'sys-agents' })).toBeUndefined()   // still their choice
   await ui.unmount()
-  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'focus', 'habits', 'pet', 'snippet', 'monitor'])
-  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'pet', 'snippet', 'monitor'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'focus', 'habits', 'toolbox', 'pet', 'snippet', 'monitor'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'toolbox', 'pet', 'snippet', 'monitor'])
 })
 
 test('a room added later gets its tab once too, and a room taken away stays away', SLOW, async ($, on) => {
@@ -1411,8 +1411,8 @@ test('a room added later gets its tab once too, and a room taken away stays away
   const bridge = fakeBridge(on, { store })
   await bridge.start($)
   await settle()
-  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'pet', 'monitor'])
-  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'focus', 'habits', 'pet', 'monitor'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'toolbox', 'pet', 'monitor'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'focus', 'habits', 'toolbox', 'pet', 'monitor'])
 })
 
 test('tabs that would wrap show the rooms not on show as their icon', SLOW, async ($, on) => {
@@ -1649,7 +1649,7 @@ test('Weather and Tech News stay off until asked for, and say where they reach',
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet'], shown: null })
   await $.command.run({ command: 'chat', args: 'rooms +weather +news' })
   expect(logs.slice(-3)).toEqual([
-    'Rooms with tabs: usage, git, agents, focus, habits, pet, snippet, weather, news.',
+    'Rooms with tabs: usage, git, agents, focus, habits, toolbox, pet, snippet, weather, news.',
     'Weather reaches api.open-meteo.com, geocoding-api.open-meteo.com, air-quality-api.open-meteo.com.',
     'Tech News reaches hacker-news.firebaseio.com, www.ithome.com.tw, www.theverge.com, feeds.arstechnica.com, techcrunch.com.',
   ])
@@ -2240,7 +2240,7 @@ test('/chat update lists what is due, asks first when hosts change; /chat uninst
   await $.command.run({ command: 'chat', args: 'uninstall us-tech' })
   expect(bridge.calls.at(-1)).toEqual({ path: '/store/uninstall', body: { id: 'us-tech' } })
   expect(logs.at(-1)).toBe('Uninstalled US Tech Stocks.')
-  expect(store.sysRooms).toEqual(['usage', 'focus', 'habits', 'pet'])
+  expect(store.sysRooms).toEqual(['usage', 'focus', 'habits', 'toolbox', 'pet'])
 })
 
 // ---------------------------------------------------------------- desktop bands
@@ -2669,6 +2669,132 @@ test('Habits bands with twelve habits: the terminal says how many more, the desk
   await ui.unmount()
   ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 120 } })
   expect(await ui.find({ type: 'Text', text: /^12 left: Meditate · Read · / })).toBeDefined()   // kept, and cut to fit
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------- Toolbox
+
+const b64url = (o: object) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+const jwtFor = (claims: object) => `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(claims)}.sig`
+
+test('Toolbox room: a tool from the menu, run on what is typed, each result copied; never kept or shared', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  recordUi(on)
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
+  const token = jwtFor({ sub: 'u1', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })
+  const store: Record<string, unknown> = {}
+  const bridge = fakeBridge(on, { store, run: (argv) => (argv[0] === 'pbpaste' ? { exitCode: 0, stdout: `${token}\n` } : null) })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await ui.press({ key: 'sys-toolbox' })
+  expect(await ui.find({ type: 'Text', text: 'TOOLS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'GENERATE' })).toBeDefined()
+  expect((await ui.find({ type: 'Button', key: 'tool-uuid' }) as any)?.props.variant).toBe('primary')   // UUID to start
+  await ui.press({ key: 'tool-again' })
+  expect((await ui.findAll({ type: 'Text', text: /^[0-9a-f]{8}-[0-9a-f]{4}-4/ })).length).toBe(5)
+  await ui.press({ key: 'tool-copy-all' })
+  expect(copied.at(-1)!.split('\n')).toHaveLength(5)
+  await ui.input({ key: 'compose', text: '3 v7' })                         // options for the tool on show
+  expect(await ui.find({ type: 'Text', text: 'v7 ×3' })).toBeDefined()
+  await ui.press({ key: 'tool-hash' })
+  expect(await ui.find({ type: 'Text', text: 'Type or paste text to hash.' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'hello' })
+  expect(await ui.find({ type: 'Text', text: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824' })).toBeDefined()
+  await ui.press({ key: 'tool-copy-0' })
+  expect(copied.at(-1)).toBe('5d41402abc4b2a76b9719d911017c592')
+  await ui.input({ key: 'compose', text: 'base' })                         // a tool's name alone shows it
+  expect((await ui.find({ type: 'Button', key: 'tool-base' }) as any)?.props.variant).toBe('primary')
+  await ui.input({ key: 'compose', text: '0xff' })
+  expect(await ui.find({ type: 'Text', text: '1111 1111' })).toBeDefined()
+  await ui.press({ key: 'tool-password' })
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeDefined()   // masked until asked
+  await ui.press({ key: 'tool-reveal' })
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeUndefined()
+  await ui.press({ key: 'tool-jwt' })
+  await ui.press({ key: 'tool-paste' })                                    // the clipboard, read once
+  expect(await ui.find({ type: 'Text', text: 'authenticated' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^● valid for 59m · signature not checked$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'share-snapshot' })).toBeUndefined()
+  await $.command.run({ command: 'tool', args: 'case user id' })           // from the prompt
+  expect(await ui.find({ type: 'Text', text: 'userId' })).toBeDefined()
+  await $.command.run({ command: 'tool', args: 'frobnicate' })
+  expect(logs.at(-1)).toMatch(/^\/tool takes a tool's name/)
+  expect(Object.keys(store).filter((k) => /tool/i.test(k))).toEqual([])   // nothing kept
+  await ui.unmount()
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 50 } } })
+  expect(await term.find({ type: 'Text', text: 'CASE' })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: 'user_id' })).toBeDefined()
+  await term.unmount()
+})
+
+test('Toolbox bands: the tools, then the last result, kept clear of ‹ › and Open', SLOW, async ($, on) => {
+  recordUi(on)
+  on('ui.copy', () => ({ value: { isCopied: true } }))
+  const bridge = fakeBridge(on, { store: { view: 'toolbox' } })
+  await bridge.start($)
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: '⚒ Toolbox' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '16' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'try UUID · Hash · Time · JWT' })).toBeDefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '16 tools' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'tool', args: 'hash hello' })
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: 'Hash' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'sha256' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2cf24dba5fb0…938b9824' })).toBeDefined()
+  await ui.unmount()
+  // A narrow window: the sections that don't fit go, ‹ › and Open stay.
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 60 } })
+  expect(await ui.find({ type: 'Text', text: 'Hash' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'band-prev' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'open' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'tool', args: 'password 16' })
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: 'Password 16 chars' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeDefined()   // never the password itself
+  await ui.unmount()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await pane.press({ key: 'tool-copy-0' })
+  await pane.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: '✓ copied' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Toolbox band with the Clipboard room on: a JWT copied shows how long it has, and the tab warns before it expires', SLOW, async ($, on) => {
+  recordUi(on)
+  const token = jwtFor({ role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 5 * 60 + 30 })
+  const store: Record<string, unknown> = { view: 'toolbox', sysRooms: ['toolbox', 'clipboard'], roomsOffered: ['usage', 'git', 'agents', 'focus', 'habits', 'toolbox', 'pet', 'snippet', 'monitor'] }
+  const bridge = fakeBridge(on, { store, run: (argv) => (argv[0] === 'pbpaste' ? { exitCode: 0, stdout: token } : null) })
+  await bridge.start($)
+  await settle()
+  await bridge.clock.advance(3_000)
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: 'clipboard' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' JWT ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '5m' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'HS256' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /eyJ/ })).toBeUndefined()   // the token itself never shows
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: 'clipboard: JWT' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '● valid for 5m' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'chat', args: 'clipboard' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await pane.find({ key: 'sysbox-toolbox' })).toBeDefined()        // the tab's ! from another room
+  await pane.unmount()
+  await $.command.run({ command: 'tool', args: 'uuid' })                    // a tool run since: the band says that
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: 'UUID v4 ×5' })).toBeDefined()
   await ui.unmount()
 })
 

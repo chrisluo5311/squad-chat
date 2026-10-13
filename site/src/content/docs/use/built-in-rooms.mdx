@@ -1,6 +1,6 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Focus, Habits, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
 ---
 
 Tabs that sit before your chat rooms. They need no server and no sign-in, and nothing in them reaches a chat room unless you share it.
@@ -12,6 +12,7 @@ Tabs that sit before your chat rooms. They need no server and no sign-in, and no
 | [⟡ Agents](#-agents) | Every Claude Code session and its subagents | on |
 | [◷ Focus](#-focus) | A Pomodoro timer with a streak | on |
 | [✓ Habits](#-habits) | Daily habits, each with its streak | on |
+| [⚒ Toolbox](#-toolbox) | Base64, URL, JWT, UUID, hashes, Unix times, cron, JSON and more | on |
 | [✿ Pet](#-pet) | Clawd, moving along with your session | on |
 | [⌘ Snippets](#-snippets) | Code you reuse, one click from the clipboard | on |
 | [▦ Monitor](#-monitor) | CPU, memory, network, battery | on |
@@ -71,6 +72,23 @@ Habits you keep every day, up to 12.
 - **✓** checks a habit off for today (again takes it back), and **+1** and **−** count one you do more than once. **✕** on a card deletes the habit and its streak.
 - **A streak** for each habit, drawn like GitHub's: the months, Mon, Wed and Fri, today ringed, and a shade for how many times on a counted one.
 - **The band** shows how many are done today, the longest streak running and what's left. The tab counts what's left from other rooms.
+
+## ⚒ Toolbox
+
+Sixteen small tools a developer reaches for, after [DevToys](https://devtoys.app/), in four groups:
+
+| Group | Tools |
+| --- | --- |
+| Encode | Base64, URL, HTML, JWT (read, the signature not checked) |
+| Generate | UUID (v4 or v7), ULID, Hash (MD5, SHA-1, SHA-256, SHA-512), Password, Lorem |
+| Convert | Time (Unix seconds or ms, dates), Base (dec, hex, oct, bin), Cron (read aloud, the next runs), JSON |
+| Text | Escape, Count, Case |
+
+- **Pick a tool** from the menu, then type what it runs on in the room's box. A generator takes its options there: `5 v7` for five UUID v7s, `24 nosym` for a password. A tool's name alone switches to it.
+- **⧉** copies a result, **⧉ all** every UUID at once, and **⧉ paste** reads the clipboard into the tool. A password stays masked until **show**.
+- **`/tool`** does it from the prompt: `/tool hash hello`, `/tool time 1739000000`, `/tool cron */15 9-18 * * 1-5`.
+- **The band** shows the last result, cut short (a password masked). With the Clipboard room on, it shows a JWT you just copied with its time left, or a Unix time as a date, and the tab shows **!** when that JWT has under 10 minutes.
+- **Kept nowhere**: what you type and what comes out live in the session's memory, and the room has no Share.
 
 ## ✿ Pet
 

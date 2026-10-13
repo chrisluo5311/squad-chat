@@ -10,21 +10,23 @@
 //   fnviews.mjs   function rooms, drawn from the manifests the bridge loads
 //   metrics.mjs   this session's numbers, github.mjs the Git room's data,
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
-//   focus.mjs, habits.mjs, clipboard.mjs, pet.mjs   the Focus, Habits, Clipboard and Pet rooms
+//   focus.mjs, habits.mjs, toolbox.mjs, clipboard.mjs, pet.mjs   the Focus, Habits, Toolbox, Clipboard and Pet rooms
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
+import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
 import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge } from "./focus.mjs";
 import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggleHabit, deleteHabit, undeleteHabit } from "./habits.mjs";
+import { createToolbox, toolWords, pickTool, rerun as toolAgain } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
 
 state.focus = createFocus();
 state.habits = createHabits();
+state.toolbox = createToolbox();
 state.clipboard = createClipboard();
 state.pet = createPet();
 
@@ -745,7 +747,7 @@ async function changeHabits($, fn) {
 
 // Words typed in a room of the mod's own: Focus's start, pause, skip, reset
 // or minutes; Habits' add, done, undo, remove, rename or a habit's name;
-// Clipboard's clear; Pet's moods. True when taken; `say` answers. `typed`
+// Toolbox's tool names and what they run on; Clipboard's clear; Pet's moods. True when taken; `say` answers. `typed`
 // is the room's own box, where a new habit needs no "add".
 async function roomInput($, view, text, say = () => {}, { typed = false } = {}) {
   const word = text.trim().toLowerCase();
@@ -753,6 +755,13 @@ async function roomInput($, view, text, say = () => {}, { typed = false } = {}) 
     const said = await changeHabits($, (h, now) => habitWords(h, text, now, { typed }));
     if (said == null) return false;
     say(said);
+    return true;
+  }
+  if (view === "toolbox") {
+    const said = await toolWords(state.toolbox, text, Date.now(), { typed });
+    if (said == null) return false;
+    if (said) say(said);
+    $.ui.invalidate("ui.render");
     return true;
   }
   if (view === "focus") {
@@ -812,6 +821,46 @@ async function readClipboard($, now) {
   } finally {
     clipBusy = false;
   }
+}
+
+// The clipboard read once, when the Toolbox's paste is pressed: the text,
+// or null when there's no reader here.
+async function readClipOnce($) {
+  const c = state.clipboard;
+  for (const argv of c.reader ? [c.reader] : CLIP_READERS) {
+    let r;
+    try { r = await $.process.run(argv, { timeoutMs: 2_000, env: CLIP_ENV }); } catch { continue; }
+    if (r.exitCode !== 0 && !c.reader) continue;
+    c.reader = argv;
+    return r.exitCode === 0 ? String(r.stdout ?? "") : "";
+  }
+  return null;
+}
+
+// The Toolbox's buttons: a tool picked, run again, a result copied, a
+// secret shown, the clipboard pasted in.
+async function toolAct($, fn) {
+  try { await fn(state.toolbox, Date.now()); } catch (err) {
+    $.ui.log(`squad-chat: the toolbox: ${err?.message ?? err}`, { to: "debug" });
+  }
+  $.ui.invalidate("ui.render");
+}
+
+async function copyTool($, text, surface) {
+  await copySnippet($, text, surface);
+  if (state.notice !== "Copied.") return;
+  const at = Date.now();
+  state.toolbox.copiedAt = at;
+  // The band says "copied" for a moment, then goes back to the result.
+  $.clock.sleep(5_000).then(() => { if (state.toolbox.copiedAt === at) $.ui.invalidate("ui.render"); }).catch(() => {});
+}
+
+async function pasteTool($) {
+  const text = await readClipOnce($);
+  if (text == null) { state.notice = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste)."; return $.ui.invalidate("ui.render"); }
+  if (!text.trim()) { state.notice = "The clipboard is empty."; return $.ui.invalidate("ui.render"); }
+  state.notice = "";
+  await toolAct($, (tb, now) => { tb.input = text.trim(); return toolAgain(tb, now); });
 }
 
 function clearClips($) {
@@ -912,7 +961,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -923,6 +972,7 @@ const COMMANDS = [
   { name: "lofi", description: "squad-chat: music in the background (lo-fi streams, YouTube, your files) through mpv, in the Lo-fi room", argumentHint: "play [name] | pause | next | prev | stop | vol <0-100> | add <url or path> | remove <name> | import" },
   { name: "focus", description: "squad-chat: a Pomodoro timer in the Focus room, with a chime when focus or a break ends", argumentHint: "start | pause | skip | reset | <focus min> [break min]" },
   { name: "habit", description: "squad-chat: daily habits in the Habits room, each with its streak", argumentHint: "add <name> [x<times a day>] | done <name> | undo <name> | remove <name> | rename <old> -> <new>" },
+  { name: "tool", description: "squad-chat: developer tools in the Toolbox room: Base64, URL, JWT, UUID, hashes, Unix times, cron, JSON …", argumentHint: "<tool> [input] | base64|url|html|jwt|uuid|ulid|hash|password|lorem|time|base|cron|json|escape|count|case" },
   { name: "snippet", description: "squad-chat: save code you reuse (the selection, or Claude's last code block), then copy or share it from the Snippet room", argumentHint: "add <name> | rename <old> -> <new> | delete <name> | copy <name> | share <name> [#room]" },
 ];
 
@@ -1025,6 +1075,13 @@ export function register(on, options) {
     if (!args) { await setView($, "habits"); return openPane($); }
     if (!(await roomInput($, "habits", args, say))) say("/habit takes add <name>, done <name>, undo <name>, remove <name> or rename <old> -> <new>.");
   }));
+  on("command.run", { command: "tool" }, ($, e) => answer($, async (call, say) => {
+    const args = String(e.args ?? "").trim();
+    if (!state.sysRooms.includes("toolbox")) return say("The Toolbox room is hidden. Bring it back with /chat rooms +toolbox.");
+    if (args && !(await roomInput($, "toolbox", args, say))) return say(TOOL_USAGE);
+    await setView($, "toolbox");
+    return openPane($);
+  }));
   on("command.run", { command: "snippet" }, ($, e) => answer($, (call, say) => snippet(call, e.args, say, {
     sources: shareSources($),
     copy: (text) => copyText($, text, say),
@@ -1113,6 +1170,11 @@ export function register(on, options) {
         void changeHabits($, (h) => { state.notice = undeleteHabit(h, undo.kept); });
       },
       onHabitMark: (id, dir) => { if (dir) void changeHabits($, (h, now) => { markHabit(h, id, dir, now); }); },
+      onToolPick: (id) => { void toolAct($, (tb, now) => pickTool(tb, id, now)); },
+      onToolAgain: () => { void toolAct($, (tb, now) => toolAgain(tb, now)); },
+      onToolCopy: (text, surface) => { void copyTool($, text, surface); },
+      onToolReveal: () => { state.toolbox.reveal = !state.toolbox.reveal; $.ui.invalidate("ui.render"); },
+      onToolPaste: () => { void pasteTool($); },
       onClipCopy: (id, surface) => { void copyClip($, id, surface); },
       onClipRemove: (id) => { removeClip(state.clipboard, id); $.ui.invalidate("ui.render"); },
       onClipClear: () => clearClips($),

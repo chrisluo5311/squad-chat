@@ -8,7 +8,7 @@ import { emptyGit } from "./github.mjs";
 export const MAX_MESSAGES = 100;   // per room
 
 // The built-in rooms, in tab order. They need no server and no sign-in.
-export const SYS_ROOMS = ["usage", "git", "agents", "focus", "habits", "clipboard", "pet"];
+export const SYS_ROOMS = ["usage", "git", "agents", "focus", "habits", "toolbox", "clipboard", "pet"];
 // Function rooms come from the bridge (manifests in rooms/<id>/room.json).
 // These have tabs until /chat rooms says otherwise. Clipboard reads what
 // you copy, so it waits to be asked for.
@@ -52,6 +52,7 @@ export const state = {
   git: emptyGit(),        // the Git room's snapshot (github.mjs)
   focus: null,            // the Focus room's timer (focus.mjs), set when the mod loads
   habits: null,           // the Habits room's goals and days (habits.mjs), likewise
+  toolbox: null,          // the Toolbox room's tool, input and result (toolbox.mjs), likewise
   clipboard: null,        // the Clipboard room's history (clipboard.mjs), likewise
   pet: null,              // the Pet room's Clawd (pet.mjs), likewise
   focusStatus: "",        // "🍅 18:42" for the status line while a timer runs, kept by the mod

@@ -594,6 +594,7 @@ const SYS_INPUT = {
   agents: { placeholder: "/usage · /git · /share agents [#room] · /help", label: "run" },
   focus: { placeholder: "start · pause · skip · reset · 50 10 sets the minutes", label: "run" },
   habits: { placeholder: "a new habit: Read 30 min, or Water x8 for 8 times a day", label: "add" },
+  toolbox: { placeholder: "text for the tool, a tool's name, or /tool hash hello", label: "run" },
   clipboard: { placeholder: "clear · /help", label: "run" },
   pet: { placeholder: "auto, or a mood: vibe typing wave cheer sleepy …", label: "run" },
 };
@@ -761,6 +762,7 @@ const SYS_HINTS = {
   agents: "▾ folds a session · all ▾ filters the feed",
   focus: "a chime when focus or a break ends",
   habits: "✓ checks off today · ✕ deletes · rename <old> -> <new>",
+  toolbox: "⧉ copies · kept in memory, never shared",
   clipboard: "⧉ copies again · kept in memory, never shared",
   pet: "Clawd follows what goes on, or keeps one mood",
 };

@@ -71,7 +71,7 @@ The bridge holds each room to its own sites, so a room can't reach anywhere else
 
 Lo-fi's streams don't go through the bridge's fetch, since mpv fetches them itself. Its stations are still held to the room's hosts, both when a room is checked and again before one plays, so a store room can't use the player to reach a host it doesn't name. What you add yourself with `/lofi add` plays from wherever it is. Files and folders you add stay where they are, and the list of them is kept in `room-data/lofi/list.json`. mpv runs only after you press play, and stops when the session ends.
 
-Only `/chat-share usage|git|agents|focus|habits|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` is hidden from Claude.
+Only `/chat-share usage|git|agents|focus|habits|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` or `/tool` is hidden from Claude. The Toolbox room keeps nothing: what you run its tools on, and what they give back, stay in the session's memory, and it has no Share.
 
 ## The room store
 

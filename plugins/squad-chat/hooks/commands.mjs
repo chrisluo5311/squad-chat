@@ -12,7 +12,7 @@ import { snapshotText, hasSnapshot, snapshotKind } from "./sysviews.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
 // sign-in codes, room passcodes, snippets.
-export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share", "snippet", "lofi"]);
+export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share", "snippet", "lofi", "tool"]);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE = /^\d[\d\s]{4,12}\d$/;
@@ -588,7 +588,9 @@ function showView(view, say, setView) {
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /habit add|done|undo|remove|rename · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /habit · /clipboard · /pet · /chat · /logout · anything else is a message";
+export const TOOL_USAGE = "/tool takes a tool's name, then what it runs on: /tool uuid 5, /tool hash hello, /tool time 1739000000.";
+
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /habit add|done|undo|remove|rename · /tool <name> [input] · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /habit · /tool · /clipboard · /pet · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
@@ -629,6 +631,10 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
         // "/habit add Run" does it without leaving the room on show.
         if (args.trim()) return (await roomInput?.("habits", args.trim(), say)) ? undefined : say("/habit takes add <name>, done <name>, undo <name>, remove <name> or rename <old> -> <new>.");
         return showView("habits", say, setView);
+      case "tool": case "tools": case "toolbox":
+        // "/tool hash hello" runs it and shows the room.
+        if (args.trim() && !(await roomInput?.("toolbox", args.trim(), say))) return say(TOOL_USAGE);
+        return showView("toolbox", say, setView);
       case "chat": {
         // "/chat git" typed here does what it does at the prompt.
         const [sub, ...more] = args.trim().toLowerCase().split(/\s+/).filter(Boolean);

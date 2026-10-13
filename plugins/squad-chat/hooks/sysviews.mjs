@@ -23,6 +23,7 @@ import { fnMeta, fnDock, fnInline, fnBandPieces, fnSnapshot, fnSnapshotLine } fr
 import { SNAPSHOT_ICONS } from "./share.mjs";
 import { FOCUS_META, focusDock, focusInline, focusBandPieces, focusBandDesk, focusBadge, focusSnapshot } from "./focus.mjs";
 import { HABITS_META, habitsDock, habitsInline, habitsBandPieces, habitsBandDesk, habitsBadge, habitsSnapshot } from "./habits.mjs";
+import { TOOLBOX_META, toolboxDock, toolboxInline, toolboxBandPieces, toolboxBandDesk, toolboxBadge } from "./toolbox.mjs";
 import { CLIP_META, clipboardDock, clipboardInline, clipboardBandPieces, clipboardBandDesk } from "./clipboard.mjs";
 import { PET_META, petDock, petInline, petBandPieces, petBandDesk } from "./pet.mjs";
 
@@ -32,6 +33,7 @@ export const SYS = {
   agents: { icon: "⟡", label: "Agents", color: theme.agents },
   focus: FOCUS_META,
   habits: HABITS_META,
+  toolbox: TOOLBOX_META,
   clipboard: CLIP_META,
   pet: PET_META,
 };
@@ -39,10 +41,11 @@ export const SYS = {
 // The built-in rooms that live in modules of their own: each draws its
 // docked cards, its inline lines, its band (a line of text, and the
 // desktop's capsule as { color, sections }), and may badge its tab or share
-// a snapshot (Clipboard and Pet have nothing to share).
+// a snapshot (Toolbox, Clipboard and Pet have nothing to share).
 const OWN = {
   focus: { dock: focusDock, inline: focusInline, band: focusBandPieces, desk: focusBandDesk, badge: focusBadge, snapshot: focusSnapshot },
   habits: { dock: habitsDock, inline: habitsInline, band: habitsBandPieces, desk: habitsBandDesk, badge: habitsBadge, snapshot: habitsSnapshot },
+  toolbox: { dock: toolboxDock, inline: toolboxInline, band: toolboxBandPieces, desk: toolboxBandDesk, badge: toolboxBadge },
   clipboard: { dock: clipboardDock, inline: clipboardInline, band: clipboardBandPieces, desk: clipboardBandDesk },
   pet: { dock: petDock, inline: petInline, band: petBandPieces, desk: petBandDesk },
 };
