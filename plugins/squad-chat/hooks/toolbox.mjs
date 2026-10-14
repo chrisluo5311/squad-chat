@@ -19,6 +19,7 @@ const COPIED_MS = 5_000;          // how long the band says "copied"
 const SOON_MS = 10 * 60_000;      // a JWT on the clipboard this close to its exp marks the tab
 const MASK = "••••••••••••";
 const BLOCK_LINES = 12;           // a block result's lines shown before "+3 more lines"
+export const MAX_INPUT = 200_000; // characters a tool runs on: a paste past this is cut
 
 export function createToolbox() {
   return {
@@ -32,6 +33,13 @@ export function createToolbox() {
     clipSeen: null, // the newest clipboard item when it ran: one copied since is newer
     runs: 0,        // runs started: only the latest one's result is kept
   };
+}
+
+// What a tool runs on, cut to MAX_INPUT. True when it was cut.
+export function setInput(tb, text) {
+  const t = String(text ?? "").trim();
+  tb.input = t.length > MAX_INPUT ? t.slice(0, MAX_INPUT) : t;
+  return t.length > MAX_INPUT;
 }
 
 // Run the tool on show again: on a new input, a new tool, or ↻. A run
@@ -70,12 +78,12 @@ export async function toolWords(tb, text, now, { typed = false } = {}) {
   const id = findTool(first);
   if (id && (!typed || !rest.length)) {
     tb.tool = id;
-    tb.input = t.slice(first.length).trim();
+    setInput(tb, t.slice(first.length));
     await rerun(tb, now, { used: !!TOOLS[id].generates || !!tb.input });
     return "";
   }
   if (!typed) return null;
-  tb.input = t;
+  setInput(tb, t);
   await rerun(tb, now);
   return "";
 }
@@ -156,9 +164,9 @@ function toolCard(els, tb, w, handlers) {
   const out = tb.out ?? { rows: [], note: tool.hint };
   const rows = [];
   let height = 3;
-  // What it ran on, for a tool that reads text.
+  // What it ran on, for a tool that reads text: its start, as much as a line holds.
   if (!tool.generates && tb.input) {
-    rows.push(line(els, "in", [{ text: "in", width: 3, color: theme.muted }, { text: tb.input.replace(/\s+/g, " "), grow: true, color: theme.muted }], { gap: 1 }));
+    rows.push(line(els, "in", [{ text: "in", width: 3, color: theme.muted }, { text: tb.input.slice(0, Math.max(40, w * 2)).replace(/\s+/g, " "), grow: true, color: theme.muted }], { gap: 1 }));
     height++;
   }
   if (out.error) { rows.push(Text({ key: "err", color: theme.warn, wrap: "wrap", children: out.error })); height += Math.ceil(cells(out.error) / Math.max(10, w - 4)); }

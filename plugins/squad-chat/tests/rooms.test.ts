@@ -4,7 +4,7 @@ import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { state } from '../hooks/state.mjs'
 import { frameKey } from '../hooks/squad-chat.mjs'
-import { createToolbox, rerun, pickTool } from '../hooks/toolbox.mjs'
+import { createToolbox, rerun, pickTool, toolWords, MAX_INPUT } from '../hooks/toolbox.mjs'
 import { createHabits, addHabit, deleteHabit, habitStreaks } from '../hooks/habits.mjs'
 import { toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, strata, contextTips } from '../hooks/metrics.mjs'
 
@@ -195,4 +195,12 @@ test('Requests: a request that fails hands what it carried to the retry, measure
   stepEnded(u, retry, usage(104_100, 100), 'end_turn')
   expect(retry.grown).toBe(4_000)
   expect(retry.added[0].tokens).toBe(4_000)
+})
+
+test('Toolbox: what a tool runs on is cut to its limit', async () => {
+  const tb = createToolbox()
+  await toolWords(tb, 'count', Date.now(), { typed: true })
+  await toolWords(tb, 'a '.repeat(MAX_INPUT), Date.now(), { typed: true })
+  expect(tb.input.length).toBe(MAX_INPUT)
+  expect(tb.out.rows[0].text).toBe(String(MAX_INPUT))
 })

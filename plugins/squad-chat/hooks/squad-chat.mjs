@@ -20,7 +20,7 @@ import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
 import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge, dayOf } from "./focus.mjs";
 import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggleHabit, deleteHabit, undeleteHabit } from "./habits.mjs";
-import { createToolbox, toolWords, pickTool, rerun as toolAgain } from "./toolbox.mjs";
+import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
 
@@ -873,8 +873,9 @@ async function pasteTool($) {
   const text = await readClipOnce($);
   if (text == null) { state.notice = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste)."; return $.ui.invalidate("ui.render"); }
   if (!text.trim()) { state.notice = "The clipboard is empty."; return $.ui.invalidate("ui.render"); }
-  state.notice = "";
-  await toolAct($, (tb, now) => { tb.input = text.trim(); return toolAgain(tb, now); });
+  const cut = setToolInput(state.toolbox, text);
+  state.notice = cut ? `Pasted the first ${MAX_TOOL_INPUT.toLocaleString("en-US")} characters.` : "";
+  await toolAct($, (tb, now) => toolAgain(tb, now));
 }
 
 function clearClips($) {
