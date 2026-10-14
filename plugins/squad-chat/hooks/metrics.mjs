@@ -30,6 +30,7 @@ export function createUsage() {
     calls: new Map(),          // call key → feed entry, while it runs
     feed: [],                  // [{ key, tool, agentId, summary, at, ms, isError, done }], oldest first
     agents: new Map(),         // agent id → { id, type, description, status, parentId, startedAt, endedAt, tools }
+    callsNamed: 0,             // tool calls named by their results, so the strata redraw
     steps: [],                 // the main loop's requests, oldest first (see stepStarted)
     overhead: null,            // { tokens, biggest: { name, tokens } }: what every request carries before the conversation
     overheadAt: 0,             // stepN when it was last read
@@ -253,6 +254,10 @@ export function stepPrompt(u, text) {
 export function stepToolResult(u, tool, chars, summary = "") {
   const about = summary && !summary.startsWith("(hidden") ? ` ${summary.length > 24 ? `${summary.slice(0, 23)}…` : summary}` : "";
   u.stepIn.push({ kind: "tool", label: `${tool}${about}`, chars: Math.max(0, chars) });
+  // The request that called it learns what the call was about, so its
+  // output can be named by it ("Claude's Edit pane.ts").
+  const call = u.steps.at(-1)?.tools.find((c) => c.tool === tool && c.about == null);
+  if (call) { call.about = about; u.callsNamed++; }
 }
 
 export function stepStarted(u, { turnId, index = 0, at }) {
@@ -264,7 +269,7 @@ export function stepStarted(u, { turnId, index = 0, at }) {
 }
 
 export function stepToolUse(step, name) {
-  if (step && name) step.tools.push(name);
+  if (step && name) step.tools.push({ tool: name, about: null });
 }
 
 // A request that failed (no usage: the stream broke or was dropped) hands
@@ -335,7 +340,7 @@ const NAMED = 4;
 // read: a redraw draws the card and its tips from one, not one each.
 const strataSeen = new WeakMap();   // usage → { sig, byCols: Map }
 export function strata(u, maxCols = 12) {
-  const sig = `${u.stepN}:${u.steps.map((s) => s.status[0]).join("")}:${u.overhead?.tokens ?? ""}`;
+  const sig = `${u.stepN}:${u.callsNamed}:${u.steps.map((s) => s.status[0]).join("")}:${u.overhead?.tokens ?? ""}`;
   let seen = strataSeen.get(u);
   if (seen?.sig !== sig) strataSeen.set(u, seen = { sig, byCols: new Map() });
   if (!seen.byCols.has(maxCols)) seen.byCols.set(maxCols, layered(u, maxCols));
@@ -358,7 +363,7 @@ function layered(u, maxCols) {
       const tokens = p.tokens ?? Math.round(p.chars / 4);
       items.push({ name: p.kind === "prompt" ? "your prompt" : p.label, kind: p.kind, n: s.n, enter: k, tokens });
     }
-    if (s.output) items.push({ name: s.tools.length ? "Claude's tool calls" : "Claude's reply", kind: "answer", n: s.n, enter: k + 1, tokens: s.output });
+    if (s.output) items.push({ name: s.tools.length ? toolCallsName(s.tools) : "Claude's reply", kind: "answer", n: s.n, enter: k + 1, tokens: s.output });
   });
   const named = [...items].filter((it) => it.tokens >= 300).sort((a, b) => b.tokens - a.tokens).slice(0, NAMED).sort((a, b) => a.enter - b.enter || a.n - b.n);
   const last = since.at(-1);
@@ -381,6 +386,15 @@ function layered(u, maxCols) {
     compacted: from > 0 || first.isCompacted,
     sent: since.length,
   };
+}
+
+// A request's tool calls, named by the one that wrote the most: a Write or an
+// Edit carries its content, the rest little more than a path or a command.
+const WRITES = new Set(["Write", "Edit", "NotebookEdit"]);
+function toolCallsName(calls) {
+  const top = calls.find((c) => WRITES.has(c.tool)) ?? calls[0];
+  const more = calls.length > 1 ? ` and ${calls.length - 1} more` : "";
+  return `Claude's ${top.tool}${top.about ?? ""}${more}`;
 }
 
 // Two or three things worth knowing, in plain words: how much of a request

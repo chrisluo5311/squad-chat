@@ -99,7 +99,7 @@ test('Requests strata: in a long session the earlier conversation is bedrock, so
   expect(st.cols.at(-1).above).toBeLessThan(5_000)                  // what came after: the Read and two answers
   const read = st.layers.find((l: any) => l.name === 'Read metrics.mjs')!
   expect(read.sizes.at(-1)).toBeGreaterThan(2_000)                  // big enough to see against the rest
-  expect(st.layers.find((l: any) => l.name === "Claude's tool calls")).toBeDefined()
+  expect(st.layers.find((l: any) => l.name === "Claude's Read metrics.mjs and 1 more")).toBeDefined()   // named by what it called
 
   const tips = contextTips(u).map((t: any) => t.parts.map((p: any) => p[0]).join(''))
   expect(tips[1]).toMatch(/^Read metrics\.mjs \(2\.\dk\): read once, resent 1 time so far \(2\.\dk sent in all\)\.$/)
@@ -203,6 +203,20 @@ test('Toolbox: what a tool runs on is cut to its limit', async () => {
   await toolWords(tb, 'a '.repeat(MAX_INPUT), Date.now(), { typed: true })
   expect(tb.input.length).toBe(MAX_INPUT)
   expect(tb.out.rows[0].text).toBe(String(MAX_INPUT))
+})
+
+test('Requests strata: tool calls are named by the one that wrote the most, once its result is back', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'fix it')
+  const a = stepStarted(u, { turnId: 't', index: 0, at: 0 })
+  stepToolUse(a, 'Bash'); stepToolUse(a, 'Edit')
+  stepEnded(u, a, usage(100_000, 6_000), 'tool_use')
+  const name = () => strata(u).layers.find((l: any) => l.kind === 'answer').name
+  expect(name()).toBe("Claude's Edit and 1 more")                      // called, not yet back: the tool alone
+  stepToolResult(u, 'Bash', 200, 'npm test')
+  stepToolResult(u, 'Edit', 100, 'hooks/pane.ts')
+  expect(name()).toBe("Claude's Edit hooks/pane.ts and 1 more")         // the Edit carried its content, so it names the request
 })
 
 test('Requests strata: worked out once a change, then the same for every reader', () => {
