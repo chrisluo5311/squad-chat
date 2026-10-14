@@ -30,12 +30,18 @@ export function createToolbox() {
     reveal: false,  // a secret result drawn plainly
     copiedAt: 0,    // ⧉ pressed: the band says so for a moment
     clipSeen: null, // the newest clipboard item when it ran: one copied since is newer
+    runs: 0,        // runs started: only the latest one's result is kept
   };
 }
 
-// Run the tool on show again: on a new input, a new tool, or ↻.
+// Run the tool on show again: on a new input, a new tool, or ↻. A run
+// that ends after a newer one began (a long hash, then UUID picked) is
+// dropped, so a card never shows another tool's rows.
 export async function rerun(tb, now, { used = true } = {}) {
-  tb.out = await runTool(tb.tool, tb.input, now);
+  const run = ++tb.runs;
+  const out = await runTool(tb.tool, tb.input, now);
+  if (run !== tb.runs) return tb.out;
+  tb.out = out;
   tb.at = now;
   tb.reveal = false;
   if (used) { tb.used = true; tb.clipSeen = state.clipboard?.items?.[0]?.id ?? null; }

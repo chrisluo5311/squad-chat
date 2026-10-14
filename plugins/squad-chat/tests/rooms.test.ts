@@ -4,6 +4,7 @@ import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { state } from '../hooks/state.mjs'
 import { frameKey } from '../hooks/squad-chat.mjs'
+import { createToolbox, rerun, pickTool } from '../hooks/toolbox.mjs'
 import { createHabits, addHabit, deleteHabit, habitStreaks } from '../hooks/habits.mjs'
 import { toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, strata, contextTips } from '../hooks/metrics.mjs'
 
@@ -166,4 +167,16 @@ test('Habits: the streak running and the longest, a year back at most', () => {
   expect(habitStreaks(h, h.goals[0], now)).toEqual({ current: 3, best: 5 })
   h.history.h1[day(0)] = 1
   expect(habitStreaks(h, h.goals[0], now)).toEqual({ current: 4, best: 5 })
+})
+
+test('Toolbox: a run that ends after a newer one began is dropped', async () => {
+  const tb = createToolbox()
+  tb.tool = 'hash'
+  tb.input = 'x'.repeat(200_000)
+  const hashing = rerun(tb, Date.now())           // the digest takes a while
+  await pickTool(tb, 'uuid', Date.now())          // UUID picked before it's done
+  await hashing
+  expect(tb.tool).toBe('uuid')
+  expect(tb.out.mode).toBe('v4 ×5')
+  expect(tb.out.rows.every((r: any) => r.label === '')).toBe(true)
 })
