@@ -106,6 +106,10 @@ export function addHabit(h, text) {
 export function removeHabit(h, text) {
   const g = findHabit(h, text);
   if (!g) return noSuch(h, text);
+  return dropGoal(h, g);
+}
+
+function dropGoal(h, g) {
   h.goals = h.goals.filter((x) => x !== g);
   delete h.history[g.id];
   return `Removed ${g.name} and its streak.`;
@@ -142,13 +146,14 @@ export function markHabit(h, id, dir, now) {
 }
 
 // ✕ on a card: the habit and its days go. Returns what to say and what
-// Cancel needs to put it back, or null.
+// Cancel needs to put it back, or null. By its id: a name such as "2"
+// would read as the second habit.
 export function deleteHabit(h, id) {
   const index = h.goals.findIndex((x) => x.id === id);
   if (index < 0) return null;
   const goal = { ...h.goals[index] };
   const days = { ...(h.history[id] ?? {}) };
-  return { said: removeHabit(h, goal.name), kept: { goal, days, index } };
+  return { said: dropGoal(h, h.goals[index]), kept: { goal, days, index } };
 }
 
 // Cancel after ✕: the habit back where it was, with its days. A name taken

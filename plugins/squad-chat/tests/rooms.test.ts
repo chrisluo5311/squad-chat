@@ -3,6 +3,7 @@ import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { state } from '../hooks/state.mjs'
+import { createHabits, addHabit, deleteHabit } from '../hooks/habits.mjs'
 import { toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, strata, contextTips } from '../hooks/metrics.mjs'
 
 const MIN = 60_000
@@ -127,4 +128,14 @@ test('Requests tip: a file read once is said to be resent, never read again', ()
   step(106_400, 300)
   const tips = contextTips(u).map((t: any) => t.parts.map((p: any) => p[0]).join(''))
   expect(tips.find((t: string) => t.startsWith('Read habits.mjs'))).toBe('Read habits.mjs (4.2k): read once, resent 3 times so far (13k sent in all).')
+})
+
+test('Habits: ✕ deletes the habit pressed, even one named with a number', () => {
+  const h = createHabits()
+  addHabit(h, 'Read')
+  addHabit(h, 'Run')
+  addHabit(h, '2')
+  const done = deleteHabit(h, 'h3')
+  expect(done?.said).toBe('Removed 2 and its streak.')
+  expect(h.goals.map((g: any) => g.name)).toEqual(['Read', 'Run'])
 })
