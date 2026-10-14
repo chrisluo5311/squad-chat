@@ -14,6 +14,7 @@ import {
 } from "./widgets.mjs";
 import {
   totalTokens, cacheRatio, burnRate, limitWindows, spendSeries, toolRows, agentTree, agentCounts, isEnded, topTool,
+  strata, contextTips,
 } from "./metrics.mjs";
 import { gitAttention, ghStatusText } from "./github.mjs";
 import * as K from "./bandkit.mjs";
@@ -256,6 +257,213 @@ function toolsCard(els, w, max) {
   return sized("Tools", card(els, { key: "tools", title: "TOOLS", color: theme.usage, metaNode: header, rows }), rows.length);
 }
 
+// The Requests card: the context as strata, one column per request to the
+// model and one for the next, each thing that came into the conversation a
+// layer from the request that first carried it on (see strata). Under them,
+// as bedrock, what was there before: the overhead every request carries and
+// any earlier conversation, drawn apart, since to scale they would flatten
+// the rest. Then a few plain-word tips. The terminal draws the strata in
+// block cells, the desktop as a drawing.
+const LAYER_COLORS = ["#8F8D87", "#D97757", "#E2B86B", "#6FC2B5", "#C8A2E0"];
+const BEDROCK = "#8A5A44";
+const EARLIER = "#5E5C57";
+
+// A layer's size as the tips say it: "3.6k", "740".
+const kTok = (n) => (n < 1000 ? String(Math.round(n)) : n < 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : `${Math.round(n / 1000)}k`);
+
+// "79k fixed + 310k earlier": what the bedrock holds.
+function bedrockText(st) {
+  const fixed = `${kTok(st.bedrock)} ${st.bedrockKnown ? "fixed" : "at start"}`;
+  return st.earlier >= 1000 ? `${fixed} + ${kTok(st.earlier)} earlier` : fixed;
+}
+
+// The context now, as a sum that comes to the Usage meter's figure:
+// "79k fixed + 499k earlier + 5.5k new = 586k".
+function contextSum(st) {
+  const added = st.cols.at(-1)?.above ?? 0;
+  return `${bedrockText(st)} + ${kTok(added)} new = ${kTok(st.bedrock + st.earlier + added)}`;
+}
+const STRATA_ROWS = 5;
+
+function requestsCard(els, w, handlers = {}) {
+  const u = state.usage;
+  const st = strata(u, els.Svg ? 16 : Math.min(12, Math.max(3, Math.floor((w - 18) / 2))));
+  const rows = [];
+  if (!st) {
+    rows.push(muted(els, "none", "None yet. Each request to the model shows up here."));
+    return sized("Requests", card(els, { key: "requests", title: "REQUESTS", color: theme.usage, rows }), 1);
+  }
+  const height = els.Svg ? strataDesk(els, st, w, rows) : strataTerm(els, st, w, rows);
+  const tips = contextTips(u);
+  let tipRows = 0;
+  for (const [i, t] of tips.entries()) {
+    const text = t.parts.map(([p]) => p).join("");
+    rows.push(els.Box({ key: `tip${i}`, flexDirection: "row", marginTop: i ? 0 : 1, children: [
+      els.Box({ key: "i", width: 2, flexShrink: 0, children: [els.Text({ key: "t", color: theme.usage, children: t.icon })] }),
+      els.Box({ key: "x", flexGrow: 1, flexShrink: 1, minWidth: 0, children: [els.Text({ key: "t", wrap: "wrap", children: t.parts.map(([p, bold], j) => (bold ? els.Text({ key: `b${j}`, bold: true, children: p }) : p)) })] }),
+    ] }));
+    tipRows += Math.max(1, Math.ceil(cells(text) / Math.max(10, w - 2)));
+  }
+  const meta = `${st.sent} request${st.sent === 1 ? "" : "s"}${st.compacted ? " since compaction" : ""}`;
+  // Copy and Share take the card as text (requestsText); Share asks first, as a snippet's does.
+  const metaNode = els.Box({ key: "meta", flexDirection: "row", alignItems: "center", columnGap: 2, flexShrink: 1, minWidth: 0, children: [
+    els.Text({ key: "m", color: theme.muted, wrap: "truncate-start", children: meta }),
+    els.Button({ key: "requests-copy", plain: true, label: "⧉ Copy", onPress: (press) => handlers.onCopy?.(requestsText(), press?.surface) }),
+    els.Button({ key: "requests-share", plain: true, label: "⇪ Share", onPress: () => handlers.onShareItem?.({ title: "Requests", lang: null, body: requestsText() }) }),
+  ] });
+  return sized("Requests", card(els, { key: "requests", title: "REQUESTS", color: theme.usage, metaNode, rows }), height + tipRows + (tips.length ? 1 : 0));
+}
+
+// The Requests card as plain text, for Copy and Share: what was there before
+// the first request, what each named layer and the rest of the conversation
+// hold now (the biggest first), and the tips.
+export function requestsText() {
+  const u = state.usage;
+  const st = strata(u);
+  if (!st) return "";
+  const k = kTok;
+  const held = st.layers.map((l) => ({ name: l.name, tokens: l.sizes.at(-1) })).filter((l) => l.tokens > 0).sort((a, b) => b.tokens - a.tokens);
+  const widest = Math.max(...held.map((l) => cells(l.name)));
+  return [
+    `Requests · ${st.sent} request${st.sent === 1 ? "" : "s"} to Claude`,
+    `Context now: ${contextSum(st)}.`,
+    "",
+    ...held.map((l) => `  ${l.name}${" ".repeat(widest - cells(l.name) + 2)}${k(l.tokens)}`),
+    "",
+    ...contextTips(u).map((t) => `${t.icon} ${t.parts.map(([p]) => p).join("")}`),
+  ].join("\n");
+}
+
+// The layer at a height in a column, and the top one, for a cell's color.
+function layerAt(st, c, h) {
+  let acc = 0;
+  for (const [i, l] of st.layers.entries()) { acc += l.sizes[c]; if (h < acc) return i; }
+  return -1;
+}
+function topLayer(st, c) {
+  for (let i = st.layers.length - 1; i >= 0; i--) if (st.layers[i].sizes[c] > 0) return i;
+  return 0;
+}
+
+// Block cells: a full one where the column passes the cell, a half where it
+// ends in its lower part. Each named layer is labeled at its height beside
+// the last column, where there's room.
+function strataTerm(els, st, w, rows) {
+  const AX = 5;
+  const LBL = w >= 44 ? 15 : 0;
+  const n = st.cols.length;
+  const cw = Math.min(5, Math.max(2, Math.floor((w - AX - LBL) / n)));
+  const block = cw - 1;
+  const max = Math.max(1, ...st.cols.map((c) => c.above));
+  const step = max / STRATA_ROWS;
+  const labels = new Map();
+  if (LBL) {
+    const last = n - 1;
+    let acc = 0;
+    for (const [i, l] of st.layers.entries()) {
+      const size = l.sizes[last];
+      if (i && size > 0) {
+        let r = Math.min(STRATA_ROWS - 1, Math.floor((acc + size / 2) / step));
+        while (labels.has(r) && r < STRATA_ROWS - 1) r++;
+        if (!labels.has(r)) labels.set(r, i);
+      }
+      acc += size;
+    }
+  }
+  for (let r = STRATA_ROWS - 1; r >= 0; r--) {
+    const lo = r * step, hi = (r + 1) * step;
+    const runs = [];
+    const push = (text, color) => { const prev = runs.at(-1); if (prev && prev.color === color) prev.text += text; else runs.push({ text, color }); };
+    st.cols.forEach((c, i) => {
+      if (c.above >= hi - step * 0.05) push("█".repeat(block), LAYER_COLORS[layerAt(st, i, (lo + hi) / 2)] ?? LAYER_COLORS[0]);
+      else if (c.above > lo + step * 0.25) push("▄".repeat(block), LAYER_COLORS[topLayer(st, i)] ?? LAYER_COLORS[0]);
+      else push(" ".repeat(block), undefined);
+      push(" ", undefined);
+    });
+    const li = labels.get(r);
+    rows.push(line(els, `s${r}`, [
+      { text: r === STRATA_ROWS - 1 ? fmtTokens(max) : "", width: AX - 1, right: true, color: theme.muted },
+      { text: " " },
+      ...runs.map((x) => ({ text: x.text, color: x.color })),
+      // The size first: a long name is cut at its end, never the number.
+      li != null ? { text: ` ${kTok(st.layers[li].sizes[n - 1])} ${st.layers[li].name}`, color: LAYER_COLORS[li], grow: true } : null,
+    ]));
+  }
+  const span = n * cw - 1;
+  const old = st.earlier >= 1000 ? Math.min(span - 1, Math.max(1, Math.round((st.earlier / (st.bedrock + st.earlier)) * span))) : 0;
+  rows.push(line(els, "bed", [
+    { text: "", width: AX },
+    { text: "▀".repeat(span - old), color: BEDROCK },
+    old ? { text: "▀".repeat(old), color: EARLIER } : null,
+    { text: ` ${contextSum(st)}`, color: theme.muted, grow: true },
+  ]));
+  const first = st.cols[0].label;
+  rows.push(line(els, "x", [
+    { text: "", width: AX },
+    { text: first, color: theme.muted },
+    { text: " ".repeat(Math.max(1, span - cells(first) - 4)) },
+    { text: "next", color: theme.usage },
+  ]));
+  return STRATA_ROWS + 2;
+}
+
+// The desktop: the columns as one drawing that stretches to the card, each
+// stratum carried on between columns so it reads as one band; the bedrock a
+// thick bar under it; a key of the named layers.
+function strataDesk(els, st, w, rows) {
+  const { Box, Svg } = els;
+  const W = 1000, H = 64;
+  const n = st.cols.length;
+  const max = Math.max(1, ...st.cols.map((c) => c.above));
+  const cw = W / n, gap = Math.min(12, cw * 0.18);
+  const y = (v) => H - (v / max) * (H - 2);
+  let body = "";
+  const base = st.cols.map(() => 0);
+  st.layers.forEach((l, li) => {
+    const fill = LAYER_COLORS[li] ?? LAYER_COLORS[0];
+    let d = "";
+    st.cols.forEach((_, c) => {
+      const s = l.sizes[c];
+      if (s > 0) {
+        const x0 = c * cw + gap / 2, x1 = (c + 1) * cw - gap / 2;
+        d += `M${x0.toFixed(1)} ${y(base[c]).toFixed(1)}V${y(base[c] + s).toFixed(1)}H${x1.toFixed(1)}V${y(base[c]).toFixed(1)}Z`;
+        if (c && l.sizes[c - 1] > 0) {   // the band between this column and the one before
+          const xa = c * cw - gap / 2, xb = c * cw + gap / 2;
+          d += `M${xa.toFixed(1)} ${y(base[c - 1]).toFixed(1)}V${y(base[c - 1] + l.sizes[c - 1]).toFixed(1)}L${xb.toFixed(1)} ${y(base[c] + s).toFixed(1)}V${y(base[c]).toFixed(1)}Z`;
+        }
+      }
+    });
+    if (d) body += `<path d="${d}" fill="${fill}" fill-opacity="${li ? 0.95 : 0.7}"/>`;
+    st.cols.forEach((_, c) => { base[c] += l.sizes[c]; });
+  });
+  const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${body}</svg>`;
+  const alt = `Context by request: ${st.layers.slice(1).map((l) => l.name).join(", ") || "conversation"} over ${fmtTokens(st.bedrock)} fixed`;
+  rows.push(Box({ key: "strata", flexDirection: "row", children: [Box({ key: "c", flexGrow: 1, minWidth: 1, overflow: "hidden", children: [Svg({ key: "svg", source, alt, height: H })] })] }));
+  // The bedrock in two parts, each its share of what was there before, as one
+  // drawing (as Spend draws in against out) so the split is exact.
+  const fixedW = st.earlier >= 1000 ? (st.bedrock / (st.bedrock + st.earlier)) * W : W;
+  const bedSrc = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="8" viewBox="0 0 ${W} 8" preserveAspectRatio="none">`
+    + `<rect width="${fixedW.toFixed(1)}" height="8" fill="${BEDROCK}"/>`
+    + (fixedW < W ? `<rect x="${fixedW.toFixed(1)}" width="${(W - fixedW).toFixed(1)}" height="8" fill="${EARLIER}"/>` : "") + `</svg>`;
+  rows.push(Box({ key: "bed", flexDirection: "row", children: [Box({ key: "c", flexGrow: 1, minWidth: 1, overflow: "hidden", children: [
+    Svg({ key: "svg", source: bedSrc, alt: `Before the first request: ${bedrockText(st)}`, height: 8 }),
+  ] })] }));
+  rows.push(line(els, "x", [
+    { text: `${st.cols[0].label}`, color: theme.muted },
+    { text: contextSum(st), color: theme.muted, grow: true, right: true },
+    { text: "  next", color: theme.usage },
+  ]));
+  // The key wraps, a whole entry to a line, rather than running past the card.
+  // Each entry with what it holds now, so every color has a size, not only the tip's.
+  const keys = st.layers.map((l, i) => ({ name: `${l.name} ${kTok(l.sizes.at(-1))}`, color: LAYER_COLORS[i], shown: i ? l.sizes.at(-1) > 0 : true }))
+    .filter((k) => k.shown).sort((a, b) => a.name.startsWith("conversation ") - b.name.startsWith("conversation "));
+  rows.push(Box({ key: "key", flexDirection: "row", flexWrap: "wrap", columnGap: 2, children: keys.map((k, i) => Box({ key: `k${i}`, flexShrink: 0, children: [
+    els.Text({ key: "t", color: k.color, children: `■ ${k.name}` }),
+  ] })) }));
+  const keyCells = keys.reduce((n, k) => n + cells(k.name) + 4, 0);
+  return 5 + Math.max(1, Math.ceil(keyCells / Math.max(20, w)));
+}
+
 function agentGlyph(status, now) {
   if (status === "completed") return { g: "✓", color: theme.online };
   if (status === "failed") return { g: "✗", color: theme.error };
@@ -321,6 +529,7 @@ function usageDock(els, w, capacity, handlers, now) {
   return stackCards(els, [
     usageCard(els, w, handlers, now),
     spendCard(els, w, now),
+    requestsCard(els, w, handlers),
     toolsCard(els, w, 5),
     subagentsCard(els, 4, now),
   ], capacity, handlers.scroll);

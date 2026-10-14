@@ -3,6 +3,7 @@ import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { state } from '../hooks/state.mjs'
+import { toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, strata, contextTips } from '../hooks/metrics.mjs'
 
 const MIN = 60_000
 
@@ -72,4 +73,58 @@ test('band: ‹ › take room from the sections beside Open', () => {
     if (cycle < plain) fewer++
   }
   expect(fewer).toBeGreaterThan(0)
+})
+
+test('Requests strata: in a long session the earlier conversation is bedrock, so what comes after shows', () => {
+  // Watching starts hours in: 79k of overhead and 310k of conversation are already there.
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'test the card')
+  const a = stepStarted(u, { turnId: 't', index: 0, at: 0 })
+  stepToolUse(a, 'Read'); stepToolUse(a, 'Bash')
+  stepEnded(u, a, usage(389_000, 400), 'tool_use')
+  stepToolResult(u, 'Read', 10_000, 'metrics.mjs'); stepToolResult(u, 'Bash', 200, 'git log --oneline -5')
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 1, at: 0 }), usage(392_000, 900), 'end_turn')
+  applyOverhead(u, { categories: [{ name: 'System tools', tokens: 32_000, kind: 'used' }, { name: 'MCP tools', tokens: 47_000, kind: 'used' }, { name: 'Messages', tokens: 310_000, kind: 'used' }] })
+  u.context = { tokens: 392_900, window: 1_000_000, percent: 39 } as any
+
+  const st = strata(u)!
+  expect(st.bedrock).toBe(79_000)
+  expect(st.earlier).toBeGreaterThan(309_000)                       // the history from before #1, kept out of the scale
+  expect(Math.round(st.bedrock + st.earlier + st.cols.at(-1).above)).toBe(392_900)   // the sum comes to the context: the last input, 392k, and its 900 out
+  expect(st.cols.map((c: any) => c.label)).toEqual(['first', 'older', 'next'])
+  expect(st.cols.at(-1).above).toBeLessThan(5_000)                  // what came after: the Read and two answers
+  const read = st.layers.find((l: any) => l.name === 'Read metrics.mjs')!
+  expect(read.sizes.at(-1)).toBeGreaterThan(2_000)                  // big enough to see against the rest
+  expect(st.layers.find((l: any) => l.name === "Claude's tool calls")).toBeDefined()
+
+  const tips = contextTips(u).map((t: any) => t.parts.map((p: any) => p[0]).join(''))
+  expect(tips[1]).toMatch(/^Read metrics\.mjs \(2\.\dk\): read once, resent 1 time so far \(2\.\dk sent in all\)\.$/)
+  expect(tips[2]).toMatch(/^The next request sends 39\dk, 39% of the window\.$/)
+})
+
+test('a Bash summary skips a leading cd, so it names the command that runs', () => {
+  expect(toolSummary('Bash', { command: 'cd /Users/me/程式/squad-chat/plugins && grep -n "step" hooks/*.mjs' })).toBe('grep -n "step" hooks/*.mjs')
+  expect(toolSummary('Bash', { command: 'cd "/tmp/a b"; ls' })).toBe('ls')
+  expect(toolSummary('Bash', { command: 'npm test' })).toBe('npm test')
+})
+
+test('Requests tip: a file read once is said to be resent, never read again', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  const step = (input: number, output: number, tools: string[] = []) => {
+    const s = stepStarted(u, { turnId: 't', index: 0, at: 0 })
+    tools.forEach((t) => stepToolUse(s, t))
+    stepEnded(u, s, usage(input, output), tools.length ? 'tool_use' : 'end_turn')
+  }
+  stepPrompt(u, 'look around')
+  step(100_000, 100, ['Read'])
+  stepToolResult(u, 'Read', 16_800, 'habits.mjs')   // about 4.2k
+  step(104_300, 100, ['Bash'])
+  stepToolResult(u, 'Bash', 1_600, 'git log')
+  step(104_800, 100, ['Read'])
+  stepToolResult(u, 'Read', 6_000, 'README.md')
+  step(106_400, 300)
+  const tips = contextTips(u).map((t: any) => t.parts.map((p: any) => p[0]).join(''))
+  expect(tips.find((t: string) => t.startsWith('Read habits.mjs'))).toBe('Read habits.mjs (4.2k): read once, resent 3 times so far (13k sent in all).')
 })

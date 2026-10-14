@@ -914,6 +914,97 @@ test('switching to a built-in room and back keeps the chat room you were in', SL
   await ui.unmount()
 })
 
+test('Usage room: the Requests card draws the context as strata, with plain-word tips', SLOW, async ($, on) => {
+  recordUi(on)
+  const usage = (input: number, cacheRead: number, output: number) => ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' })
+  // The demo: "explain readme.md" reads a file, then answers.
+  on('turn.step', async function* (_$: any, e: any) {
+    if (e.index === 0) {
+      yield { kind: 'tool', index: 0, id: 'tu_1', name: 'Read' }
+      return { turnId: e.turnId, index: 0, answer: '', toolUses: [], stopReason: 'tool_use', usage: usage(300, 53_800, 70) }
+    }
+    yield { kind: 'text', index: 0, text: 'Here is what it says.' }
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: usage(2_130, 54_100, 2_300) }
+  })
+  on('tool.call', () => ({ result: 'x'.repeat(8000), text: 'x'.repeat(8000) }))
+  on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
+  const asked: any[] = []
+  on('session.usage', (_$: any, e: any) => {
+    asked.push(e)
+    return { value: { startedAt: 0, context: { tokens: 58_500, window: 1_000_000, percent: 6, ...(e?.breakdown ? { breakdown: { maxTokens: 1_000_000, categories: [
+      { name: 'System prompt', tokens: 3_100, kind: 'used' },
+      { name: 'MCP tools', tokens: 31_000, kind: 'used' },
+      { name: 'System tools', tokens: 20_000, kind: 'used' },
+      { name: 'Messages', tokens: 4_000, kind: 'used' },
+      { name: 'Free space', tokens: 900_000, kind: 'free' },
+    ] } } : {}) }, rateLimits: [] } }
+  })
+  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+
+  const step = async (index: number) => {
+    const s = $.turn.step({ turnId: 't1', index, model: 'claude-opus-5-5', messageCount: 1 + index * 2 } as any)
+    const seen: any[] = []
+    for (;;) {
+      const x = await s.next()
+      if (x.done) return { seen, result: x.value }
+      seen.push(x.value)
+    }
+  }
+  await $.turn.start({ text: 'explain readme.md', turnId: 't1' } as any)
+  const first = await step(0)
+  expect(first.seen).toEqual([{ kind: 'tool', index: 0, id: 'tu_1', name: 'Read' }])   // the stream passes through untouched
+  expect(first.result.stopReason).toBe('tool_use')
+  await $.tool.call({ tool: 'Read', file_path: '/src/README.md' } as any)
+  await step(1)
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' } as any)
+  await settle()
+  expect(asked.some((e) => e?.breakdown === 'summary')).toBe(true)   // read once for the bedrock
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'REQUESTS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2 requests' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /█/ })).toBeDefined()                   // the strata, in block cells
+  expect(await ui.find({ type: 'Text', text: /^ 2(\.\d)?k Read README\.md$/ })).toBeDefined()   // the file's layer, its size first, then what it read
+  expect(await ui.find({ type: 'Text', text: ' 54k fixed + 4.4k new = 59k' })).toBeDefined()   // the context as a sum: bedrock, then what came after
+  expect(await ui.find({ type: 'Text', text: 'next' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' (54k): sent with every request, 96% of the last request. Biggest: MCP tools (31k).' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: "Claude's reply" })).toBeDefined()         // 2.3k, more than the file's 2.1k
+  expect(await ui.find({ type: 'Text', text: /#\d/ })).toBeUndefined()                // no request numbers to decode
+  expect(await ui.find({ type: 'Text', text: '59k' })).toBeDefined()                 // the next request: 56.2k in, 2.3k out
+
+  // Copy and Share take the card as text; Share asks first.
+  await ui.press({ key: 'requests-copy' })
+  expect(copied).toHaveLength(1)
+  expect(copied[0]).toMatch(/^Requests · 2 requests to Claude\nContext now: 54k fixed \+ 4\.4k new = 59k\./)
+  expect(copied[0]).toContain("Claude's reply")
+  expect(copied[0]).toContain('Read README.md')
+  expect(copied[0]).toContain('⚙ Fixed overhead (54k): sent with every request, 96% of the last request.')
+  await ui.press({ key: 'requests-share' })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()
+  await ui.press({ key: 'send' })
+  await settle()
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: copied[0], room: LOBBY.id, kind: 'code' } })
+  await ui.unmount()
+
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  expect(await desk.find({ type: 'Svg', alt: /^Context by request: Read README\.md, Claude's reply/ })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /^54k fixed \+ 4\.4k new = 59k$/ })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: 'Before the first request: 54k fixed' })).toBeDefined()   // the bedrock, one drawing
+  const key = await desk.find({ type: 'Box', key: 'key' }) as any
+  expect(key?.props.flexWrap).toBe('wrap')                                         // the key wraps, never runs past the card
+  expect(await desk.find({ type: 'Text', text: /^■ Read README\.md 2(\.\d)?k$/ })).toBeDefined()   // every key entry says its size
+  expect(await desk.find({ type: 'Text', text: /^■ conversation \d+$/ })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /█/ })).toBeUndefined()               // drawn, not set in a font
+  await desk.unmount()
+})
+
 test('Usage room: context, limits, spend, cache, tool timings and subagents', SLOW, async ($, on) => {
   const seen = recordUi(on)
   on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))

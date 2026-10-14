@@ -32,6 +32,7 @@ How this session uses Claude, live.
 
 - **Context, 5-hour, 7-day**: how full each is, and when it resets.
 - **Spend**: cost, the rate per hour, tokens and the cache.
+- **Requests**: the context as strata. Each request to the model is a column, and each thing that came into the conversation (a file Claude read, a long answer) is a layer from then on, so you can see what keeps riding along. Under them is the fixed overhead every request carries: the system prompt, tools, MCP tools and memory. A few plain-word tips follow, such as how much of a request that overhead is and what the next request will send. **⧉ Copy** puts the card on the clipboard as text, and **⇪ Share** posts it to a chat room after you check it.
 - **Tools and subagents**: each tool's p50, p95 and failures, and what each subagent does.
 
 ## ⎇ Git

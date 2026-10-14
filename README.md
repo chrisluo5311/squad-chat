@@ -217,7 +217,7 @@ Tabs before your chat rooms. They need no server and no sign-in, and nothing in 
 
 | Room | Shows | Tab |
 | --- | --- | --- |
-| ◔ Usage | Context, rate limits, spend, tool timings | on |
+| ◔ Usage | Context, rate limits, spend, what each request carries, tool timings | on |
 | ⎇ Git | Your branch, its PR and checks, Actions | on |
 | ⟡ Agents | Every Claude Code session and its subagents | on |
 | ◷ Focus | A Pomodoro timer with a streak | on |
@@ -418,6 +418,7 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information
 * [Resend](https://resend.com) (optional), for delivering sign-in codes on servers that use email sign-in
 * [glowup](https://github.com/NovusEdge/glowup), whose classic pack inspired the palette and card layout
 * [token-weather](https://github.com/anthropics/claude-code-playground/tree/main/claude-code/mods/token-weather), whose context forecast the Usage band draws
+* [turn-inspector](https://github.com/davila7/claude-code-templates/tree/main/cli-tool/components/mods/ui/turn-inspector) from claude-code-templates, whose turn-by-turn view of the context led to the Usage room's Requests card
 * [awesome-claude-code-mods](https://github.com/karanb192/awesome-claude-code-mods) and the mods listed there, which gave the built-in rooms their ideas: token-weather-usage, claude-flightdeck, hud and clawd-dash for Usage, cc-pr-tracker, github-issues and pr-pulse for Git, and agent-shell-watch, claude-agentpane and gsd-status for Agents
 * [Shields.io](https://shields.io) and [Hits](https://hits.sh), for the badges
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template), for this README's layout

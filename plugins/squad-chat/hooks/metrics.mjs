@@ -30,6 +30,11 @@ export function createUsage() {
     calls: new Map(),          // call key → feed entry, while it runs
     feed: [],                  // [{ key, tool, agentId, summary, at, ms, isError, done }], oldest first
     agents: new Map(),         // agent id → { id, type, description, status, parentId, startedAt, endedAt, tools }
+    steps: [],                 // the main loop's requests, oldest first (see stepStarted)
+    overhead: null,            // { tokens, biggest: { name, tokens } }: what every request carries before the conversation
+    overheadAt: 0,             // stepN when it was last read
+    stepIn: [],                // what the next request carries that the last one didn't: [{ kind, label, chars }]
+    stepN: 0,
     activity: { state: "idle", tool: null, since: 0 },   // idle | thinking | tool
   };
 }
@@ -145,7 +150,8 @@ export function toolSummary(tool, input = {}) {
   const base = (p) => String(p ?? "").split("/").filter(Boolean).at(-1) ?? "";
   let s;
   switch (tool) {
-    case "Bash": s = input.command; break;
+    // A leading "cd <dir> &&" says where, not what: the command after it is the news.
+    case "Bash": s = String(input.command ?? "").replace(/^\s*cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*(?:&&|;)\s*/, ""); break;
     case "Read": case "Write": case "Edit": case "NotebookEdit": s = base(input.file_path ?? input.notebook_path); break;
     case "Grep": s = input.pattern ? `"${input.pattern}"` : ""; break;
     case "Glob": s = input.pattern; break;
@@ -226,6 +232,171 @@ export function turnStarted(u, at) {
 
 export function turnEnded(u, at) {
   u.activity = { state: "idle", tool: null, since: at };
+}
+
+// ---------------------------------------------------------------- requests
+
+// Each request the main loop sends the model (one prompt takes several: a
+// tool's answer goes back in a new one), with the API's own usage for it,
+// what it carried that was new (the prompt, tool results) and what it
+// answered with. The engine gives one total per request, so the growth since
+// the request before is split across its new pieces by size: an estimate,
+// which is what tells you that a Read took 6k and a Bash 200.
+const STEPS = 30;
+
+export function stepPrompt(u, text) {
+  if (text) u.stepIn.push({ kind: "prompt", label: "prompt", chars: String(text).length });
+}
+
+// A tool's answer, named by what it was about ("Read metrics.mjs") so the
+// card can say which one without numbering requests.
+export function stepToolResult(u, tool, chars, summary = "") {
+  const about = summary && !summary.startsWith("(hidden") ? ` ${summary.length > 24 ? `${summary.slice(0, 23)}…` : summary}` : "";
+  u.stepIn.push({ kind: "tool", label: `${tool}${about}`, chars: Math.max(0, chars) });
+}
+
+export function stepStarted(u, { turnId, index = 0, at }) {
+  const step = { n: ++u.stepN, turnId, index, at, status: "streaming", input: null, output: null, cacheRead: 0, added: u.stepIn, grown: null, tools: [], stopReason: null, isCompacted: false };
+  u.stepIn = [];
+  u.steps.push(step);
+  if (u.steps.length > STEPS) u.steps.splice(0, u.steps.length - STEPS);
+  return step;
+}
+
+export function stepToolUse(step, name) {
+  if (step && name) step.tools.push(name);
+}
+
+export function stepEnded(u, step, usage, stopReason) {
+  if (!step) return false;
+  step.stopReason = stopReason ?? null;
+  if (!usage) { step.status = "failed"; return true; }
+  step.status = "done";
+  step.input = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+  step.output = usage.output_tokens ?? 0;
+  step.cacheRead = usage.cache_read_input_tokens ?? 0;
+  const i = u.steps.indexOf(step);
+  const prev = i > 0 ? u.steps[i - 1] : null;
+  if (prev?.input != null && prev.output != null) {
+    if (step.input < prev.input) step.isCompacted = true;
+    else step.grown = Math.max(0, step.input - prev.input - prev.output);
+  }
+  if (step.grown != null) splitBySize(step.added, step.grown);
+  return true;
+}
+
+// Spreads `total` over `pieces` by their characters; the parts sum to it.
+function splitBySize(pieces, total) {
+  const sum = pieces.reduce((n, p) => n + Math.max(1, p.chars), 0);
+  let left = total;
+  pieces.forEach((p, i) => {
+    p.tokens = i === pieces.length - 1 ? left : Math.round((total * Math.max(1, p.chars)) / sum);
+    left -= p.tokens;
+  });
+}
+
+// What every request carries before the conversation, from the /context
+// breakdown: its used rows (system prompt, tools, MCP tools, memory files,
+// skills, agents) less the conversation itself.
+const NOT_OVERHEAD = /messages|free space|autocompact|reserved/i;
+export function applyOverhead(u, breakdown) {
+  const rows = (breakdown?.categories ?? []).filter((c) => (c.kind ? c.kind === "used" : true) && !c.isDeferred && c.tokens > 0 && !NOT_OVERHEAD.test(c.name));
+  if (!rows.length) return false;
+  const biggest = rows.reduce((a, b) => (b.tokens > a.tokens ? b : a));
+  u.overhead = { tokens: rows.reduce((n, c) => n + c.tokens, 0), biggest: { name: biggest.name, tokens: biggest.tokens } };
+  u.overheadAt = u.stepN;
+  return true;
+}
+
+// Whether to read the breakdown again: never read, or a few requests old.
+export function wantsOverhead(u) {
+  return u.steps.length > 0 && (!u.overhead || u.stepN - u.overheadAt >= 8);
+}
+
+// The context as strata, for the Requests card: one column per request (what
+// it sent), then one for the next (the context now). Each thing that came
+// into the conversation is a layer from the request that first carried it
+// on, so a tool result read once is seen riding along in every column after.
+// The few biggest get layers of their own; the rest is "conversation". Under
+// them all is the bedrock: what was already there when the first column was
+// sent, the overhead every request carries and any conversation from before
+// we started watching, drawn apart since to scale it would flatten what
+// comes after (a session hours long has hundreds of k of it). Column heights
+// are the API's own figures.
+const NAMED = 4;
+export function strata(u, maxCols = 12) {
+  let from = 0;
+  const done = u.steps.filter((s) => s.status === "done" && s.input != null);
+  done.forEach((s, i) => { if (s.isCompacted) from = i; });
+  const since = done.slice(from);
+  if (!since.length) return null;
+  const first = since[0];
+  const firstAdded = first.added.reduce((n, p) => n + (p.tokens ?? Math.round(p.chars / 4)), 0);
+  const start = Math.max(0, first.input - firstAdded);
+  const bed = Math.min(u.overhead?.tokens ?? start, start);
+  const items = [];
+  since.forEach((s, k) => {
+    for (const p of s.added) {
+      const tokens = p.tokens ?? Math.round(p.chars / 4);
+      items.push({ name: p.kind === "prompt" ? "your prompt" : p.label, kind: p.kind, n: s.n, enter: k, tokens });
+    }
+    if (s.output) items.push({ name: s.tools.length ? "Claude's tool calls" : "Claude's reply", kind: "answer", n: s.n, enter: k + 1, tokens: s.output });
+  });
+  const named = [...items].filter((it) => it.tokens >= 300).sort((a, b) => b.tokens - a.tokens).slice(0, NAMED).sort((a, b) => a.enter - b.enter || a.n - b.n);
+  const last = since.at(-1);
+  const all = [...since.map((s, k) => ({ label: k ? "older" : "first", k, total: s.input })), { label: "next", k: since.length, total: last.input + (last.output ?? 0) }];
+  const cols = all.slice(-maxCols);
+  // Named by what they are; two alike ("Claude's reply") are told apart by count.
+  const seen = new Map();
+  const layers = named.map((it) => {
+    const k = (seen.get(it.name) ?? 0) + 1;
+    seen.set(it.name, k);
+    return { name: k > 1 ? `${it.name} (${k})` : it.name, kind: it.kind, sizes: cols.map((c) => (c.k >= it.enter ? it.tokens : 0)) };
+  });
+  const talk = cols.map((c, i) => Math.max(0, c.total - start - layers.reduce((n, l) => n + l.sizes[i], 0)));
+  return {
+    bedrock: bed,
+    bedrockKnown: !!u.overhead,
+    earlier: start - bed,
+    cols: cols.map((c) => ({ label: c.label, above: Math.max(0, c.total - start) })),
+    layers: [{ name: "conversation", kind: "talk", sizes: talk }, ...layers],
+    compacted: from > 0 || first.isCompacted,
+    sent: since.length,
+  };
+}
+
+// Two or three things worth knowing, in plain words: how much of a request
+// is the overhead, the biggest thing riding along, and what the next one sends.
+export function contextTips(u) {
+  const st = strata(u);
+  if (!st) return [];
+  const tips = [];
+  const last = u.steps.filter((s) => s.status === "done" && s.input != null).at(-1);
+  if (st.bedrockKnown && last?.input) {
+    const pct = Math.round((st.bedrock / last.input) * 100);
+    const big = u.overhead.biggest;
+    tips.push({ icon: "⚙", parts: [["Fixed overhead", true], [` (${fmtK(st.bedrock)}): sent with every request, ${pct}% of the last request.`, false], ...(big ? [[` Biggest: ${big.name} (${fmtK(big.tokens)}).`, false]] : [])] });
+  }
+  const top = st.layers.slice(1).reduce((a, l) => (!a || l.sizes.at(-1) > a.sizes.at(-1) ? l : a), null);
+  const tok = top?.sizes.at(-1) ?? 0;
+  if (top && tok >= 1000) {
+    const rides = top.sizes.slice(0, -1).filter((n) => n > 0).length;
+    const what = top.name.charAt(0).toUpperCase() + top.name.slice(1);
+    // Said so it can't read as fetched again: it came in once, and is resent,
+    // with what that has added up to.
+    const once = top.kind === "answer" ? "written once" : top.kind === "prompt" ? "sent once" : /^Read\b/.test(top.name) ? "read once" : "came back once";
+    const resent = rides ? `resent ${rides} time${rides === 1 ? "" : "s"} so far (${fmtK(rides * tok)} sent in all).` : "resent with every request from now on.";
+    tips.push({ icon: "⇠", parts: [[what, true], [` (${fmtK(tok)}): ${once}, ${resent}`, false]] });
+  }
+  const next = st.bedrock + st.earlier + (st.cols.at(-1)?.above ?? 0);
+  const pct = u.context?.percent;
+  tips.push({ icon: "→", parts: [["The next request sends ", false], [fmtK(next), true], [Number.isFinite(pct) ? `, ${Math.round(pct)}% of the window.` : ".", false], ...(pct >= 80 ? [[" Compaction is near.", false]] : [])] });
+  return tips;
+}
+
+function fmtK(n) {
+  if (n < 1000) return String(Math.round(n));
+  return n < 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : `${Math.round(n / 1000)}k`;
 }
 
 // ---------------------------------------------------------------- subagents

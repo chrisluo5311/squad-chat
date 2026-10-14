@@ -15,7 +15,7 @@
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
-import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, wantsOverhead, toolSummary } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
 import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge } from "./focus.mjs";
@@ -576,9 +576,14 @@ async function restoreSessionUsage($) {
 
 async function refreshUsage($) {
   try {
-    const u = await $.session.usage(state.usage.showBreakdown ? { breakdown: "summary" } : {});
+    // The breakdown when it's open, and now and then for the Requests card's bedrock.
+    const breakdown = state.usage.showBreakdown || wantsOverhead(state.usage);
+    const u = await $.session.usage(breakdown ? { breakdown: "summary" } : {});
     applyMeasure(state.usage, u, Date.now());
-    if (u?.context?.breakdown) state.usage.breakdown = u.context.breakdown;
+    if (u?.context?.breakdown) {
+      state.usage.breakdown = u.context.breakdown;
+      applyOverhead(state.usage, u.context.breakdown);
+    }
     afterChange($);
   } catch (err) {
     $.ui.log(`squad-chat: could not read usage: ${err?.message ?? err}`, { to: "debug" });
@@ -1221,13 +1226,13 @@ export function register(on, options) {
   on("turn.start", ($, e, next) => {
     const id = e.turnId;
     turn = id;
-    if (!e.agentId) { turnStarted(state.usage, Date.now()); sysChanged($); }
+    if (!e.agentId) { turnStarted(state.usage, Date.now()); stepPrompt(state.usage, e.text); sysChanged($); }
     void (async () => {
       await $.clock.sleep(LONG_TURN_MS);
       if (turn !== id || state.dnd !== "auto") return;
       state.working = true;
       quietChanged($);
-    })();
+    })().catch(() => {});   // the session may end while it waits
     return next(e);
   });
 
@@ -1256,6 +1261,25 @@ export function register(on, options) {
     return r;
   });
 
+  // Each request of the main loop, for the Usage room's Requests card: the
+  // tools it called as they stream, then the API's usage for it. The stream
+  // is passed on piece by piece, untouched.
+  on("turn.step", async function* ($, e, next) {
+    if (e.agentId) return yield* next(e);
+    let step = null;
+    try { step = stepStarted(state.usage, { turnId: e.turnId, index: e.index, at: Date.now() }); sysChanged($); }
+    catch { /* the request matters more than its tally */ }
+    const stream = next(e);
+    for await (const c of stream) {
+      if (c.kind === "tool") stepToolUse(step, c.name);
+      yield c;
+    }
+    const r = await stream.result;
+    try { stepEnded(state.usage, step, r?.usage, r?.stopReason); sysChanged($); }
+    catch { /* as above */ }
+    return r;
+  });
+
   // The Usage room's figures, as the engine measures them.
   on("session.measure", async ($, e, next) => {
     const r = await next(e);
@@ -1276,6 +1300,8 @@ export function register(on, options) {
     } finally {
       try {
         toolEnded(state.usage, key, { at: Date.now(), isError: !r || !!r.isError || !!r.deny });
+        // Its answer goes back to the model with the next request: only its size is kept.
+        if (!e.agentId && r) stepToolResult(state.usage, e.tool, String(r.deny ?? r.text ?? (r.result === undefined ? "" : JSON.stringify(r.result) ?? "")).length, toolSummary(e.tool, e));
         sysChanged($);
         // A push or a new PR: the Git room catches up once GitHub has.
         if (e.tool === "Bash" && PUSHED.test(String(e.command ?? ""))) {
