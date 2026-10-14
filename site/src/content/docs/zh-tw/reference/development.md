@@ -22,7 +22,7 @@ claude --plugin-dir ./plugins/squad-chat      # run Claude Code with this checko
 # The bridge
 cd plugins/squad-chat/bridge
 npm install && npm run build                  # rebuild dist/bridge.mjs after editing src/
-npm test                                      # two users, two bridges, local Supabase
+node --test ../../../bridge-tests/*.test.mjs  # two users, two bridges, local Supabase
 
 # The database
 supabase start                                # local stack on ports 56420-56429

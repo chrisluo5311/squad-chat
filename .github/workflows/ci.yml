@@ -65,6 +65,6 @@ jobs:
       - name: Bridge tests
         run: |
           curl -fsS http://127.0.0.1:56421/auth/v1/health -H "apikey: $SQUAD_TEST_SUPABASE_KEY" > /dev/null
-          npm test | tee test.log
+          node --test ../../../bridge-tests/*.test.mjs | tee test.log
           # The suites skip themselves when the stack is down. In CI that is a failure.
           ! grep -Eq '^# skipped [1-9]' test.log

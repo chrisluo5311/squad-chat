@@ -174,7 +174,7 @@ Function rooms are rooms you install: a JSON manifest drawn with the built-in ro
 | Suite | Runs | Covers |
 |---|---|---|
 | `supabase/tests/rls.test.sql` | `supabase test db` | Access control, limits, cascades (pgTAP) |
-| `bridge-tests/` | `npm test` in `plugins/squad-chat/bridge` | Two users, two real bridges, local Supabase: sign-in, passcodes, presence, messages, a network drop through a cuttable proxy, restarts, unread, deleting rooms, `kill -9` |
-| `bridge-tests/sessions.test.mjs` | the same `npm test`, no Supabase needed | Two bridges without a server sharing heartbeats, a dead session dropped, refusing bad heartbeats, cleaning up on shutdown |
-| `bridge-tests/fnrooms.test.mjs` | the same `npm test`, no Supabase needed | Loading rooms and refusing bad manifests, the Snippets list (add, rename, delete, a private file, kept across restarts), fetch held to a room's hosts, time and size, and strings cleaned of terminal escapes |
+| `bridge-tests/` | `node --test bridge-tests/*.test.mjs` | Two users, two real bridges, local Supabase: sign-in, passcodes, presence, messages, a network drop through a cuttable proxy, restarts, unread, deleting rooms, `kill -9` |
+| `bridge-tests/sessions.test.mjs` | the same `node --test`, no Supabase needed | Two bridges without a server sharing heartbeats, a dead session dropped, refusing bad heartbeats, cleaning up on shutdown |
+| `bridge-tests/fnrooms.test.mjs` | the same `node --test`, no Supabase needed | Loading rooms and refusing bad manifests, the Snippets list (add, rename, delete, a private file, kept across restarts), fetch held to a room's hosts, time and size, and strings cleaned of terminal escapes |
 | `plugins/squad-chat/tests/` | `claude plugin test ./plugins/squad-chat` | The mod against a fake bridge: sign-in, views, band, status line, read markers, mentions, tabs, room commands, room text never reaching the model, the built-in rooms (usage figures, tool timing passed through untouched, `gh` results and toasts, other sessions, snapshots), and function rooms (the Snippets room, `/snippet`, icon tabs, the band, stale data) |

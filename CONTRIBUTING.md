@@ -44,7 +44,7 @@ claude plugin validate ./plugins/squad-chat
 claude plugin test ./plugins/squad-chat
 
 # The bridge (needs `supabase start`)
-cd plugins/squad-chat/bridge && npm test
+node --test bridge-tests/*.test.mjs
 
 # The database (needs `supabase start`)
 supabase test db
