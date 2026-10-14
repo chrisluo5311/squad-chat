@@ -6,6 +6,7 @@
 [![Version][version-shield]][version-url]
 [![CI][ci-shield]][ci-url]
 [![OpenSSF Scorecard][scorecard-shield]][scorecard-url]
+[![OpenSSF Best Practices][bestpractices-shield]][bestpractices-url]
 [![License][license-shield]][license-url]
 [![Made for Claude Code][made-for-shield]][made-for-url]
 [![Node][node-shield]][node-url]
@@ -435,6 +436,8 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information
 [ci-url]: https://github.com/chrisluo5311/squad-chat/actions/workflows/ci.yml
 [scorecard-shield]: https://img.shields.io/ossf-scorecard/github.com/chrisluo5311/squad-chat?style=for-the-badge&label=openssf%20scorecard
 [scorecard-url]: https://scorecard.dev/viewer/?uri=github.com/chrisluo5311/squad-chat
+[bestpractices-shield]: https://img.shields.io/cii/level/15489?style=for-the-badge&label=openssf%20best%20practices
+[bestpractices-url]: https://www.bestpractices.dev/projects/15489
 [license-shield]: https://img.shields.io/badge/license-MIT-3da639?style=for-the-badge
 [license-url]: LICENSE
 [made-for-shield]: https://img.shields.io/badge/made%20for-Claude%20Code-d97757?style=for-the-badge&logo=claude&logoColor=white
