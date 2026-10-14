@@ -42,7 +42,7 @@ Your display name (the name you chose, or the part of your email before the `@`)
 
 ## What the built-in rooms read
 
-The Usage and Agents rooms read this session's own figures from Claude Code: context, cost, rate limits, token counts, tool names and timings, and subagents. The Git room runs `git status` and `gh` in the session's folder as you. Nothing is sent anywhere, and no token is stored.
+The Usage and Agents rooms read this session's own figures from Claude Code: context, cost, rate limits, token counts, tool names and timings, and subagents. The Git room runs `git status` and `gh` in the session's folder as you, and `gh` talks to GitHub with your own sign-in. Nothing else is sent anywhere, and no token is stored.
 
 To show other sessions, each session keeps a small heartbeat file in `/tmp/squad-chat-<uid>/sessions/`, readable only by you: the folder's name, branch, model, what it is doing, and the last few tool calls each with a brief description (a command, a file's name, a search pattern). Anything that resembles a secret is masked. No prompts, replies or tool output are included. A heartbeat is removed when its session ends.
 

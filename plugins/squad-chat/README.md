@@ -89,9 +89,25 @@ The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/lofi
 - **Where your data lives:**
   - Messages live in your squad's own Supabase database and are deleted after 30 days. Whoever hosts it can read it, like any database admin.
   - Only members of a room can read it. You become a member only with the room's passcode, and access is enforced in the database.
-- **The built-in rooms** read this session's figures from Claude Code, and `git` and `gh` in its folder as you. Nothing is sent anywhere. Each session keeps a small heartbeat in `/tmp/squad-chat-<uid>/sessions/`, readable only by you (folder name, branch, model, recent tool names with a few words each, secrets masked, never prompts or output), so the Agents room can show every session. The Clipboard room, once you add it, reads the clipboard every 2 seconds and keeps the last 30 items in this session's memory only, masks anything that looks like a secret, and never shares them.
+- **The built-in rooms** read this session's figures from Claude Code, and `git` and `gh` in its folder as you (`gh` talks to GitHub with your own sign-in). They send nothing of yours anywhere. Each session keeps a small heartbeat in `/tmp/squad-chat-<uid>/sessions/`, readable only by you (folder name, branch, model, recent tool names with a few words each, secrets masked, never prompts or output), so the Agents room can show every session. The Clipboard room, once you add it, reads the clipboard every 2 seconds and keeps the last 30 items in this session's memory only, masks anything that looks like a secret, and never shares them.
 - **On your computer:** your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you. `/chat-logout` removes it.
 - **What others see:** your display name: the name you picked, or the part of your email before the `@` (`ann@example.com` → `ann`). Friends see it, plus whether you're online. They never see your email.
+
+## Network
+
+squad-chat connects only to the places below. Each room's `room.json` lists its hosts under `permissions.hosts`, and the bridge refuses any other host for that room, settings included.
+
+| What | Where it connects | What it sends |
+|---|---|---|
+| Chat | Your squad's Supabase project, the URL you set in `supabase_url` | Your sign-in, messages, presence and what you share |
+| Git room | GitHub, through your own `gh` CLI | Read-only requests about this repository: its pull requests and checks, workflow runs, your issues and its open Dependabot alerts |
+| Weather (off until added) | `api.open-meteo.com`, `geocoding-api.open-meteo.com`, `air-quality-api.open-meteo.com` | The city names you set |
+| Tech News (off until added) | `hacker-news.firebaseio.com` and the feeds `www.ithome.com.tw`, `www.theverge.com`, `feeds.arstechnica.com`, `techcrunch.com` | Nothing beyond the request |
+| Stocks (off until added) | `mis.twse.com.tw`, `query1.finance.yahoo.com` | The symbols on your watchlist |
+| Lo-fi (off until added) | `ice2.somafm.com` and `www.youtube.com`, played by your own `mpv` (and `yt-dlp` for YouTube), started only when you press play | Nothing beyond the stream request. Tracks you add play from wherever you point them |
+| Room store | `raw.githubusercontent.com/chrisluo5311/squad-chat/main/rooms` | Nothing beyond the request. A room installs only after you see its hosts and confirm |
+
+Nothing goes to Claude, to Anthropic or to the author of squad-chat.
 
 ## How it works
 
