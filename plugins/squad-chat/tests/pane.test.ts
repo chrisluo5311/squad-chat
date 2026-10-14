@@ -640,7 +640,7 @@ const DIFF = [
   '+++ b/.env',
   '@@ -1 +1 @@',
   '-PORT=3000',
-  '+OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwx',
+  '+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx',
 ].join('\n') + '\n'
 
 test('/share diff runs git in the session folder, and a likely secret takes a second send', SLOW, async ($, on) => {
@@ -2534,7 +2534,7 @@ test('Clipboard room: off until asked for; reads what is copied, masks secrets, 
   expect(reads.length).toBe(0)                               // no tab, no reading
   await $.command.run({ command: 'chat', args: 'rooms +clipboard' })
   await bridge.clock.advance(1_000)
-  clipboard = 'token ghp_abcdefghijklmnopqrstuvwxyz0123456789'
+  clipboard = 'token ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
   await bridge.clock.advance(2_000)
   clipboard = 'npm run build'                                // copied again: back on top, not twice
   await bridge.clock.advance(2_000)
@@ -2546,7 +2546,7 @@ test('Clipboard room: off until asked for; reads what is copied, masks secrets, 
   expect(await ui.find({ type: 'Text', text: /ghp_/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^•+ / })).toBeDefined()
   await ui.press({ key: 'copy-c2' })                         // the masked one still copies whole
-  expect(copied).toEqual(['token ghp_abcdefghijklmnopqrstuvwxyz0123456789'])
+  expect(copied).toEqual(['token ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'])
   await ui.press({ key: 'drop-c1' })                         // still on the clipboard, and still gone
   await bridge.clock.advance(4_000)
   expect(await ui.find({ type: 'Text', text: '1 item' })).toBeDefined()
