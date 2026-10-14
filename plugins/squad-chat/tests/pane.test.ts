@@ -2706,6 +2706,21 @@ test('Habits room: goals added by typing, checked off, counted, renamed and remo
   await ui.unmount()
 })
 
+test('Habits room: presses that overlap each count, none undone by the other', SLOW, async ($, on) => {
+  recordUi(on)
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+  const store: Record<string, unknown> = { habits: { goals: [{ id: 'h1', name: 'Water', target: 8 }], history: {} } }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await ui.press({ key: 'sys-habits' })
+  await Promise.all([1, 2, 3].map(() => ui.press({ key: 'habit-h1-do' })))
+  await settle()
+  expect((store.habits as any).history.h1[today]).toBe(3)
+  await ui.unmount()
+})
+
 test('Habits room: a streak a goal, drawn as GitHub draws contributions', SLOW, async ($, on) => {
   recordUi(on)
   const day = (n: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }

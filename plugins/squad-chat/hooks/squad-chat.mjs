@@ -735,8 +735,17 @@ function focusEnded($, ended, now) {
 }
 
 // The Habits room's goals and days are every session's: read again before
-// a change, so one session's save doesn't undo another's, then kept.
-async function changeHabits($, fn) {
+// a change, so one session's save doesn't undo another's, then kept. One
+// change at a time: two presses that overlap would both read the store
+// before either saved, and the second would put back what the first changed.
+let habitsBusy = Promise.resolve();
+function changeHabits($, fn) {
+  const run = habitsBusy.then(() => changeHabitsNow($, fn));
+  habitsBusy = run.catch(() => {});
+  return run;
+}
+
+async function changeHabitsNow($, fn) {
   // The wall clock, as the drawing has it: a day is the calendar's.
   const now = Date.now();
   try { restoreHabits(state.habits, await $.store.get("habits")); } catch (err) {
