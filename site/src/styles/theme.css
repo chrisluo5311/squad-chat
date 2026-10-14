@@ -267,6 +267,12 @@ starlight-toc a[aria-current="true"]:focus {
   text-align: center;
 }
 
+/* A small screenshot, such as a single card, centered at a size close to the terminal's. */
+.sl-markdown-content figure.shot.small {
+  max-width: 28rem;
+  margin-inline: auto;
+}
+
 /* A room's pane, beside its few lines of text. */
 .sl-markdown-content figure.shot.pane {
   max-width: 22rem;
@@ -357,4 +363,9 @@ starlight-toc a[aria-current="true"]:focus {
   border: 1px solid var(--sl-color-hairline-light);
   border-radius: 0.625rem;
   background: #181818;
+}
+
+/* Geist has no CJK glyphs: name the Traditional Chinese faces before the system's default. */
+:root:lang(zh-TW) {
+  --sl-font: "Geist", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
 }

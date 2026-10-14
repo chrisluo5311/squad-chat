@@ -1,0 +1,61 @@
+---
+// Starlight's prev / next links. The homepage is English in every locale
+// (/zh-tw/ falls back to it), so there "Next" and the page it names stay English,
+// while the link still leads into the reader's language.
+import { getEntry } from "astro:content";
+import Default from "@astrojs/starlight/components/Pagination.astro";
+import { Icon } from "@astrojs/starlight/components";
+
+const { entry, locale, pagination } = Astro.locals.starlightRoute;
+const next = entry.id === "" ? pagination.next : undefined;
+const nextTitle = next && (await getEntry("docs", next.href.replace(/^.*?\/squad-chat\/(zh-tw\/)?|\/$/g, "")))?.data.title;
+---
+
+{
+  next ? (
+    <div class="pagination-links print:hidden">
+      <a href={next.href} rel="next">
+        <Icon name="right-arrow" size="1.5rem" />
+        <span>
+          {Astro.locals.t("page.nextLink", { lng: "en" })}
+          <br />
+          <span class="link-title">{nextTitle ?? next.label}</span>
+        </span>
+      </a>
+    </div>
+  ) : (
+    <Default />
+  )
+}
+
+<style>
+  /* Starlight's own pagination styles, which stay scoped to its component. */
+  .pagination-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+    gap: 1rem;
+  }
+  a {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: end;
+    gap: 0.5rem;
+    width: 100%;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    text-align: end;
+    text-decoration: none;
+    color: var(--sl-color-gray-2);
+    box-shadow: var(--sl-shadow-md);
+    overflow-wrap: anywhere;
+  }
+  a:hover { border-color: var(--sl-color-gray-2); }
+  .link-title {
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-2xl);
+    line-height: var(--sl-line-height-headings);
+  }
+  svg { flex-shrink: 0; }
+</style>

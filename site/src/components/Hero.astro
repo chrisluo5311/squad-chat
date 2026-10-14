@@ -5,8 +5,9 @@ import Default from "@astrojs/starlight/components/Hero.astro";
 import PaneDemo from "./PaneDemo.astro";
 import plugin from "../../../plugins/squad-chat/.claude-plugin/plugin.json";
 
-const isHome = Astro.locals.starlightRoute.entry.id === "";   // src/content/docs/index.mdx
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const { entry, locale } = Astro.locals.starlightRoute;
+const isHome = entry.id === "";   // src/content/docs/index.mdx, which /zh-tw/ shows too
+const base = import.meta.env.BASE_URL.replace(/\/$/, "") + (locale ? `/${locale}` : "");
 
 // The wave: warm colors only, a diagonal ripple across the grid.
 const COLS = 40, ROWS = 14;

@@ -11,7 +11,7 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 <div class="checks not-content">
   <div><span class="tick">✓</span> <b>private</b> <span>nothing typed in the pane enters the conversation</span></div>
   <div><span class="tick">✓</span> <b>rooms</b> <span>joined with a passcode, enforced by row-level security</span></div>
-  <div><span class="tick">✓</span> <b>presence</b> <span>who's online and typing, across every room</span></div>
+  <div><span class="tick">✓</span> <b>presence</b> <span>who is online and typing, across every room</span></div>
   <div><span class="tick">✓</span> <b>share</b> <span>your selection, Claude's code block or `git diff`, previewed first</span></div>
   <div><span class="tick">✓</span> <b>usage</b> <span>context, rate limits, spend, each tool's p50 and p95</span></div>
   <div><span class="tick">✓</span> <b>git</b> <span>branch, this PR's checks, reviews, Actions and alerts</span></div>
@@ -21,7 +21,7 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 ## See it run
 
-A real session, recorded at 2× resolution: chat with your squad while Claude works, then the Agents, Usage and Git rooms, and a Usage snapshot shared back to the room.
+A real session, recorded at 2× resolution: a conversation with the group while Claude works, then the Agents, Usage and Git rooms, and a Usage snapshot shared back to the room.
 
 <video class="demo-video" src="/squad-chat/media/demo.mp4" poster="/squad-chat/media/demo-poster.jpg" controls muted loop playsinline preload="metadata" aria-label="squad-chat demo: chatting with sam and ana while Claude runs a subagent, then the Agents, Usage and Git rooms, and a Usage snapshot shared to the room"></video>
 
@@ -42,8 +42,8 @@ Next to your chat rooms, every session gets these tabs. Nothing in them leaves y
 
 <CardGrid>
   <LinkCard title="Install" description="Add the marketplace, install the plugin and open the pane." href="/squad-chat/start/install/" />
-  <LinkCard title="Connect to a server" description="Point squad-chat at your squad's Supabase project." href="/squad-chat/start/connect/" />
+  <LinkCard title="Connect to a server" description="Connect squad-chat to your group's Supabase project." href="/squad-chat/start/connect/" />
   <LinkCard title="Commands" description="Every slash command, with examples." href="/squad-chat/use/commands/" />
   <LinkCard title="Desktop app" description="The chat and every room, drawn with the app's own pieces." href="/squad-chat/use/desktop/" />
-  <LinkCard title="Host your own server" description="Set up a Supabase project for your group, once." href="/squad-chat/host/server/" />
+  <LinkCard title="Host your own server" description="Set up a Supabase project for your group. This is done once." href="/squad-chat/host/server/" />
 </CardGrid>

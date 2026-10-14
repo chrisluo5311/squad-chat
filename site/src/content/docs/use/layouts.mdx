@@ -1,15 +1,15 @@
 ---
 title: Layouts
-description: Where the pane goes, depending on your terminal's width, and the status line.
+description: Where the pane is placed, depending on the terminal width, and the status line.
 ---
 
-Claude Code decides where the pane goes, not the mod. It depends on the layout and how wide your terminal is.
+Claude Code, rather than the mod, determines where the pane is placed, based on the layout and the width of the terminal.
 
 | Where | What you see |
 | --- | --- |
 | Docked (fullscreen, ≥ 110 columns) | Room tabs, a FRIENDS card, and the room's messages as bubbles: yours on the right, theirs on the left, grouped by sender, with date labels and a **new** line where you stopped reading |
-| Above the prompt (narrower) | The room, who's online, the last five messages and the input box |
-| Pane closed | One line: the room, who's online, unread count, the latest message and **Open** |
+| Above the prompt (narrower) | The room, who is online, the last five messages and the input box |
+| Pane closed | One line: the room, who is online, unread count, the latest message and **Open** |
 | Status line | Unread counts per room, such as `💬 #team 3`, or `🔕 #team 3` during do not disturb. The built-in rooms add `◔ 85%` when the context is nearly full and `✗ CI` when this branch's checks fail and `🍅 18:42` while a focus timer runs, and nothing otherwise. |
 
 <figure class="shot">
@@ -17,7 +17,7 @@ Claude Code decides where the pane goes, not the mod. It depends on the layout a
   <figcaption>The one-line summary above the prompt while the pane is closed.</figcaption>
 </figure>
 
-In the desktop app that line is a capsule of small drawings instead. [Desktop app](/squad-chat/use/desktop/) shows every room's.
+In the desktop app, this line is rendered as a capsule of small drawings instead. See [Desktop app](/squad-chat/use/desktop/) for every room's version.
 
 ## Getting the docked layout
 

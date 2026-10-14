@@ -1,0 +1,169 @@
+---
+title: 撰寫房間
+description: 房間就是一個 JSON 檔。如何撰寫、試用，並放上商店。
+---
+
+import BandGallery from "../../../../components/BandGallery.astro";
+
+房間就是一個檔案 `room.json`：它叫什麼、由 squad-chat 的哪些 provider 提供資料、這些 provider 可以連線至哪些 host、它的設定，以及卡片長什麼樣子。檔案中不包含、也無法包含程式碼。正因如此，任何人都能安裝房間，而無須信任其作者。若所需功能沒有對應的 provider，請針對 provider 本身提出 issue 或 pull request。
+
+## 第一個房間
+
+```json
+{
+  "schema": 1,
+  "id": "rust-blog",
+  "version": "1.0.0",
+  "minSquadChat": "0.15.0",
+  "name": "Rust Blog",
+  "icon": "⚙",
+  "color": "sand",
+  "description": "New posts from the Rust blog.",
+  "author": "you",
+  "permissions": { "hosts": ["blog.rust-lang.org"] },
+  "settings": {
+    "feeds": { "type": "list", "label": "Feeds", "item": "url", "max": 4, "default": ["https://blog.rust-lang.org/feed.xml"] }
+  },
+  "providers": [
+    { "id": "feeds", "type": "rss", "params": { "feeds": "$settings.feeds" }, "interval": { "visible": "30m", "background": "2h" } }
+  ],
+  "layout": {
+    "cards": [
+      { "title": "POSTS", "meta": "{feeds.count}", "body": { "type": "list", "items": "feeds.items", "title": "title", "preview": "meta", "copy": "url", "share": "share" } }
+    ],
+    "band": "{feeds.items.0.title}"
+  }
+}
+```
+
+## 試用
+
+1. 存放於 `~/.config/squad-chat/rooms/<id>/room.json`。資料夾名稱必須和房間的 id 相同。
+2. 執行 `/reload-plugins`（或重新啟動 Claude Code），然後 `/chat rooms +<id>` 和 `/chat <id>`。
+3. 若房間未顯示，原因會記錄於 debug log（`claude --debug`）裡，在以 `squad-chat: room … skipped` 開頭的那一行。
+
+## 欄位
+
+| 欄位 | 說明 |
+| --- | --- |
+| `schema` | 固定是 `1`。 |
+| `id` | 2 到 24 個小寫字母、數字或 `-`，以字母開頭。不得與 squad-chat 內建的房間重複。 |
+| `version` | 例如 `1.0.0`。每次修改皆須調高版本，`/chat update` 才會提供更新。 |
+| `minSquadChat` | 支援的最舊 squad-chat 版本：`0.15.0` 或更新，第一個有商店的版本。 |
+| `name`、`icon`、`color` | 最多 20 個字元、一個字元，以及 `sky`、`leaf`、`lilac`、`amber`、`coral`、`rose`、`teal`、`sand`、`red` 其中之一。 |
+| `description`、`author` | 最多 200 個字元的說明，以及作者。 |
+| `permissions.hosts` | provider 可以連線至的所有 host，最多 10 個。provider 無法連線至其他地方，安裝時也會顯示這份清單。 |
+| `settings` | 最多 8 個設定，用 `/chat set <room> <setting> <value>` 更改：`list`（`"item": "url"` 代表連結，必須在房間的 host 上，`"add": true` 代表將輸入的內容加入清單，`min` 和 `max` 是項目數量）、`enum`（`values`）、`string`、`bool` 或 `int`（`min`、`max`），每個都要有 `default`。 |
+| `providers` | 最多 4 個：`id`（在 layout 的路徑中使用）、`type`、`params`（設定寫成 `"$settings.<key>"`），以及 `interval`（`visible` 是房間顯示時，`background` 是其他時候，至少 `1s`）。 |
+| `layout` | `cards`（1 到 6 張），以及可選的 `inline`、`band`、`pills`、`snapshot`、`hint`、`placeholder`、`keys` 和 `add`（房間輸入框的內容要加進哪個清單設定，或 `{ "action", "field" }`）。 |
+
+## Provider
+
+| 類型 | 參數 | 資料內容 |
+| --- | --- | --- |
+| `http-json` | `url`、`vars`、`rows`、`fields`、`values`（請參閱[任何 JSON API](#任何-json-api)） | 每個欄位都已格式化的 `rows[]`、`values`、`count`、`updated` |
+| `rss` | `feeds`：在房間 host 上的 feed URL | `items[]`（`title`、`url`、`source`、`meta`、`share`）、`count`、`failed` |
+| `hn` | `list`（`top`、`best`、`new`、`off`）、`count` | 和 `rss` 一樣的 `items[]`，加上 `score`、`comments` 和 `age`，以及 `count`、`list` |
+| `open-meteo` | `cities`（每個新城市會先查詢，找不到這個地方就拒絕）、`units`（`metric` 或 `imperial`） | `cities[]`（`name`、`place`（含國家代碼）、`query`（設定裡的寫法）、`icon`、`desc`、`tempText`、`range`、`rain`、`rainText`、`rainNext`（接下來 8 小時的降雨機率）、`aqi`、`aqiText`、`aqiTone`、`days[]`…）、`first`、`days[]`、`updated` |
+| `quotes` | `watchlist`、`colors`（`market`、`red-up`、`green-up`）、`move` | `quotes[]`（`symbol`、`name`、`priceText`、`pctText`、`arrow`、`color`、`spark`、`line`（當日價格）、`volText`、`when`）、`markets`、`statusText`、`statusTone`、`band`、`note`、`updated` |
+| `local-list` | `max` | `items[]`（`id`、`name`、`lang`、`body`）、`count`、`latest`（`name`、`lang`） |
+| `sysinfo` | `alerts`、`cpu_temp`、`memory` | `cpu`（含 `hist`、`tone`、`temp`）、`mem`（含 `tone`）、`gpu`、`net`、`disk`、`battery`（含 `charging`、`tone`）、`band`…（請參閱 Monitor 房間的 manifest） |
+| `player` | `stations`（https，在房間的 host 上）、`volume` | `now`、`playing`、`entries[]`、`band`、`share`（請參閱 Lo-fi 房間的 manifest） |
+
+每個 provider 只能連線至其支援的 host，且 manifest 必須同時列出這些 host。`rss` 和 `http-json` 會讀取任何指定的網址，因此僅由 manifest 的清單決定其可連線範圍。squad-chat 內建的房間放在 [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms)，提供每種 provider 的完整範例。
+
+## 任何 JSON API
+
+`http-json` 讀取房間 host 上的一個 https URL，無須撰寫程式碼即可將回應轉換為元件可用的格式。以下為商店中 Crypto 房間讀取 CoinGecko 的方式：
+
+```json
+"params": {
+  "url": "https://api.coingecko.com/api/v3/simple/price?ids={coins}&vs_currencies={currency}&include_24hr_change=true",
+  "vars": { "coins": "$settings.coins", "currency": "$settings.currency" },
+  "rows": { "from": "", "key": "id", "order": "coins" },
+  "fields": {
+    "price": { "path": "{currency}", "format": "number" },
+    "change": { "path": "{currency}_24h_change", "format": "signed-percent", "digits": 2 }
+  }
+}
+```
+
+* **`url`**：`{name}` 這些空位由 `vars` 填入，清單會以逗號連接，每個部分都會 URL 編碼。var 通常是一個設定。
+* **`rows`**：清單在哪裡（`from`，一個路徑，空字串代表最上層），可以是陣列，也可以是由物件組成的物件。物件的每個 key 會變成一列，key 放在 `key` 欄位（數字則變成 `value`）。`order` 讓各列依照某個 var 列出的順序排列。
+* **`fields`**：每一列用 `path` 取值（空位一樣由 `vars` 填入），並指定 `format`：`text`、`number`（`digits` 指定固定小數位數）、`compact`（185.8M）、`percent`、`signed`、`signed-percent`、`date` 或 `age`（3h）。每個欄位會提供用來顯示的 `<name>`，以及數值 `<name>Value`。有正負號的欄位還會加上 `<name>Arrow`（▲ ▼，四捨五入後為零時是 –）和 `<name>Color`，上漲是綠色（`"up": "red"` 改成紅色），給表格欄位的 `colorFrom` 使用。
+* **`values`**：同上，用於回應最上層的單一值（`base`、`date`）。
+
+## 警示
+
+房間可在數值越過門檻時發出通知。在數值回到門檻內之前僅通知一次，勿擾模式下則不會通知：
+
+```json
+"alerts": [
+  { "rows": "c.rows", "field": "changeValue", "beyond": "$settings.move", "text": "₿ {id} {changeArrow} {change}", "id": "{id}-{changeArrow}" }
+]
+```
+
+`rows` 和 `field` 監看每一列，`value` 則監看單一數字。`above`、`below` 或 `beyond`（兩個方向都算）是門檻：一個數字或一個設定，設定值為 `0` 時關閉警示（直接寫在 manifest 裡的 `0` 就只是零）。`text` 和 `id` 是由該列填入的範本，`id` 決定哪些算是同一個警示。
+
+## 元件
+
+卡片有 `title`、可選的 `meta`、`badge`（meta 前面的幾個字，顏色由路徑 `badgeTone` 決定）和 `when`（只在該路徑有資料時顯示卡片），以及 `body`：一個元件，或最多 6 個元件的清單，還可以加上 [`desktop`](#桌面版的卡片) body。
+
+| 元件 | 欄位 |
+| --- | --- |
+| `list` | `items`（指向清單的路徑）、`title`，以及可選的 `mark`（標題前的短欄位，例如 Lo-fi 的 ♫）、`tag`、`preview`、`copy`（⧉）、`share`（⇪）、`act`（每列一個按鈕：`label`、`action`、`field`）、`max`、`empty` |
+| `table` | `items`、`columns`（每欄一個 `field`，以及可選的 `label`、`width`、`grow`、`right`、`color` 或 `colorFrom`）、`drop`（每列一個 ✕，將該列從清單設定中移除：`setting`、`field`）、`pick`（按下的列會依 `field` 存進字串 `setting`，並顯示在路徑 `as`，例如 Weather 的城市選 `wx.first`）、`max`、`empty` |
+| `tiles` | `tiles`：最多 6 格，每格一個 `value` 和 `sub` 範本 |
+| `meter` | `label`、`value`（指向百分比的路徑）、`right`、`color` |
+| `text` | `text`，一個範本。所有空位都是空的那一行會被省略。 |
+| `buttons` | `buttons`：最多 8 個，每個都有 `label` 和它的 provider 的一個 `action` |
+
+表格欄位寬 `width` 格（未設定時是 12）。標記 `grow` 的欄位會佔用剩下的空間，沒有的話就是最後一個沒有 `width` 的欄位。
+
+路徑以點號逐層存取 provider 的資料，以 provider 的 `id` 開頭：`feeds.items`、`wx.first.name`。範本以大括號嵌入路徑：`"{feeds.count} posts"`。`keys` 將房間中輸入的單一按鍵對應至動作：`{ "p": "pause" }`。
+
+## 桌面版的卡片
+
+卡片的 `desktop` 是桌面版 App 用來取代 `body` 的內容。終端機仍然使用 `body`。它接受上面的元件，以及下面這些只在桌面版上畫的元件：
+
+| 元件 | 欄位 |
+| --- | --- |
+| `stat` | `value`（路徑）、`right`、`color`：用大字顯示的數字 |
+| `bar` | `value`（百分比）、`color` |
+| `chart` | `values`（數字清單）、`values2`、`color`、`color2`、`max`、`caption` |
+| `grid` | `items`、`title`，以及可選的 `sub`、`value`、`change`、`colorFrom`、`line`、`icon`、`note`、`across`、`pick`、`pickTitle`、`drop`、`hint`、`empty`：將項目以方格呈現 |
+| `forecast` | `values`（跨越各小時的曲線）、`bars`、`marks`、`caption`、`color`、`color2` |
+| `strip` | `items`、`title`，以及可選的 `icon`、`value`、`sub`、`note`、`lit`：將項目以直欄呈現，`lit` 那一欄加上外框 |
+| `sun` | `rise`、`set`、`value`（一天中的 0 到 100）、`sub`、`note`：一道有太陽在上面的弧線 |
+| `media` | `title`、`sub`、`progress`、`elapsed`、`total`、`live`、`playing`、`empty`：正在播放的內容 |
+
+在桌面版上，`list` 還接受更多欄位：`code`（將 preview 顯示為程式碼區塊）、`score`（以 Hacker News 的樣式顯示文章）、`group`（依每個值分組並加上小標籤）、`open`（可開啟的連結）、搭配 `pause` 的 `lit`（正在播放的那一列），以及 `remove`（執行某個動作的 ✕）。`buttons` 接受 `split` 和 `level`，在按鈕之間顯示數值（"− 60% +"）。[`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms) 中的 Weather、Lo-fi、Tech News、Stocks、Monitor 和 Snippets 房間皆有 `desktop` body 可供參考。
+
+## 桌面版的橫條
+
+在終端機裡，橫條就是 `band` 那一行。在桌面版 App 裡，它可以是一排膠囊，每個膠囊是一張小圖加上幾個字，滑鼠移過去會出現卡片。以下是 App 畫出的每個房間的橫條（數字僅為示意，滑鼠移至膠囊上即可將其點亮）：
+
+<BandGallery />
+
+`pills` 最多列出 6 個：
+
+```json
+"pills": [
+  { "draw": { "type": "icon", "icon": "chip" }, "colorFrom": "sys.cpu.tone", "value": "{sys.cpu.pct}%", "tip": ["CPU {sys.cpu.pct}%", "{sys.cpu.meta}"] },
+  { "each": "q.quotes", "max": 4, "draw": { "type": "area", "value": "it.line" }, "colorFrom": "it.color", "label": "{it.symbol}", "value": "{it.arrow}{it.pctText}" }
+]
+```
+
+* **文字**：`label`（暗色，在 value 前面）、`value`（粗體）、`msg`（較長的文字，橫條太窄時會讓出空間）、`tag` 和 `sub`（暗色，在後面）。每個都是範本，所有空位都是空的就會被省略。
+* **`draw`**：squad-chat 內建的其中一種小圖，以及數字的來源（`value`，一個路徑）。`area` 和 `bars` 接受數字清單，`orbit`、`drop` 和 `progress` 接受百分比，`battery` 接受百分比並用 `flag` 表示充電中，`thermometer` 接受攝氏溫度，`weather` 接受 `open-meteo` 的圖示，`equalizer` 用 `flag` 表示播放中，`icon` 是 `branch`、`pr`、`stack`、`flame`、`chip`、`net`、`spark` 或 `clock` 其中之一，`dot` 則什麼都不用。
+* **顏色**：`color`，或 `colorFrom`，指向資料所選顏色名稱的路徑（provider 會為此提供色調，例如 `sys.cpu.tone`）。當膠囊的顏色是 `amber`、`red`、`rose` 或 `leaf` 時，value 會套用該顏色。
+* **`when`** 只在該路徑有資料時顯示膠囊。**`each`** 對清單的前 `max` 個項目（最多 6 個）重複這個膠囊，路徑中用 `it` 取得每個項目。
+* **`tip`**：滑鼠移過去時卡片的內容，最多 6 行，第一行使用膠囊的顏色。
+
+沒有 `pills` 的房間，在桌面版的膠囊裡也會顯示它的 `band` 那一行。
+
+## 放上商店
+
+1. 在 [squad-chat](https://github.com/chrisluo5311/squad-chat) 的 fork 裡，加入 `rooms/<id>/room.json`。
+2. 執行 `node rooms/build-index.mjs`。此指令會以與 bridge 相同的方式檢查房間，並將其加入 `rooms/index.json`。
+3. 開一個 pull request。CI 會執行同樣的檢查，review 時會看房間連線至哪些地方。merge 之後，`/chat store` 就會列出它。

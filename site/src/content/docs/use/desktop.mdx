@@ -1,38 +1,38 @@
 ---
 title: Desktop app
-description: How squad-chat looks in the Claude Code desktop app, drawn with the app's own pieces.
+description: How squad-chat appears in the Claude Code desktop app, rendered with the app's native components.
 ---
 
 import BandGallery from "../../../components/BandGallery.astro";
 
-In the Claude Code desktop app (2.1.292 or newer), the chat and every room are drawn with the app's own pieces: drawings, rounded pills and its buttons, in place of the terminal's glyphs. Everything works the same, and so do the commands.
+In the Claude Code desktop app (2.1.292 or newer), the chat and every room are rendered with the app's native components: drawings, rounded pills and buttons, in place of the terminal's glyphs. All features and commands work the same way.
 
 ## The header
 
-- **Room icons** for the built-in rooms. **+** lists the ones without a tab and adds one.
-- **Your chats** on a line of their own. **＋ join** asks for a room's name, then its passcode.
+- **Room icons** for the built-in rooms. **+** lists the rooms without a tab and adds the one you select.
+- **Your chats** on a separate line. **＋ join** prompts for a room's name, then its passcode.
 
 ## Chat
 
-Bubbles like a phone's, yours on the right, friends as chips. The chat keeps its height and scrolls on its own: **▲** shows older messages, **↓ N newer** goes back down.
+Message bubbles similar to a phone's, with yours on the right and other members shown as chips. The chat keeps a fixed height and scrolls independently: **▲** shows older messages, **↓ N newer** returns to the latest messages.
 
 ## The band
 
-With the pane closed, the line above the prompt is a capsule of small drawings, one per figure, with a card on hover. **‹** and **›** switch rooms, as `/chat band <room>` does. Each room draws its own (the figures here are made up):
+With the pane closed, the line above the prompt is a capsule of small drawings, one per figure, with a card shown on hover. **‹** and **›** switch rooms, as `/chat band <room>` does. Each room renders its own (the figures shown are illustrative):
 
 <BandGallery />
 
 ## Rooms
 
-Each room has a body made for the app. A few of the differences:
+Each room has a layout designed for the app. Notable differences:
 
 | Room | On the desktop |
 | --- | --- |
 | Usage | Spend as three tiles, subagent counts set large |
 | Git | A commit graph like Fork's, links that open |
 | Agents | Each session on one line, a ring spinning while it works |
-| Pet | A vector Clawd that moves, and strolls by the input box |
+| Pet | An animated vector Clawd that also walks beside the input box |
 | Weather | A tile per city, a line for 24 hours, the sun's arc |
 | Snippets | Code blocks with Copy, Share and Delete |
 
-[Built-in rooms](/squad-chat/use/built-in-rooms/) has a picture of each.
+See [Built-in rooms](/squad-chat/use/built-in-rooms/) for a screenshot of each.

@@ -1,0 +1,156 @@
+---
+title: 內建房間
+description: 位於聊天室之前的 Usage、Git、Agents、Focus、Habits、Toolbox、Clipboard、Pet、Snippets、Monitor、Weather、Tech News、Stocks 和 Lo-fi 分頁。
+---
+
+這些分頁位於聊天室之前，不需要伺服器，也不需要登入。除非主動分享，其中的內容皆不會傳送至聊天室。
+
+| 房間 | 顯示 | 分頁 |
+| --- | --- | --- |
+| [◔ Usage](#-usage) | Context、速率限制、花費、工具耗時 | 預設開啟 |
+| [⎇ Git](#-git) | 分支、其 PR 與檢查、Actions | 預設開啟 |
+| [⟡ Agents](#-agents) | 每個 Claude Code 工作階段及其 subagent | 預設開啟 |
+| [◷ Focus](#-focus) | 附連續紀錄的番茄鐘 | 預設開啟 |
+| [✓ Habits](#-habits) | 每日習慣，各自有連續紀錄 | 預設開啟 |
+| [⚒ Toolbox](#-toolbox) | Base64、URL、JWT、UUID、雜湊、Unix 時間、cron、JSON 等 | 預設開啟 |
+| [✿ Pet](#-pet) | Clawd，隨工作階段活動 | 預設開啟 |
+| [⌘ Snippets](#-snippets) | 常用的程式碼，一鍵複製 | 預設開啟 |
+| [▦ Monitor](#-monitor) | CPU、記憶體、網路、電池 | 預設開啟 |
+| [⧉ Clipboard](#-clipboard) | 最近複製的內容 | `/chat rooms +clipboard` |
+| [☀ Weather](#-weather) | 現在、24 小時和一週天氣 | `/chat rooms +weather` |
+| [✦ Tech News](#-tech-news) | Hacker News 和科技新聞 feed | `/chat rooms +news` |
+| [$ Stocks](#-stocks) | 台股和美股報價 | `/chat rooms +stock` |
+| [♫ Lo-fi](#-lo-fi) | 工作時播放的音樂 | `/chat rooms +lofi` |
+
+點選分頁即可開啟，或使用 `/chat <room>`（`/chat usage`、`/chat stock`）。最後五個房間會連線至網路或讀取剪貼簿，因此需手動加入。在桌面版 App 上，亦可透過標頭的 **+** 加入。
+
+## ◔ Usage
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/usage.png" alt="Usage 房間：context 以及 5 小時和 7 天的量表、花費和它的圖表與快取命中、每個工具的 p50 和 p95，以及一個 Explore subagent。" /></figure>
+
+即時顯示此工作階段使用 Claude 的情形。
+
+- **Context、5 小時、7 天**：各自的使用量，以及重置時間。
+- **花費**：費用、每小時的速率、token 和快取。
+- **Requests**：以地層的形式呈現 context。每次對模型的請求是一欄，每個進入對話的內容（Claude 讀取的檔案、較長的回答）自該處起形成一層，藉此可看出哪些內容持續佔用 context。最下方是每次請求皆須攜帶的固定開銷：system prompt、工具、MCP 工具和記憶。下方另有幾則簡要提示，例如固定開銷佔一次請求多少，以及下一次請求會送出多少。**⧉ Copy** 將卡片以文字形式複製至剪貼簿，**⇪ Share** 可在確認後分享至聊天室。
+- **工具和 subagent**：每個工具的 p50、p95 和失敗次數，以及各 subagent 的工作內容。
+
+## ⎇ Git
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/git.png" alt="Git 房間：分支和它的變更、這個分支的 pull request、其他開啟中的 pull request、最近的 Actions 執行，以及 issue 和警示。" /></figure>
+
+透過 [`gh` CLI](https://cli.github.com) 顯示您的分支在 GitHub 上的狀態。
+
+- **分支**：領先與落後的 commit 數、變更的檔案，桌面版另提供 commit 圖。
+- **這個 PR**：執行中的檢查、review、是否可以 merge。
+- 檢查失敗或通過，或收到新的 review 時會**發出通知**。`r` 可重新整理。
+
+## ⟡ Agents
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/agents.png" alt="Agents 房間：這台電腦上的工作階段和它們的 subagent 樹狀圖，以及工具呼叫的即時動態。" /></figure>
+
+本機上的每個 Claude Code 工作階段。
+
+- **工作階段**：資料夾、分支、模型，以及各自目前的工作。
+- **Subagent** 以樹狀結構顯示於啟動它的工作階段之下。
+- 所有工作階段工具呼叫的**即時動態**。
+
+## ◷ Focus
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/focus.png" alt="Focus 房間：一輪 50 分鐘的計時正在進行，有暫停、休息和重設，以及時間長度和連續紀錄。" /></figure>
+
+番茄鐘。
+
+- **▶ Start**、**⏸**、**⏭** 和 **↺**，每段結束時會播放提示音。輸入 `50 10`（或 `/focus 50 10`）即可設定時間長度。
+- **連續紀錄**：以 GitHub 的樣式標示完成番茄鐘的日期。
+- 計時期間，狀態列會顯示 `🍅 18:42`。
+
+## ✓ Habits
+
+每日維持的習慣，最多 12 個。
+
+- **新增習慣**：於房間的輸入框輸入名稱並按 **add**：`Read 30 min`，或 `Water x8` 代表每日 8 次。`remove Run`、`rename Read -> Read 20 min` 和 `undo Water` 用於修改，`/habit` 可在提示列完成上述所有操作。
+- **✓** 將今日的習慣標記為完成（再次點選即取消），**+1** 和 **−** 用於一天需執行多次的習慣。卡片上的 **✕** 會刪除該習慣及其連續紀錄。
+- 每個習慣都有**連續紀錄**，以 GitHub 的樣式呈現：顯示月份與週一、三、五，今天以圓圈標示，計次型習慣以顏色深淺表示次數。
+- **橫條**顯示今日已完成的數量、目前最長的連續紀錄，以及尚未完成的項目。位於其他房間時，分頁上會顯示剩餘數量。
+
+## ⚒ Toolbox
+
+開發者常用的十六項小工具，參考 [DevToys](https://devtoys.app/)，分成四組：
+
+| 分組 | 工具 |
+| --- | --- |
+| Encode | Base64、URL、HTML、JWT（解讀，不驗證簽章） |
+| Generate | UUID（v4 或 v7）、ULID、Hash（MD5、SHA-1、SHA-256、SHA-512）、Password、Lorem |
+| Convert | Time（Unix 秒或毫秒、日期）、Base（十、十六、八、二進位）、Cron（白話解讀、接下來的執行時間）、JSON |
+| Text | Escape、Count、Case |
+
+- **從選單選擇工具**，再於房間的輸入框輸入要處理的內容。產生器的選項也於此輸入：`5 v7` 產生五個 UUID v7，`24 nosym` 產生一組密碼。僅輸入工具名稱則會切換至該工具。
+- **⧉** 複製單一結果，**⧉ all** 一次複製所有 UUID，**⧉ paste** 將剪貼簿內容讀入工具。密碼會保持遮蔽，直到按下 **show**。
+- **`/tool`** 從提示列執行：`/tool hash hello`、`/tool time 1739000000`、`/tool cron */15 9-18 * * 1-5`。
+- **橫條**顯示最後一個結果的縮短版本（密碼會遮蔽）。啟用 Clipboard 房間時，橫條會顯示剛複製的 JWT 及其剩餘有效時間，或將 Unix 時間轉換為日期，而 JWT 有效時間不足 10 分鐘時，分頁會顯示 **!**。
+- **不保留任何資料**：輸入的內容與產生的結果僅存在於工作階段的記憶體中，此房間也不提供 Share。
+
+## ✿ Pet
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/pet.png" alt="Pet 房間：戴著耳機的 Clawd、相處時間、今天的專注輪數、心情、紀錄和心情選擇器。" /></figure>
+
+Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時在打字、完成一輪番茄鐘時歡呼、閒置一段時間後入睡。
+
+- **今日的相處時間**，以及會升級的**羈絆**。
+- **Lately**：Clawd 觀察到的事件（不包含任何人撰寫的內容）。
+- **在輸入框旁**：Clawd 可以散步、走走停停、坐著，或不顯示。
+
+## ⌘ Snippets
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/snippet.png" alt="Snippets 房間：三個已存的 snippet，各有複製和分享。" /></figure>
+
+經常重複使用的程式碼。
+
+- `/snippet add` 儲存您選取的文字，或 Claude 最後一個程式碼區塊。`/snippet add <text>` 儲存文字。
+- **⧉** 複製，**⇪** 分享至聊天室。
+- 存放於 `~/.config/squad-chat/room-data/snippet/list.json`，僅限您本人讀取。
+
+## ▦ Monitor
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/monitor.png" alt="Monitor 房間：CPU 和負載與溫度、記憶體和 swap、GPU 和功耗與風扇，以及網路圖表。" /></figure>
+
+即時顯示本機狀態，不需要 sudo：CPU、記憶體、GPU、網路、磁碟和電池。在 Mac 上，溫度和功耗需要 [macmon](https://github.com/vladkens/macmon)（`brew install macmon`）。溫度過高或容量將滿時會發出通知，可用 `/chat set monitor alerts off` 關閉。
+
+## ⧉ Clipboard
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/clipboard.png" alt="Clipboard 房間：四個複製過的項目，依時間由新至舊排列，其中一個 Supabase key 以遮蔽方式顯示。" /></figure>
+
+最近複製的 30 筆內容，可再次複製。僅存在於記憶體中，工作階段結束即清除。疑似 key 的內容會遮蔽顯示，且此房間的內容皆無法分享。
+
+## ☀ Weather
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/weather.png" alt="Weather 房間：台北現在的天氣、接下來 24 小時、這一週，以及日出和日落。" /></figure>
+
+來自 [Open-Meteo](https://open-meteo.com) 的城市天氣，不需要 key：現在、接下來 24 小時、這一週、日出和日落。在房間的輸入框輸入城市即可加入，✕ 可移除城市。`/chat set weather units imperial` 可切換單位。
+
+## ✦ Tech News
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/news.png" alt="Tech News 房間：Hacker News 文章和它們的分數與留言數，接著是各個 feed。" /></figure>
+
+[Hacker News](https://news.ycombinator.com) 和科技新聞 feed，依時間由新至舊排列。**⧉** 複製連結，**⇪** 分享。`/chat set news hn best` 可選擇列表。
+
+## $ Stocks
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/stock.png" alt="Stocks 房間：加權指數、2330、0050、S&P 500、Apple 和 NVIDIA，各自有漲跌和當日走勢。" /></figure>
+
+台股和美股的自選股清單，每檔皆附當日走勢線。可使用 `/chat set stock watchlist TAIEX, 2330, AAPL` 設定（最多 12 檔）。報價可能有所延遲，所有內容皆不構成投資建議。
+
+## ♫ Lo-fi
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="Lo-fi 房間：播放器和音量，以及電台。" /></figure>
+
+透過 [mpv](https://mpv.io) 和 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（`brew install mpv yt-dlp`）播放 Lofi Girl 和 SomaFM。在輸入框貼上連結或資料夾，即可加入自訂的音樂。`p` 播放或暫停，`n` 跳至下一首。按下播放前不會播放任何內容。
+
+## 更多房間、分享、隱藏
+
+- **[房間商店](/squad-chat/zh-tw/rooms/store/)**：`/chat store` 列出社群撰寫的房間，`/chat install <id>` 可安裝房間。房間僅是一個 JSON 檔，因此安裝時不會執行任何程式碼。
+- **分享快照**：房間下方的 **⇪ Share**，或 `/chat-share usage #room`，預覽後以卡片形式送出。
+- **選擇顯示的分頁**：`/chat rooms usage,git`、`+clipboard`、`-snippet` 或 `none`。
+
+所有設定請參閱[指令](/squad-chat/zh-tw/use/commands/)。各房間讀取的資料，請參閱[隱私與安全](/squad-chat/zh-tw/reference/privacy/#內建房間讀取的資料)。

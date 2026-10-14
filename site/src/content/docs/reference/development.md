@@ -3,9 +3,9 @@ title: Development
 description: Run squad-chat from a checkout, against a local Supabase, and run the tests.
 ---
 
-Want to help? [CONTRIBUTING.md](https://github.com/chrisluo5311/squad-chat/blob/main/CONTRIBUTING.md) covers setting up, the tests and how to send a pull request. [Architecture](/squad-chat/reference/architecture/) explains how the pieces fit, and is worth a read before a bigger change.
+Contributions are welcome. [CONTRIBUTING.md](https://github.com/chrisluo5311/squad-chat/blob/main/CONTRIBUTING.md) covers setting up, the tests and how to send a pull request. [Architecture](/squad-chat/reference/architecture/) explains how the components fit together, and is recommended reading before a larger change.
 
-## You'll need
+## Requirements
 
 - [Claude Code](https://claude.com/claude-code) 2.1.292 or newer
 - Node.js 22 or newer
@@ -63,7 +63,7 @@ Sign-in emails land in the local mail UI at http://127.0.0.1:56424. To chat with
 
 ## This site
 
-The docs live in `site/src/content/docs/` as Markdown. To preview them:
+The docs live in `site/src/content/docs/` as Markdown, and their Traditional Chinese translations in `site/src/content/docs/zh-tw/`. To preview them:
 
 ```sh
 cd site
@@ -71,4 +71,4 @@ npm install
 npm run dev
 ```
 
-The GIFs and screenshots come from `docs/assets/` and `docs/screenshots/`, and the Architecture page from `docs/ARCHITECTURE.md`, so edit those in place. Pushing to `main` publishes the site to GitHub Pages.
+The GIFs and screenshots come from `docs/assets/` and `docs/screenshots/`, and the Architecture page from `docs/ARCHITECTURE.md`, so edit those files directly. Pushing to `main` publishes the site to GitHub Pages.

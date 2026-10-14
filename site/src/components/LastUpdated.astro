@@ -1,0 +1,22 @@
+---
+// Starlight's "Last updated", in English on the homepage in every locale (see Pagination.astro).
+import Default from "@astrojs/starlight/components/LastUpdated.astro";
+
+const { entry, lastUpdated } = Astro.locals.starlightRoute;
+const isHome = entry.id === "";
+---
+
+{
+  isHome ? (
+    lastUpdated && (
+      <p>
+        {Astro.locals.t("page.lastUpdated", { lng: "en" })}{" "}
+        <time datetime={lastUpdated.toISOString()}>
+          {lastUpdated.toLocaleDateString("en", { dateStyle: "medium", timeZone: "UTC" })}
+        </time>
+      </p>
+    )
+  ) : (
+    <Default />
+  )
+}
