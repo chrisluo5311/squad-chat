@@ -4,7 +4,7 @@ import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { state } from '../hooks/state.mjs'
 import { frameKey } from '../hooks/squad-chat.mjs'
-import { createHabits, addHabit, deleteHabit } from '../hooks/habits.mjs'
+import { createHabits, addHabit, deleteHabit, habitStreaks } from '../hooks/habits.mjs'
 import { toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, strata, contextTips } from '../hooks/metrics.mjs'
 
 const MIN = 60_000
@@ -154,4 +154,16 @@ test('Redraws while Claude works: a second at a time only for rooms that move by
   for (const view of ['habits', 'toolbox', 'clipboard', 'pet', 'usage']) expect(frameKey(view, at)).toBe(frameKey(view, at + 1_000))
   for (const view of ['focus', 'agents', 'git']) expect(frameKey(view, at)).not.toBe(frameKey(view, at + 1_000))
   expect(frameKey('habits', at)).not.toBe(frameKey('habits', at + MIN))   // a new day still shows
+})
+
+test('Habits: the streak running and the longest, a year back at most', () => {
+  const now = new Date(2026, 9, 14, 9).getTime()
+  const day = (n: number) => dayOf(new Date(2026, 9, 14 - n, 12).getTime())
+  const h = createHabits()
+  addHabit(h, 'Run')
+  // Yesterday and the two days before; five in a row before that; one too old to keep.
+  h.history.h1 = Object.fromEntries([1, 2, 3, 10, 11, 12, 13, 14, 400].map((n) => [day(n), 1]))
+  expect(habitStreaks(h, h.goals[0], now)).toEqual({ current: 3, best: 5 })
+  h.history.h1[day(0)] = 1
+  expect(habitStreaks(h, h.goals[0], now)).toEqual({ current: 4, best: 5 })
 })

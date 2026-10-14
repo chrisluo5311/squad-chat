@@ -9,7 +9,7 @@ import { theme } from "./theme.mjs";
 import { line, card, stackCards, cells } from "./widgets.mjs";
 import * as K from "./bandkit.mjs";
 import { draw, value, sub, msg } from "./bands.mjs";
-import { dayOf, daysBefore, dayAfter } from "./focus.mjs";
+import { dayOf, daysBefore } from "./focus.mjs";
 
 export const HABITS_META = { icon: "✓", label: "Habits", color: "#6FC2B5" };
 const TEAL = HABITS_META.color;
@@ -40,20 +40,29 @@ export function today(h, now) {
   return { done: h.goals.length - left.length, total: h.goals.length, left, day };
 }
 
+// The days kept, today first: back[n] is the day n days before today's.
+// Worked out once a day, not once a square and a streak each redraw.
+let keptFor = "", kept = [];
+function daysBack(now) {
+  const today = dayOf(now);
+  if (today !== keptFor) {
+    kept = Array.from({ length: KEEP_DAYS + 1 }, (_, n) => daysBefore(now, n));
+    keptFor = today;
+  }
+  return kept;
+}
+
 // Days in a row with the goal met, up to today (or yesterday, when today
 // isn't done yet), and the longest run kept.
 export function habitStreaks(h, g, now) {
-  const oldest = daysBefore(now, KEEP_DAYS);
-  const days = Object.keys(h.history[g.id] ?? {}).filter((day) => day >= oldest && doneOn(h, g, day)).sort();
-  const had = new Set(days);
-  const has = (n) => had.has(daysBefore(now, n));
+  const days = daysBack(now);
+  const met = (n) => n < days.length && doneOn(h, g, days[n]);
   let current = 0;
-  for (let n = has(0) ? 0 : 1; has(n); n++) current++;
-  let best = 0, run = 0, prev = "";
-  for (const day of days) {
-    run = prev && dayAfter(prev) === day ? run + 1 : 1;
+  for (let n = met(0) ? 0 : 1; met(n); n++) current++;
+  let best = 0, run = 0;
+  for (let n = days.length - 1; n >= 0; n--) {
+    run = met(n) ? run + 1 : 0;
     best = Math.max(best, run);
-    prev = day;
   }
   return { current, best };
 }
@@ -141,7 +150,7 @@ export function markHabit(h, id, dir, now) {
   const n = Math.min(g.target, Math.max(0, (days[day] ?? 0) + dir));
   if (n) days[day] = n;
   else delete days[day];
-  const oldest = daysBefore(now, KEEP_DAYS);
+  const oldest = daysBack(now).at(-1);
   for (const d of Object.keys(days)) if (d < oldest) delete days[d];
   return g;
 }
@@ -252,12 +261,13 @@ const flame = (n) => `🔥 ${n} day${n === 1 ? "" : "s"}`;
 // count, or null for the days after today.
 function grid(h, g, now, weeks) {
   const dow = new Date(now).getDay();
+  const days = daysBack(now);
   const cols = [];
   for (let wk = weeks - 1; wk >= 0; wk--) {
     const col = [];
     for (let d = 0; d < 7; d++) {
       const back = wk * 7 + (dow - d);
-      col.push(back < 0 ? null : count(h, g, daysBefore(now, back)));
+      col.push(back < 0 ? null : count(h, g, days[back]));
     }
     cols.push(col);
   }
