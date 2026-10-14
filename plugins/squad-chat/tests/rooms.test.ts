@@ -3,6 +3,10 @@ import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { state } from '../hooks/state.mjs'
+import { frameKey } from '../hooks/squad-chat.mjs'
+import { createToolbox, rerun, pickTool, toolWords, MAX_INPUT } from '../hooks/toolbox.mjs'
+import { createHabits, addHabit, deleteHabit, habitStreaks } from '../hooks/habits.mjs'
+import { toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, strata, contextTips } from '../hooks/metrics.mjs'
 
 const MIN = 60_000
 
@@ -72,4 +76,161 @@ test('band: ‹ › take room from the sections beside Open', () => {
     if (cycle < plain) fewer++
   }
   expect(fewer).toBeGreaterThan(0)
+})
+
+test('Requests strata: in a long session the earlier conversation is bedrock, so what comes after shows', () => {
+  // Watching starts hours in: 79k of overhead and 310k of conversation are already there.
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'test the card')
+  const a = stepStarted(u, { turnId: 't', index: 0, at: 0 })
+  stepToolUse(a, 'Read'); stepToolUse(a, 'Bash')
+  stepEnded(u, a, usage(389_000, 400), 'tool_use')
+  stepToolResult(u, 'Read', 10_000, 'metrics.mjs'); stepToolResult(u, 'Bash', 200, 'git log --oneline -5')
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 1, at: 0 }), usage(392_000, 900), 'end_turn')
+  applyOverhead(u, { categories: [{ name: 'System tools', tokens: 32_000, kind: 'used' }, { name: 'MCP tools', tokens: 47_000, kind: 'used' }, { name: 'Messages', tokens: 310_000, kind: 'used' }] })
+  u.context = { tokens: 392_900, window: 1_000_000, percent: 39 } as any
+
+  const st = strata(u)!
+  expect(st.bedrock).toBe(79_000)
+  expect(st.earlier).toBeGreaterThan(309_000)                       // the history from before #1, kept out of the scale
+  expect(Math.round(st.bedrock + st.earlier + st.cols.at(-1).above)).toBe(392_900)   // the sum comes to the context: the last input, 392k, and its 900 out
+  expect(st.cols.map((c: any) => c.label)).toEqual(['first', 'older', 'next'])
+  expect(st.cols.at(-1).above).toBeLessThan(5_000)                  // what came after: the Read and two answers
+  const read = st.layers.find((l: any) => l.name === 'Read metrics.mjs')!
+  expect(read.sizes.at(-1)).toBeGreaterThan(2_000)                  // big enough to see against the rest
+  expect(st.layers.find((l: any) => l.name === "Claude's Read metrics.mjs and 1 more")).toBeDefined()   // named by what it called
+
+  const tips = contextTips(u).map((t: any) => t.parts.map((p: any) => p[0]).join(''))
+  expect(tips[1]).toMatch(/^Read metrics\.mjs \(2\.\dk\): read once, resent 1 time so far \(2\.\dk sent in all\)\.$/)
+  expect(tips[2]).toMatch(/^The next request sends 39\dk, 39% of the window\.$/)
+})
+
+test('a Bash summary skips a leading cd, so it names the command that runs', () => {
+  expect(toolSummary('Bash', { command: 'cd /Users/me/程式/squad-chat/plugins && grep -n "step" hooks/*.mjs' })).toBe('grep -n "step" hooks/*.mjs')
+  expect(toolSummary('Bash', { command: 'cd "/tmp/a b"; ls' })).toBe('ls')
+  expect(toolSummary('Bash', { command: 'npm test' })).toBe('npm test')
+})
+
+test('Requests tip: a file read once is said to be resent, never read again', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  const step = (input: number, output: number, tools: string[] = []) => {
+    const s = stepStarted(u, { turnId: 't', index: 0, at: 0 })
+    tools.forEach((t) => stepToolUse(s, t))
+    stepEnded(u, s, usage(input, output), tools.length ? 'tool_use' : 'end_turn')
+  }
+  stepPrompt(u, 'look around')
+  step(100_000, 100, ['Read'])
+  stepToolResult(u, 'Read', 16_800, 'habits.mjs')   // about 4.2k
+  step(104_300, 100, ['Bash'])
+  stepToolResult(u, 'Bash', 1_600, 'git log')
+  step(104_800, 100, ['Read'])
+  stepToolResult(u, 'Read', 6_000, 'README.md')
+  step(106_400, 300)
+  const tips = contextTips(u).map((t: any) => t.parts.map((p: any) => p[0]).join(''))
+  expect(tips.find((t: string) => t.startsWith('Read habits.mjs'))).toBe('Read habits.mjs (4.2k): read once, resent 3 times so far (13k sent in all).')
+})
+
+test('Habits: ✕ deletes the habit pressed, even one named with a number', () => {
+  const h = createHabits()
+  addHabit(h, 'Read')
+  addHabit(h, 'Run')
+  addHabit(h, '2')
+  const done = deleteHabit(h, 'h3')
+  expect(done?.said).toBe('Removed 2 and its streak.')
+  expect(h.goals.map((g: any) => g.name)).toEqual(['Read', 'Run'])
+})
+
+test('Habits: "x8" after a space counts the times a day; an x inside a word is the name', () => {
+  const h = createHabits()
+  for (const t of ['Water x8', 'Tea×3', 'Stretch *2', 'Inbox 0', 'Relax 5', 'Fix 2']) addHabit(h, t)
+  expect(h.goals.map((g: any) => [g.name, g.target])).toEqual([
+    ['Water', 8], ['Tea', 3], ['Stretch', 2], ['Inbox 0', 1], ['Relax 5', 1], ['Fix 2', 1],
+  ])
+})
+
+test('Redraws while Claude works: a second at a time only for rooms that move by the second', () => {
+  const at = 10 * MIN + 5_000
+  for (const view of ['habits', 'toolbox', 'clipboard', 'pet', 'usage']) expect(frameKey(view, at)).toBe(frameKey(view, at + 1_000))
+  for (const view of ['focus', 'agents', 'git']) expect(frameKey(view, at)).not.toBe(frameKey(view, at + 1_000))
+  expect(frameKey('habits', at)).not.toBe(frameKey('habits', at + MIN))   // a new day still shows
+})
+
+test('Habits: the streak running and the longest, a year back at most', () => {
+  const now = new Date(2026, 9, 14, 9).getTime()
+  const day = (n: number) => dayOf(new Date(2026, 9, 14 - n, 12).getTime())
+  const h = createHabits()
+  addHabit(h, 'Run')
+  // Yesterday and the two days before; five in a row before that; one too old to keep.
+  h.history.h1 = Object.fromEntries([1, 2, 3, 10, 11, 12, 13, 14, 400].map((n) => [day(n), 1]))
+  expect(habitStreaks(h, h.goals[0], now)).toEqual({ current: 3, best: 5 })
+  h.history.h1[day(0)] = 1
+  expect(habitStreaks(h, h.goals[0], now)).toEqual({ current: 4, best: 5 })
+})
+
+test('Toolbox: a run that ends after a newer one began is dropped', async () => {
+  const tb = createToolbox()
+  tb.tool = 'hash'
+  tb.input = 'x'.repeat(200_000)
+  const hashing = rerun(tb, Date.now())           // the digest takes a while
+  await pickTool(tb, 'uuid', Date.now())          // UUID picked before it's done
+  await hashing
+  expect(tb.tool).toBe('uuid')
+  expect(tb.out.mode).toBe('v4 ×5')
+  expect(tb.out.rows.every((r: any) => r.label === '')).toBe(true)
+})
+
+test('Requests: a request that fails hands what it carried to the retry, measured from the last that came back', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'look around')
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), usage(100_000, 100), 'tool_use')
+  stepToolResult(u, 'Read', 16_000, 'habits.mjs')
+  const broke = stepStarted(u, { turnId: 't', index: 1, at: 0 })
+  stepEnded(u, broke, null, null)                                    // the stream broke
+  expect(broke.status).toBe('failed')
+  const retry = stepStarted(u, { turnId: 't', index: 1, at: 0 })
+  expect(retry.added.map((p: any) => p.label)).toEqual(['Read habits.mjs'])
+  stepEnded(u, retry, usage(104_100, 100), 'end_turn')
+  expect(retry.grown).toBe(4_000)
+  expect(retry.added[0].tokens).toBe(4_000)
+})
+
+test('Toolbox: what a tool runs on is cut to its limit', async () => {
+  const tb = createToolbox()
+  await toolWords(tb, 'count', Date.now(), { typed: true })
+  await toolWords(tb, 'a '.repeat(MAX_INPUT), Date.now(), { typed: true })
+  expect(tb.input.length).toBe(MAX_INPUT)
+  expect(tb.out.rows[0].text).toBe(String(MAX_INPUT))
+})
+
+test('Requests strata: tool calls are named by the one that wrote the most, once its result is back', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'fix it')
+  const a = stepStarted(u, { turnId: 't', index: 0, at: 0 })
+  stepToolUse(a, 'Bash'); stepToolUse(a, 'Edit')
+  stepEnded(u, a, usage(100_000, 6_000), 'tool_use')
+  const name = () => strata(u).layers.find((l: any) => l.kind === 'answer').name
+  expect(name()).toBe("Claude's Edit and 1 more")                      // called, not yet back: the tool alone
+  stepToolResult(u, 'Bash', 200, 'npm test')
+  stepToolResult(u, 'Edit', 100, 'hooks/pane.ts')
+  expect(name()).toBe("Claude's Edit hooks/pane.ts and 1 more")         // the Edit carried its content, so it names the request
+})
+
+test('Requests strata: worked out once a change, then the same for every reader', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'look around')
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), usage(100_000, 100), 'end_turn')
+  const st = strata(u)
+  expect(strata(u)).toBe(st)
+  stepToolResult(u, 'Read', 4_000, 'a.mjs')                    // waiting for the next request: nothing drawn changes
+  expect(strata(u)).toBe(st)
+  const next = stepStarted(u, { turnId: 't', index: 1, at: 0 })
+  expect(strata(u)).toEqual(st)                                 // a request on its way isn't drawn either
+  stepEnded(u, next, usage(101_100, 100), 'end_turn')
+  expect(strata(u)).not.toBe(st)
+  expect(strata(u).sent).toBe(2)
 })

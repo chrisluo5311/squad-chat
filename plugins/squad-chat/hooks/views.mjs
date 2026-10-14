@@ -573,9 +573,18 @@ function typingLine(els, text) {
   return Box({ key: "hints", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, italic: true, wrap: "truncate-end", children: `${glyph.typing} ${text}` })] });
 }
 
-function notice(els) {
-  const { Text } = els;
-  return state.notice ? Text({ key: "notice", color: theme.warn, wrap: "wrap", children: state.notice }) : null;
+// The notice, and beside it the button that takes back what it says was
+// done (a habit deleted: Cancel), while that can still be taken back.
+function notice(els, handlers) {
+  const { Box, Text, Button } = els;
+  if (!state.notice) return null;
+  const text = Text({ key: "notice", color: theme.warn, wrap: "wrap", children: state.notice });
+  const undo = state.undo;
+  if (!handlers || !undo || undo.text !== state.notice || Date.now() >= undo.until) return text;
+  return Box({ key: "notice-row", flexDirection: "row", alignItems: "center", columnGap: 1, children: [
+    Box({ key: "t", flexShrink: 1, minWidth: 0, children: [text] }),
+    Button({ key: "notice-undo", label: undo.label, onPress: () => handlers.onUndo?.() }),
+  ] });
 }
 
 // What the input box is for right now.
@@ -584,6 +593,8 @@ const SYS_INPUT = {
   git: { placeholder: "r to refresh · /share git [#room] · /help", label: "run" },
   agents: { placeholder: "/usage · /git · /share agents [#room] · /help", label: "run" },
   focus: { placeholder: "start · pause · skip · reset · 50 10 sets the minutes", label: "run" },
+  habits: { placeholder: "a new habit: Read 30 min, or Water x8 for 8 times a day", label: "add" },
+  toolbox: { placeholder: "text for the tool, a tool's name, or /tool hash hello", label: "run" },
   clipboard: { placeholder: "clear · /help", label: "run" },
   pet: { placeholder: "auto, or a mood: vibe typing wave cheer sleepy …", label: "run" },
 };
@@ -670,7 +681,7 @@ function dockView(els, props, handlers) {
   }
 
   if (view !== "chat") {
-    const n = notice(els);
+    const n = notice(els, handlers);
     const pending = shareCard(els, handlers, width);
     const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
     // The desktop scrolls the pane itself (its own bar, the wheel and the
@@ -750,6 +761,8 @@ const SYS_HINTS = {
   git: "↻ or r refreshes · ⧉ copies a link",
   agents: "▾ folds a session · all ▾ filters the feed",
   focus: "a chime when focus or a break ends",
+  habits: "✓ checks off today · ✕ deletes · rename <old> -> <new>",
+  toolbox: "⧉ copies · kept in memory, never shared",
   clipboard: "⧉ copies again · kept in memory, never shared",
   pet: "Clawd follows what goes on, or keeps one mood",
 };
@@ -767,25 +780,24 @@ function sysHints(els, view, handlers) {
   ].filter(Boolean) });
 }
 
-// The rooms a waiting snippet can go to, the chosen one lit. Rooms that
-// don't fit the width are left out, except the chosen one.
-function shareTargets(els, p, width, handlers) {
+// Where a waiting snippet goes: "‹ #room ›", stepping through your rooms
+// (wrapping at either end), then its place in the list and who's there.
+function shareTargets(els, p, handlers) {
   const { Box, Text, Button } = els;
-  if (state.rooms.length < 2) return null;
-  let left = width - 4 - 4;   // inside the card, after "to: "
-  const picks = [];
-  for (const r of [...state.rooms].sort((a, b) => (b.id === p.room) - (a.id === p.room))) {
-    const w = r.slug.length + 2;
-    if (w > left && r.id !== p.room) continue;
-    left -= w;
-    picks.push(r);
-  }
-  picks.sort((a, b) => state.rooms.indexOf(a) - state.rooms.indexOf(b));
-  return Box({ key: "to", flexDirection: "row", children: [
-    Text({ key: "label", color: theme.muted, children: "to: " }),
-    ...picks.map((r) => Box({ key: `pick-${r.id}`, flexShrink: 0, children: [
-      Button({ key: `to-${r.id}`, plain: true, label: `#${r.slug} `, dimColor: r.id !== p.room, onPress: () => handlers.onShareTarget?.(r.id) }),
-    ] })),
+  const n = state.rooms.length;
+  if (n < 2) return null;
+  const i = Math.max(0, state.rooms.findIndex((r) => r.id === p.room));
+  const step = (d) => handlers.onShareTarget?.(state.rooms[(i + d + n) % n].id);
+  const here = (state.online.get(p.room) ?? []).filter((u) => u.user_id !== state.user?.id).length;
+  return Box({ key: "to", flexDirection: "row", alignItems: "center", gap: 1, children: [
+    Text({ key: "label", color: theme.muted, children: "to" }),
+    Box({ key: "stepper", flexDirection: "row", flexShrink: 0, children: [
+      Button({ key: "to-prev", plain: true, label: "‹", onPress: () => step(-1) }),
+      Text({ key: "room", bold: true, children: ` #${p.slug} ` }),
+      Button({ key: "to-next", plain: true, label: "›", onPress: () => step(1) }),
+    ] }),
+    Text({ key: "pos", color: theme.muted, wrap: "truncate-end", children: `${i + 1} / ${n} · ` }),
+    Text({ key: "here", color: here ? theme.online : theme.muted, wrap: "truncate-end", children: here ? `${here} here` : "just you" }),
   ] });
 }
 
@@ -795,7 +807,7 @@ function shareCard(els, handlers, width = 48) {
   const p = state.pendingShare;
   if (!p || Date.now() > p.until) return null;
   const { Box, Text, Button } = els;
-  const targets = shareTargets(els, p, width, handlers);
+  const targets = shareTargets(els, p, handlers);
   // A line of chat shows as it will read, a card with its title bar, other
   // snippets their first lines.
   let preview, rows;

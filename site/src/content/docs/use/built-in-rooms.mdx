@@ -1,9 +1,9 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Focus, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
 ---
 
-Tabs that sit before your chat rooms. They need no server and no sign-in, and nothing in them reaches a chat room unless you share it.
+These tabs appear before your chat rooms. They require no server and no sign-in, and nothing in them reaches a chat room unless you share it.
 
 | Room | Shows | Tab |
 | --- | --- | --- |
@@ -11,6 +11,8 @@ Tabs that sit before your chat rooms. They need no server and no sign-in, and no
 | [⎇ Git](#-git) | Your branch, its PR and checks, Actions | on |
 | [⟡ Agents](#-agents) | Every Claude Code session and its subagents | on |
 | [◷ Focus](#-focus) | A Pomodoro timer with a streak | on |
+| [✓ Habits](#-habits) | Daily habits, each with its streak | on |
+| [⚒ Toolbox](#-toolbox) | Base64, URL, JWT, UUID, hashes, Unix times, cron, JSON and more | on |
 | [✿ Pet](#-pet) | Clawd, moving along with your session | on |
 | [⌘ Snippets](#-snippets) | Code you reuse, one click from the clipboard | on |
 | [▦ Monitor](#-monitor) | CPU, memory, network, battery | on |
@@ -20,27 +22,28 @@ Tabs that sit before your chat rooms. They need no server and no sign-in, and no
 | [$ Stocks](#-stocks) | Taiwan and US quotes | `/chat rooms +stock` |
 | [♫ Lo-fi](#-lo-fi) | Music while you work | `/chat rooms +lofi` |
 
-Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last five reach the web or your clipboard, so they wait until you add them. On the desktop app, **+** in the header adds one too.
+Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last five access the network or your clipboard, so they must be added manually. In the desktop app, **+** in the header also adds one.
 
 ## ◔ Usage
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/usage.png" alt="The Usage room: context and the 5-hour and 7-day meters, spend with its chart and cache hits, each tool's p50 and p95, and an Explore subagent." /></figure>
 
-How this session uses Claude, live.
+Live figures on how this session uses Claude.
 
-- **Context, 5-hour, 7-day**: how full each is, and when it resets.
+- **Context, 5-hour, 7-day**: how much of each is used, and when it resets.
 - **Spend**: cost, the rate per hour, tokens and the cache.
-- **Tools and subagents**: each tool's p50, p95 and failures, and what each subagent does.
+- **Requests**: the context as strata. Each request to the model is a column, and each thing that came into the conversation (a file Claude read, a long answer) is a layer from then on, showing what continues to occupy the context. Under them is the fixed overhead every request carries: the system prompt, tools, MCP tools and memory. A few short tips follow, such as how much of a request that overhead is and what the next request will send. **⧉ Copy** puts the card on the clipboard as text, and **⇪ Share** posts it to a chat room after you review it.
+- **Tools and subagents**: each tool's p50, p95 and failures, and the work of each subagent.
 
 ## ⎇ Git
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/git.png" alt="The Git room: the branch and its changes, this branch's pull request, other open pull requests, the latest Actions runs, and issues and alerts." /></figure>
 
-Where your branch stands on GitHub, through the [`gh` CLI](https://cli.github.com).
+The status of your branch on GitHub, through the [`gh` CLI](https://cli.github.com).
 
-- **Branch**: ahead and behind, files changed, and a commit graph on the desktop.
-- **This PR**: checks as they run, reviews, whether it can merge.
-- **Toasts** when checks fail or pass, or a review comes in. `r` refreshes.
+- **Branch**: commits ahead and behind, files changed, and a commit graph on the desktop.
+- **This PR**: running checks, reviews, and whether it can be merged.
+- **Notifications** when checks fail or pass, or a review arrives. `r` refreshes.
 
 ## ⟡ Agents
 
@@ -48,7 +51,7 @@ Where your branch stands on GitHub, through the [`gh` CLI](https://cli.github.co
 
 Every Claude Code session on this computer.
 
-- **Sessions**: folder, branch, model, and what each is doing now.
+- **Sessions**: folder, branch, model, and the current activity of each.
 - **Subagents** as a tree under the session that started them.
 - **Live feed** of tool calls from all of them.
 
@@ -58,25 +61,51 @@ Every Claude Code session on this computer.
 
 A Pomodoro timer.
 
-- **▶ Start**, **⏸**, **⏭** and **↺**, with a chime at each end. Type `50 10` (or `/focus 50 10`) for your lengths.
-- **A streak** of the days you finished a round, drawn like GitHub's.
+- **▶ Start**, **⏸**, **⏭** and **↺**, with a chime at each end. Type `50 10` (or `/focus 50 10`) to set the durations.
+- **A streak** of the days on which you completed a round, in the style of GitHub's contribution graph.
 - `🍅 18:42` in the status line while it runs.
+
+## ✓ Habits
+
+Daily habits, up to 12.
+
+- **Add one** by typing it in the room's box and pressing **add**: `Read 30 min`, or `Water x8` for a habit done 8 times a day. `remove Run`, `rename Read -> Read 20 min` and `undo Water` modify them, and `/habit` provides all of this from the prompt.
+- **✓** checks a habit off for today (selecting it again undoes this), and **+1** and **−** count a habit done more than once a day. **✕** on a card deletes the habit and its streak.
+- **A streak** for each habit, in the style of GitHub's contribution graph: the months, Mon, Wed and Fri, today circled, and shading for the count on a counted habit.
+- **The band** shows how many are completed today, the longest current streak and what remains. From other rooms, the tab shows how many remain.
+
+## ⚒ Toolbox
+
+Sixteen small developer utilities, after [DevToys](https://devtoys.app/), in four groups:
+
+| Group | Tools |
+| --- | --- |
+| Encode | Base64, URL, HTML, JWT (read, the signature not checked) |
+| Generate | UUID (v4 or v7), ULID, Hash (MD5, SHA-1, SHA-256, SHA-512), Password, Lorem |
+| Convert | Time (Unix seconds or ms, dates), Base (dec, hex, oct, bin), Cron (read aloud, the next runs), JSON |
+| Text | Escape, Count, Case |
+
+- **Pick a tool** from the menu, then enter its input in the room's box. A generator takes its options there: `5 v7` for five UUID v7s, `24 nosym` for a password. A tool's name alone switches to it.
+- **⧉** copies a result, **⧉ all** every UUID at once, and **⧉ paste** reads the clipboard into the tool. A password stays masked until **show**.
+- **`/tool`** does it from the prompt: `/tool hash hello`, `/tool time 1739000000`, `/tool cron */15 9-18 * * 1-5`.
+- **The band** shows the last result, truncated (with passwords masked). With the Clipboard room enabled, it shows a recently copied JWT with its remaining validity, or a Unix time as a date, and the tab shows **!** when that JWT expires within 10 minutes.
+- **Nothing is stored**: input and results exist only in the session's memory, and the room has no Share.
 
 ## ✿ Pet
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/pet.png" alt="The Pet room: Clawd with headphones, time together, the focus rounds today, the mood, the log and the mood picker." /></figure>
 
-Clawd's corner. Its mood follows the session: typing while Claude works, cheering a finished round, asleep after a quiet while.
+Clawd's space. Its mood follows the session: typing while Claude works, cheering when a round is completed, and sleeping after a period of inactivity.
 
-- **Today together** and a **bond** that levels up.
-- **Lately**: what Clawd noticed (never what anyone wrote).
-- **By the input box**: Clawd strolls, stops and goes, sits, or stays off.
+- **Time together today** and a **bond** that increases in level.
+- **Lately**: events Clawd observed (never the content of any message).
+- **By the input box**: Clawd walks, pauses, sits, or is hidden.
 
 ## ⌘ Snippets
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/snippet.png" alt="The Snippets room: three saved snippets, each with copy and share." /></figure>
 
-Code you reach for again and again.
+Code you use repeatedly.
 
 - `/snippet add` saves your selection, or Claude's last code block. `/snippet add <text>` saves text.
 - **⧉** copies, **⇪** shares to a chat room.
@@ -86,19 +115,19 @@ Code you reach for again and again.
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/monitor.png" alt="The Monitor room: CPU with load and temperature, memory and swap, GPU and power with the fans, and the network chart." /></figure>
 
-This computer as it runs, with no sudo: CPU, memory, GPU, network, disk and battery. Temperatures and power need [macmon](https://github.com/vladkens/macmon) on a Mac (`brew install macmon`). It toasts when something runs hot or nearly full. `/chat set monitor alerts off` stops that.
+Live system figures for this computer, without sudo: CPU, memory, GPU, network, disk and battery. Temperatures and power need [macmon](https://github.com/vladkens/macmon) on a Mac (`brew install macmon`). It shows a notification when a component runs hot or nearly fills up. `/chat set monitor alerts off` disables this.
 
 ## ⧉ Clipboard
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/clipboard.png" alt="The Clipboard room: four copied items, newest first, a Supabase key among them shown masked." /></figure>
 
-The last 30 things you copied, to copy again. Kept in memory only, gone when the session ends. Anything that looks like a key shows masked, and nothing here can be shared.
+The last 30 items you copied, available to copy again. They are kept in memory only and cleared when the session ends. Anything that resembles a key is masked, and nothing in this room can be shared.
 
 ## ☀ Weather
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/weather.png" alt="The Weather room: Taipei now, the next 24 hours, this week and sunrise and sunset." /></figure>
 
-Your cities from [Open-Meteo](https://open-meteo.com), no key: now, the next 24 hours, the week, sunrise and sunset. Type a city in the room's box to add it, ✕ drops one. `/chat set weather units imperial` switches units.
+Your cities from [Open-Meteo](https://open-meteo.com), no key: now, the next 24 hours, the week, sunrise and sunset. Type a city in the room's box to add it, and use ✕ to remove one. `/chat set weather units imperial` switches units.
 
 ## ✦ Tech News
 
@@ -116,12 +145,12 @@ A watchlist of Taiwan and US stocks, each with today's line. Set it with `/chat 
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="The Lo-fi room: the player and its volume, and the stations." /></figure>
 
-Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`). Paste a link or a folder into the box to add your own. `p` plays or pauses, `n` skips. Nothing plays until you press play.
+Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`). Paste a link or a folder into the box to add your own. `p` plays or pauses, and `n` skips. Nothing plays until you press play.
 
 ## More rooms, sharing, hiding
 
-- **[The room store](/squad-chat/rooms/store/)**: `/chat store` lists rooms anyone wrote, `/chat install <id>` adds one. A room is one JSON file, so installing one never runs code.
+- **[The room store](/squad-chat/rooms/store/)**: `/chat store` lists rooms written by the community, `/chat install <id>` adds one. A room is one JSON file, so installing one never runs code.
 - **Share a snapshot**: **⇪ Share** under a room, or `/chat-share usage #room`, posts it as a card after a preview.
 - **Pick your tabs**: `/chat rooms usage,git`, `+clipboard`, `-snippet` or `none`.
 
-Every setting is in [Commands](/squad-chat/use/commands/). What each room reads is in [Privacy & security](/squad-chat/reference/privacy/#what-the-built-in-rooms-read).
+Every setting is listed in [Commands](/squad-chat/use/commands/). The data each room reads is described in [Privacy & security](/squad-chat/reference/privacy/#what-the-built-in-rooms-read).

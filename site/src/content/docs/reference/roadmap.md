@@ -1,6 +1,6 @@
 ---
 title: Roadmap
-description: What's done and what's next.
+description: What is done and what is next.
 ---
 
 - [x] Supabase backend: rooms with passcodes, RLS, rate limits, 30-day retention
@@ -37,5 +37,6 @@ See the [open issues](https://github.com/chrisluo5311/squad-chat/issues) for pro
 - [Resend](https://resend.com) (optional), for delivering sign-in codes on servers that use email sign-in
 - [glowup](https://github.com/NovusEdge/glowup), whose classic pack inspired the palette and card layout, and whose docs inspired this site
 - [token-weather](https://github.com/anthropics/claude-code-playground/tree/main/claude-code/mods/token-weather), whose context forecast the Usage band draws
-- [awesome-claude-code-mods](https://github.com/karanb192/awesome-claude-code-mods) and the mods listed there, which gave the built-in rooms their ideas
+- [Turn Inspector](https://x.com/dani_avila7/status/2109822699174559748), the idea behind the Usage room's Requests card
+- [awesome-claude-code-mods](https://github.com/karanb192/awesome-claude-code-mods) and the mods listed there, which inspired the built-in rooms
 - [Starlight](https://starlight.astro.build), which builds this site

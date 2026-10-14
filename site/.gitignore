@@ -4,3 +4,4 @@ dist/
 public/media/
 src/content/docs/reference/architecture.md
 src/content/docs/rooms/store.md
+src/content/docs/zh-tw/rooms/store.md

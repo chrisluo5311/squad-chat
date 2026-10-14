@@ -6,6 +6,7 @@
 import * as K from "../../../plugins/squad-chat/hooks/bandkit.mjs";
 import { theme, palette, nameColor } from "../../../plugins/squad-chat/hooks/theme.mjs";
 
+const zh = Astro.locals.starlightRoute.locale === "zh-tw";
 const T = theme;
 const P = palette;
 type Part = { svg?: { source: string }; text?: string; kind?: string; color?: string; bg?: string };
@@ -37,7 +38,7 @@ const rooms: { title: string; what: string; bands: Band[] }[] = [
       { color: P.teal, parts: [d(K.cells(98, P.teal)), v("98%"), s("cache")] },
       { color: T.agents, parts: [d(K.dots(["live", "live", "done"], T.agents)), v("2"), s("running")] },
     ] },
-    { room: "◔ Usage", color: T.usage, note: "past the moon, the arc turns warm: using faster than time passes", sections: [
+    { room: "◔ Usage", color: T.usage, note: zh ? "弧線越過月亮就轉暖色：用量跑得比時間還快" : "past the moon, the arc turns warm: using faster than time passes", sections: [
       { color: T.error, parts: [d(K.weather("↯", T.error)), v("812k"), s("│"), d(K.bars(ctxHist.slice(2), T.error)), s("▲ +38k")] },
       { color: T.git, parts: [d(K.orbit(86, T.git, { elapsed: 55, warm: T.error })), l("5h"), v("86%", T.error)] },
       { color: T.agents, parts: [d(K.orbit(91, T.agents, { elapsed: 70, warm: T.error })), l("7d"), v("91%", T.error)] },
@@ -62,7 +63,7 @@ const rooms: { title: string; what: string; bands: Band[] }[] = [
       { color: T.amber, parts: [dot(T.amber), v("3"), s("changed")] },
       { color: T.online, parts: [d(K.icon("pr", T.git)), l("#27"), d(K.segments([{ n: 9, color: T.online }])), v("9/9", T.online), s("checks")] },
     ] },
-    { room: "⎇ Git", color: T.git, note: "the ring: green passed, amber running, red failed", sections: [
+    { room: "⎇ Git", color: T.git, note: zh ? "圓環：綠色是通過，琥珀色是執行中，紅色是失敗" : "the ring: green passed, amber running, red failed", sections: [
       { color: T.git, parts: [d(K.icon("branch", T.git)), v("main")] },
       { color: T.online, parts: [dot(T.online), s("clean")] },
       { color: T.error, parts: [d(K.icon("pr", T.git)), l("#26"), d(K.segments([{ n: 5, color: T.online }, { n: 2, color: T.amber }, { n: 3, color: T.error }])), v("3 failing", T.error)] },

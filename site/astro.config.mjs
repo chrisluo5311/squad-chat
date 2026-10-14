@@ -16,16 +16,22 @@ export default defineConfig({
       social: [
         { icon: "github", label: "GitHub", href: "https://github.com/chrisluo5311/squad-chat" },
       ],
-      editLink: {
-        baseUrl: "https://github.com/chrisluo5311/squad-chat/edit/main/site/",
-      },
       lastUpdated: true,
+      // English at the root, Traditional Chinese under /zh-tw/. Starlight puts the
+      // language picker in the header, and a page not yet translated shows the English.
+      defaultLocale: "root",
+      locales: {
+        root: { label: "English", lang: "en" },
+        "zh-tw": { label: "繁體中文", lang: "zh-TW" },
+      },
       customCss: ["./src/styles/theme.css"],
       components: {
         Head: "./src/components/Head.astro",
         SiteTitle: "./src/components/SiteTitle.astro",
         PageTitle: "./src/components/PageTitle.astro",
         Hero: "./src/components/Hero.astro",
+        Pagination: "./src/components/Pagination.astro",
+        LastUpdated: "./src/components/LastUpdated.astro",
       },
       expressiveCode: {
         themes: ["github-dark-default", "github-light-default"],
@@ -62,14 +68,16 @@ export default defineConfig({
       sidebar: [
         {
           label: "Start",
+          translations: { "zh-TW": "開始" },
           items: [
-            { label: "Overview", link: "/" },
+            { label: "Overview", translations: { "zh-TW": "總覽" }, link: "/" },
             { slug: "start/install" },
             { slug: "start/connect" },
           ],
         },
         {
           label: "Use",
+          translations: { "zh-TW": "使用" },
           items: [
             { slug: "use/first-run" },
             { slug: "use/commands" },
@@ -81,14 +89,17 @@ export default defineConfig({
         },
         {
           label: "Rooms",
+          translations: { "zh-TW": "房間" },
           items: [{ slug: "rooms/store" }, { slug: "rooms/write-a-room" }],
         },
         {
           label: "Host",
+          translations: { "zh-TW": "架設" },
           items: [{ slug: "host/server" }, { slug: "host/email-sign-in" }],
         },
         {
           label: "Reference",
+          translations: { "zh-TW": "參考" },
           items: [
             { slug: "reference/privacy" },
             { slug: "reference/architecture" },

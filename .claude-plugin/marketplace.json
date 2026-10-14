@@ -11,7 +11,7 @@
       "name": "squad-chat",
       "source": "./plugins/squad-chat",
       "description": "The all-in-one Claude Code plugin. Talk with your squad, share code, and keep live rooms (usage, git, weather, lo-fi and more) next to your session. Zero tokens, zero leaks to Claude.",
-      "version": "1.0.0"
+      "version": "1.1.0"
     }
   ]
 }

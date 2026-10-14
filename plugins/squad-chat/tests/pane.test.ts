@@ -817,9 +817,18 @@ test('a snapshot shared from a built-in room shows its preview there, and the ca
   await ui.press({ key: 'share-snapshot' })
   await settle()
   expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()   // drawn in the Usage room, not only in chat
-  expect(await ui.find({ key: 'to-r-design' })).toBeDefined()
-  await ui.press({ key: 'to-r-design' })
+  expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '1 / 2 · ' })).toBeDefined()
+  await ui.press({ key: 'to-prev' })                                    // wraps around to the last room
   await settle()
+  expect(await ui.find({ type: 'Text', text: ' #design ' })).toBeDefined()
+  await ui.press({ key: 'to-next' })                                    // and back
+  await settle()
+  expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()
+  await ui.press({ key: 'to-next' })
+  await settle()
+  expect(await ui.find({ key: 'send' }) as any).toBeDefined()
+  expect((await ui.find({ key: 'send' }) as any)?.props?.label).toBe('Send to #design')
   await ui.press({ key: 'send' })
   await settle()
   const sent = bridge.calls.at(-1)
@@ -912,6 +921,97 @@ test('switching to a built-in room and back keeps the chat room you were in', SL
   expect(await ui.find({ type: 'Text', text: 'hi there' })).toBeDefined()
   expect(bridge.calls.at(-1)).toEqual({ path: '/room/select', body: { room: LOBBY.id } })
   await ui.unmount()
+})
+
+test('Usage room: the Requests card draws the context as strata, with plain-word tips', SLOW, async ($, on) => {
+  recordUi(on)
+  const usage = (input: number, cacheRead: number, output: number) => ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' })
+  // The demo: "explain readme.md" reads a file, then answers.
+  on('turn.step', async function* (_$: any, e: any) {
+    if (e.index === 0) {
+      yield { kind: 'tool', index: 0, id: 'tu_1', name: 'Read' }
+      return { turnId: e.turnId, index: 0, answer: '', toolUses: [], stopReason: 'tool_use', usage: usage(300, 53_800, 70) }
+    }
+    yield { kind: 'text', index: 0, text: 'Here is what it says.' }
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: usage(2_130, 54_100, 2_300) }
+  })
+  on('tool.call', () => ({ result: 'x'.repeat(8000), text: 'x'.repeat(8000) }))
+  on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
+  const asked: any[] = []
+  on('session.usage', (_$: any, e: any) => {
+    asked.push(e)
+    return { value: { startedAt: 0, context: { tokens: 58_500, window: 1_000_000, percent: 6, ...(e?.breakdown ? { breakdown: { maxTokens: 1_000_000, categories: [
+      { name: 'System prompt', tokens: 3_100, kind: 'used' },
+      { name: 'MCP tools', tokens: 31_000, kind: 'used' },
+      { name: 'System tools', tokens: 20_000, kind: 'used' },
+      { name: 'Messages', tokens: 4_000, kind: 'used' },
+      { name: 'Free space', tokens: 900_000, kind: 'free' },
+    ] } } : {}) }, rateLimits: [] } }
+  })
+  const bridge = fakeBridge(on, { store: { view: 'usage' } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+
+  const step = async (index: number) => {
+    const s = $.turn.step({ turnId: 't1', index, model: 'claude-opus-5-5', messageCount: 1 + index * 2 } as any)
+    const seen: any[] = []
+    for (;;) {
+      const x = await s.next()
+      if (x.done) return { seen, result: x.value }
+      seen.push(x.value)
+    }
+  }
+  await $.turn.start({ text: 'explain readme.md', turnId: 't1' } as any)
+  const first = await step(0)
+  expect(first.seen).toEqual([{ kind: 'tool', index: 0, id: 'tu_1', name: 'Read' }])   // the stream passes through untouched
+  expect(first.result.stopReason).toBe('tool_use')
+  await $.tool.call({ tool: 'Read', file_path: '/src/README.md' } as any)
+  await step(1)
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' } as any)
+  await settle()
+  expect(asked.some((e) => e?.breakdown === 'summary')).toBe(true)   // read once for the bedrock
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: 'REQUESTS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2 requests' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /█/ })).toBeDefined()                   // the strata, in block cells
+  expect(await ui.find({ type: 'Text', text: /^ 2(\.\d)?k Read README\.md$/ })).toBeDefined()   // the file's layer, its size first, then what it read
+  expect(await ui.find({ type: 'Text', text: ' 54k fixed + 4.4k new = 59k' })).toBeDefined()   // the context as a sum: bedrock, then what came after
+  expect(await ui.find({ type: 'Text', text: 'next' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' (54k): sent with every request, 96% of the last request. Biggest: MCP tools (31k).' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: "Claude's reply" })).toBeDefined()         // 2.3k, more than the file's 2.1k
+  expect(await ui.find({ type: 'Text', text: /#\d/ })).toBeUndefined()                // no request numbers to decode
+  expect(await ui.find({ type: 'Text', text: '59k' })).toBeDefined()                 // the next request: 56.2k in, 2.3k out
+
+  // Copy and Share take the card as text; Share asks first.
+  await ui.press({ key: 'requests-copy' })
+  expect(copied).toHaveLength(1)
+  expect(copied[0]).toMatch(/^Requests · 2 requests to Claude\nContext now: 54k fixed \+ 4\.4k new = 59k\./)
+  expect(copied[0]).toContain("Claude's reply")
+  expect(copied[0]).toContain('Read README.md')
+  expect(copied[0]).toContain('⚙ Fixed overhead (54k): sent with every request, 96% of the last request.')
+  await ui.press({ key: 'requests-share' })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()
+  await ui.press({ key: 'send' })
+  await settle()
+  expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: copied[0], room: LOBBY.id, kind: 'code' } })
+  await ui.unmount()
+
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  expect(await desk.find({ type: 'Svg', alt: /^Context by request: Read README\.md, Claude's reply/ })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /^54k fixed \+ 4\.4k new = 59k$/ })).toBeDefined()
+  expect(await desk.find({ type: 'Svg', alt: 'Before the first request: 54k fixed' })).toBeDefined()   // the bedrock, one drawing
+  const key = await desk.find({ type: 'Box', key: 'key' }) as any
+  expect(key?.props.flexWrap).toBe('wrap')                                         // the key wraps, never runs past the card
+  expect(await desk.find({ type: 'Text', text: /^■ Read README\.md 2(\.\d)?k$/ })).toBeDefined()   // every key entry says its size
+  expect(await desk.find({ type: 'Text', text: /^■ conversation \d+$/ })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /█/ })).toBeUndefined()               // drawn, not set in a font
+  await desk.unmount()
 })
 
 test('Usage room: context, limits, spend, cache, tool timings and subagents', SLOW, async ($, on) => {
@@ -1381,12 +1481,12 @@ test('/chat rooms takes function rooms too, and +name or -name', SLOW, async ($,
   bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...snippetsLoaded())
   await settle()
   await $.command.run({ command: 'chat', args: 'rooms -snippet' })
-  expect(logs.at(-1)).toBe('Rooms with tabs: usage, git, agents, focus, pet.')
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, git, agents, focus, habits, toolbox, pet.')
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: [], shown: null })
   await $.command.run({ command: 'chat', args: 'rooms +snippet -git' })
-  expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, focus, pet, snippet.')
+  expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, focus, habits, toolbox, pet, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms weather' })
-  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, clipboard, pet, snippet.')
+  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, habits, toolbox, clipboard, pet, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms snippet' })
   expect(logs.at(-1)).toBe('Rooms with tabs: snippet.')
 })
@@ -1401,8 +1501,8 @@ test('a room new in this version gets a tab once, even for people who chose thei
   expect(await ui.find({ key: 'sys-snippet' })).toBeDefined()
   expect(await ui.find({ key: 'sys-agents' })).toBeUndefined()   // still their choice
   await ui.unmount()
-  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'focus', 'pet', 'snippet', 'monitor'])
-  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'pet', 'snippet', 'monitor'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'focus', 'habits', 'toolbox', 'pet', 'snippet', 'monitor'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'toolbox', 'pet', 'snippet', 'monitor'])
 })
 
 test('a room added later gets its tab once too, and a room taken away stays away', SLOW, async ($, on) => {
@@ -1411,8 +1511,8 @@ test('a room added later gets its tab once too, and a room taken away stays away
   const bridge = fakeBridge(on, { store })
   await bridge.start($)
   await settle()
-  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'pet', 'monitor'])
-  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'focus', 'pet', 'monitor'])
+  expect(store.sysRooms).toEqual(['usage', 'git', 'focus', 'habits', 'toolbox', 'pet', 'monitor'])
+  expect(store.roomsOffered).toEqual(['usage', 'git', 'agents', 'snippet', 'focus', 'habits', 'toolbox', 'pet', 'monitor'])
 })
 
 test('tabs that would wrap show the rooms not on show as their icon', SLOW, async ($, on) => {
@@ -1649,7 +1749,7 @@ test('Weather and Tech News stay off until asked for, and say where they reach',
   expect(bridge.calls.filter((c) => c.path === '/fnroom/visible').at(-1)?.body).toEqual({ enabled: ['snippet'], shown: null })
   await $.command.run({ command: 'chat', args: 'rooms +weather +news' })
   expect(logs.slice(-3)).toEqual([
-    'Rooms with tabs: usage, git, agents, focus, pet, snippet, weather, news.',
+    'Rooms with tabs: usage, git, agents, focus, habits, toolbox, pet, snippet, weather, news.',
     'Weather reaches api.open-meteo.com, geocoding-api.open-meteo.com, air-quality-api.open-meteo.com.',
     'Tech News reaches hacker-news.firebaseio.com, www.ithome.com.tw, www.theverge.com, feeds.arstechnica.com, techcrunch.com.',
   ])
@@ -2240,7 +2340,7 @@ test('/chat update lists what is due, asks first when hosts change; /chat uninst
   await $.command.run({ command: 'chat', args: 'uninstall us-tech' })
   expect(bridge.calls.at(-1)).toEqual({ path: '/store/uninstall', body: { id: 'us-tech' } })
   expect(logs.at(-1)).toBe('Uninstalled US Tech Stocks.')
-  expect(store.sysRooms).toEqual(['usage', 'focus', 'pet'])
+  expect(store.sysRooms).toEqual(['usage', 'focus', 'habits', 'toolbox', 'pet'])
 })
 
 // ---------------------------------------------------------------- desktop bands
@@ -2364,23 +2464,26 @@ test('Focus room: ▶ starts, a chime and a toast when focus ends, the break run
   await ui.press({ key: 'sys-focus' })
   expect(await ui.find({ type: 'Text', text: 'FOCUS' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '25:00' })).toBeDefined()
-  await ui.press({ key: 'rest-more' })                       // break 5 → 6 min
-  expect((store.focus as any).rest).toBe(6)
+  // The shortest round: each second the clock passes redraws the room, and
+  // 25 minutes of them made this test take 12 s of the file's 37.
+  await ui.input({ key: 'compose', text: '5 1' })
+  await ui.press({ key: 'rest-more' })                       // break 1 → 2 min
+  expect(store.focus).toMatchObject({ work: 5, rest: 2 })
   await ui.press({ key: 'focus-main' })
   await bridge.clock.advance(1_000)
-  expect(seen.statuses.at(-1)).toMatch(/^🍅 24:5\d$/)
+  expect(seen.statuses.at(-1)).toMatch(/^🍅 04:5\d$/)
   expect(store['focus:s-1']).toMatchObject({ phase: 'focus', paused: false })
 
-  for (let i = 0; i < 5; i++) await bridge.clock.advance(5 * 60_000)
+  await bridge.clock.advance(5 * 60_000)
   expect(played).toEqual(['sounds/focus-done.wav'])
-  expect(seen.toasts).toContain('🍅 Focus done (1 today). Break for 6 min.')
+  expect(seen.toasts).toContain('🍅 Focus done (1 today). Break for 2 min.')
   expect(seen.statuses.at(-1)).toMatch(/^☕ /)
   expect((store.focus as any).done).toBe(1)
   expect(Object.values((store.focus as any).history)).toEqual([1])
   expect((store.pet as any).log[0]).toMatchObject({ icon: '🎉', text: 'Finished a focus round' })
   expect((store.pet as any).xp).toBe(3)
 
-  for (let i = 0; i < 6; i++) await bridge.clock.advance(60_000)
+  for (let i = 0; i < 2; i++) await bridge.clock.advance(60_000)
   await bridge.clock.advance(1_000)
   expect(played).toEqual(['sounds/focus-done.wav', 'sounds/break-done.wav'])
   expect(seen.toasts.at(-1)).toMatch(/^☕ Break's over/)
@@ -2537,6 +2640,280 @@ test('Focus room: a streak of days with a finished round, drawn as a grid', SLOW
   expect(await term.find({ type: 'Text', text: 'STREAK' })).toBeDefined()
   expect((await term.findAll({ type: 'Text', text: '■ ' })).length).toBe(8)
   await term.unmount()
+})
+
+test('Habits room: goals added by typing, checked off, counted, renamed and removed', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  recordUi(on)
+  const store: Record<string, unknown> = {}
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await ui.press({ key: 'sys-habits' })
+  expect(await ui.find({ type: 'Text', text: 'No habits yet.' })).toBeDefined()
+  expect((await ui.find({ type: 'Input' }) as any)?.props.submitLabel).toBe('add')
+  await ui.input({ key: 'compose', text: 'Read 30 min' })                  // what's typed is a new habit
+  await ui.input({ key: 'compose', text: 'add Water x8' })
+  expect((store.habits as any).goals).toEqual([{ id: 'h1', name: 'Read 30 min', target: 1 }, { id: 'h2', name: 'Water', target: 8 }])
+  expect(await ui.find({ type: 'Text', text: 'READ 30 MIN' })).toBeDefined()
+  await ui.press({ key: 'habit-h1-do' })
+  expect((store.habits as any).history.h1).toEqual({ [today]: 1 })
+  expect(await ui.find({ type: 'Text', text: '🔥 1 day' })).toBeDefined()
+  expect(await svgAlt(ui, /^Read 30 min: 1 day done in the last \d+ weeks$/)).toBeDefined()
+  expect(await ui.find({ type: 'Svg', alt: 'Missed or done' })).toBeDefined()
+  expect(await ui.find({ type: 'Svg', alt: 'Less to more' })).toBeDefined()   // Water counts
+  for (let i = 0; i < 3; i++) await ui.press({ key: 'habit-h2-do' })
+  expect(await ui.find({ type: 'Text', text: '3/8' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'done water' })
+  expect((store.habits as any).history.h2[today]).toBe(4)
+  await ui.press({ key: 'habit-h2-less' })
+  expect((store.habits as any).history.h2[today]).toBe(3)
+  await ui.press({ key: 'habit-h1-do' })                                   // ✓ again takes it back
+  expect((store.habits as any).history.h1).toEqual({})
+  await ui.input({ key: 'compose', text: 'rename read -> Read 20 min' })
+  expect((store.habits as any).goals[0].name).toBe('Read 20 min')
+  await ui.input({ key: 'compose', text: 'add water' })
+  expect(await ui.find({ type: 'Text', text: "There's already a habit called Water." })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'Ｒｅａｄ ２０ ｍｉｎ。' })              // full-width, as an IME types it, and a stop
+  expect(await ui.find({ type: 'Text', text: "There's already a habit called Read 20 min." })).toBeDefined()
+  expect((store.habits as any).goals).toHaveLength(2)
+  await ui.input({ key: 'compose', text: 'Check email' })                   // a verb that doesn't fit is part of the name
+  await ui.input({ key: 'compose', text: 'remove 1' })
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water', 'Check email'])
+  await ui.press({ key: 'habit-h2-do' })                                    // a day for Water, to see it come back
+  await ui.press({ key: 'habit-h2-delete' })                                // ✕ deletes it and its days
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Check email'])
+  expect((store.habits as any).history.h2).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Removed Water and its streak.' })).toBeDefined()
+  await ui.press({ key: 'notice-undo' })                                    // Cancel puts it back where it was
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water', 'Check email'])
+  expect((store.habits as any).history.h2[today]).toBe(4)
+  expect(await ui.find({ type: 'Text', text: 'Water is back.' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
+  await ui.press({ key: 'habit-h3-delete' })
+  expect(await ui.find({ type: 'Button', key: 'notice-undo', label: 'Cancel' })).toBeDefined()
+  await bridge.clock.advance(10_000)                                        // left alone, it goes after 10 seconds
+  expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Removed Check email and its streak.' })).toBeUndefined()
+  expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water'])
+  expect(await ui.find({ type: 'Button', key: 'share-snapshot' })).toBeDefined()
+  await $.command.run({ command: 'habit', args: 'done water' })
+  expect(logs.at(-1)).toBe('Water: 5/8 today.')
+  await $.command.run({ command: 'habit', args: 'later' })
+  expect(logs.at(-1)).toMatch(/^\/habit takes add <name>/)
+  await ui.unmount()
+})
+
+test('Habits room: presses that overlap each count, none undone by the other', SLOW, async ($, on) => {
+  recordUi(on)
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+  const store: Record<string, unknown> = { habits: { goals: [{ id: 'h1', name: 'Water', target: 8 }], history: {} } }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await ui.press({ key: 'sys-habits' })
+  await Promise.all([1, 2, 3].map(() => ui.press({ key: 'habit-h1-do' })))
+  await settle()
+  expect((store.habits as any).history.h1[today]).toBe(3)
+  await ui.unmount()
+})
+
+test('Habits room: a streak a goal, drawn as GitHub draws contributions', SLOW, async ($, on) => {
+  recordUi(on)
+  const day = (n: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  // Yesterday and the two days before, then a gap, then five days in a row.
+  const h1 = Object.fromEntries([1, 2, 3, 10, 11, 12, 13, 14].map((n) => [day(n), 1]))
+  const goals = [{ id: 'h1', name: 'Meditate', target: 1 }, { id: 'h2', name: 'Run', target: 1 }]
+  const bridge = fakeBridge(on, { store: { habits: { goals, history: { h1 } } } })
+  await bridge.start($)
+  await settle()
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await desk.press({ key: 'sys-habits' })
+  expect(await desk.find({ type: 'Text', text: '🔥 3 days' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: 'best 5' })).toBeDefined()
+  const grid = await svgAlt(desk, /^Meditate: 8 days done in the last \d+ weeks$/)
+  expect(grid!.props.source).toMatch(/<text[^>]*>[A-Z][a-z]{2}<\/text>/)    // month names along the top
+  expect(grid!.props.source).toMatch(/>Mon<\/text>.*>Wed<\/text>.*>Fri<\/text>/)
+  expect(grid!.props.source).toMatch(/stroke="#ECE7E1"/)                    // today, ringed
+  await desk.unmount()
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 50 } } })
+  expect(await term.find({ type: 'Text', text: 'MEDITATE' })).toBeDefined()
+  expect((await term.findAll({ type: 'Text', text: '■ ' })).length).toBe(8)
+  await term.unmount()
+})
+
+test('Habits bands and Share: done today, the longest streak, and what is left', SLOW, async ($, on) => {
+  recordUi(on)
+  const logs = recordLogs(on)
+  const day = (n: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  const goals = [{ id: 'h1', name: 'Meditate', target: 1 }, { id: 'h2', name: 'Water', target: 8 }, { id: 'h3', name: 'Run', target: 1 }]
+  const history = { h1: { [day(0)]: 1, [day(1)]: 1, [day(2)]: 1 }, h2: { [day(0)]: 5, [day(1)]: 8 } }
+  const bridge = fakeBridge(on, { store: { view: 'habits', habits: { goals, history } } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: '✓ Habits' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓ 1/3' })).toBeDefined()
+  expect(await ui.find({ type: 'Svg', alt: '1 of 3 done today' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '🔥 3' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Meditate' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2 left: Water 5/8 · Run' })).toBeDefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '1/3 today' })).toBeDefined()   // after the room's own name, not again
+  expect(await ui.find({ type: 'Text', text: '🔥 Meditate 3 · Water 1' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'chat-share', args: 'habits' })
+  await $.command.run({ command: 'chat-share', args: 'send' })
+  const sent = bridge.calls.at(-1)
+  expect(sent?.body.kind).toBe('text')
+  expect(sent?.body.text).toBe('✓ 1 of 3 habits done today. 🔥 Meditate 3 days, Water 1 day. Left: Water 5/8, Run.')
+  expect(logs.length).toBeGreaterThan(0)
+})
+
+test('Habits bands with twelve habits: the terminal says how many more, the desktop cuts what is left short', SLOW, async ($, on) => {
+  recordUi(on)
+  const names = ['Meditate', 'Read', 'Water', 'Run', 'Stretch', 'Journal', 'No sugar', 'Duolingo', 'Floss', 'Walk 8k steps', 'Call family', 'Tidy desk']
+  const goals = names.map((name, i) => ({ id: `h${i + 1}`, name, target: 1 }))
+  const bridge = fakeBridge(on, { store: { view: 'habits', habits: { goals, history: {} } } })
+  await bridge.start($)
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...bandProps, bodyColumns: 80 } })
+  expect(await ui.find({ type: 'Text', text: /^left: Meditate, Read, .*\+\d+ more$/ })).toBeDefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 120 } })
+  expect(await ui.find({ type: 'Text', text: /^12 left: Meditate · Read · / })).toBeDefined()   // kept, and cut to fit
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------- Toolbox
+
+const b64url = (o: object) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+const jwtFor = (claims: object) => `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(claims)}.sig`
+
+test('Toolbox room: a tool from the menu, run on what is typed, each result copied; never kept or shared', SLOW, async ($, on) => {
+  const logs = recordLogs(on)
+  recordUi(on)
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
+  const token = jwtFor({ sub: 'u1', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })
+  const store: Record<string, unknown> = {}
+  const bridge = fakeBridge(on, { store, run: (argv) => (argv[0] === 'pbpaste' ? { exitCode: 0, stdout: `${token}\n` } : null) })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await ui.press({ key: 'sys-toolbox' })
+  expect(await ui.find({ type: 'Text', text: 'TOOLS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'GENERATE' })).toBeDefined()
+  expect((await ui.find({ type: 'Button', key: 'tool-uuid' }) as any)?.props.variant).toBe('primary')   // UUID to start
+  await ui.press({ key: 'tool-again' })
+  expect((await ui.findAll({ type: 'Text', text: /^[0-9a-f]{8}-[0-9a-f]{4}-4/ })).length).toBe(5)
+  await ui.press({ key: 'tool-copy-all' })
+  expect(copied.at(-1)!.split('\n')).toHaveLength(5)
+  await ui.input({ key: 'compose', text: '3 v7' })                         // options for the tool on show
+  expect(await ui.find({ type: 'Text', text: 'v7 ×3' })).toBeDefined()
+  await ui.press({ key: 'tool-hash' })
+  expect(await ui.find({ type: 'Text', text: 'Type or paste text to hash.' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'hello' })
+  expect(await ui.find({ type: 'Text', text: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824' })).toBeDefined()
+  await ui.press({ key: 'tool-copy-0' })
+  expect(copied.at(-1)).toBe('5d41402abc4b2a76b9719d911017c592')
+  await ui.input({ key: 'compose', text: 'base' })                         // a tool's name alone shows it
+  expect((await ui.find({ type: 'Button', key: 'tool-base' }) as any)?.props.variant).toBe('primary')
+  await ui.input({ key: 'compose', text: '0xff' })
+  expect(await ui.find({ type: 'Text', text: '1111 1111' })).toBeDefined()
+  await ui.press({ key: 'tool-password' })
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeDefined()   // masked until asked
+  await ui.press({ key: 'tool-reveal' })
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeUndefined()
+  await ui.press({ key: 'tool-jwt' })
+  await ui.press({ key: 'tool-paste' })                                    // the clipboard, read once
+  expect(await ui.find({ type: 'Text', text: 'authenticated' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^● valid for 59m · signature not checked$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'share-snapshot' })).toBeUndefined()
+  await $.command.run({ command: 'tool', args: 'case user id' })           // from the prompt
+  expect(await ui.find({ type: 'Text', text: 'userId' })).toBeDefined()
+  await $.command.run({ command: 'tool', args: 'frobnicate' })
+  expect(logs.at(-1)).toMatch(/^\/tool takes a tool's name/)
+  expect(Object.keys(store).filter((k) => /tool/i.test(k))).toEqual([])   // nothing kept
+  await ui.unmount()
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 50 } } })
+  expect(await term.find({ type: 'Text', text: 'CASE' })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: 'user_id' })).toBeDefined()
+  await term.unmount()
+})
+
+test('Toolbox bands: the tools, then the last result, kept clear of ‹ › and Open', SLOW, async ($, on) => {
+  recordUi(on)
+  on('ui.copy', () => ({ value: { isCopied: true } }))
+  const bridge = fakeBridge(on, { store: { view: 'toolbox' } })
+  await bridge.start($)
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: '⚒ Toolbox' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '16' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'try UUID · Hash · Time · JWT' })).toBeDefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '16 tools' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'tool', args: 'hash hello' })
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: 'Hash' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'sha256' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2cf24dba5fb0…938b9824' })).toBeDefined()
+  await ui.unmount()
+  // A narrow window: the sections that don't fit go, ‹ › and Open stay.
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 60 } })
+  expect(await ui.find({ type: 'Text', text: 'Hash' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'band-prev' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'open' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'tool', args: 'password 16' })
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: 'Password 16 chars' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeDefined()   // never the password itself
+  await ui.unmount()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await pane.press({ key: 'tool-copy-0' })
+  await pane.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: '✓ copied' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '••••••••••••' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Toolbox band with the Clipboard room on: a JWT copied shows how long it has, and the tab warns before it expires', SLOW, async ($, on) => {
+  recordUi(on)
+  const token = jwtFor({ role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 5 * 60 + 30 })
+  const store: Record<string, unknown> = { view: 'toolbox', sysRooms: ['toolbox', 'clipboard'], roomsOffered: ['usage', 'git', 'agents', 'focus', 'habits', 'toolbox', 'pet', 'snippet', 'monitor'] }
+  const bridge = fakeBridge(on, { store, run: (argv) => (argv[0] === 'pbpaste' ? { exitCode: 0, stdout: token } : null) })
+  await bridge.start($)
+  await settle()
+  await bridge.clock.advance(3_000)
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...bandProps, bodyColumns: 200 } })
+  expect(await ui.find({ type: 'Text', text: 'clipboard' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' JWT ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '5m' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'HS256' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /eyJ/ })).toBeUndefined()   // the token itself never shows
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: 'clipboard: JWT' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '● valid for 5m' })).toBeDefined()
+  await ui.unmount()
+  await $.command.run({ command: 'chat', args: 'clipboard' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await pane.find({ key: 'sysbox-toolbox' })).toBeDefined()        // the tab's ! from another room
+  await pane.unmount()
+  await $.command.run({ command: 'tool', args: 'uuid' })                    // a tool run since: the band says that
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: 'UUID v4 ×5' })).toBeDefined()
+  await ui.unmount()
 })
 
 test('desktop band: Focus shows the phase and its time, the streak with this week, and what comes next', SLOW, async ($, on) => {

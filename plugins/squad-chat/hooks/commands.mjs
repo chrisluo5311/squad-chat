@@ -12,7 +12,7 @@ import { snapshotText, hasSnapshot, snapshotKind } from "./sysviews.mjs";
 
 // Commands whose arguments must never reach the model: messages, emails,
 // sign-in codes, room passcodes, snippets.
-export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share", "snippet", "lofi"]);
+export const PRIVATE_ARGS = new Set(["say", "room", "chat-login", "chat-share", "snippet", "lofi", "tool"]);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE = /^\d[\d\s]{4,12}\d$/;
@@ -588,20 +588,22 @@ function showView(view, say, setView) {
   return setView?.(view);
 }
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /clipboard · /pet · /chat · /logout · anything else is a message";
+export const TOOL_USAGE = "/tool takes a tool's name, then what it runs on: /tool uuid 5, /tool hash hello, /tool time 1739000000.";
+
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /habit add|done|undo|remove|rename · /tool <name> [input] · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /habit · /tool · /clipboard · /pet · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
 // `refreshGit()` fetches the Git room again, `refreshRoom(id)` a function
 // room, `copy(text)` puts text on the clipboard, `saveRooms(list)` saves
-// which rooms have tabs, `roomInput(view, text)` takes words typed in a
+// which rooms have tabs, `roomInput(view, text, say)` takes words typed in a
 // built-in room of the mod's (Focus's "start" or "50 10"), true if it did.
 export async function paneInput(call, value, say, { setDnd, sources, setView, refreshGit, refreshRoom, copy, saveRooms, roomInput } = {}) {
   const text = String(value ?? "").trim();
   if (!text) return;
   const view = activeView();
   if (view === "git" && /^r(efresh)?$/i.test(text)) return refreshGit?.();
-  if (!text.startsWith("/") && await roomInput?.(view, text)) return;
+  if (!text.startsWith("/") && await roomInput?.(view, text, say, { typed: true })) return;
   if (isFnRoom(view) && /^r(efresh)?$/i.test(text)) return refreshRoom?.(view);
   // A room's own keys: "p" in Lo-fi plays or pauses.
   const key = isFnRoom(view) && text.length === 1 ? state.fn.get(view).manifest.layout.keys?.[text.toLowerCase()] : null;
@@ -625,6 +627,14 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
         // "/focus 50 10" or "/focus start" does it without leaving the room on show.
         if (args.trim()) return (await roomInput?.("focus", args.trim())) ? undefined : say("/focus takes start, pause, skip, reset, or the minutes: /focus 50 10.");
         return showView(cmd, say, setView);
+      case "habit": case "habits":
+        // "/habit add Run" does it without leaving the room on show.
+        if (args.trim()) return (await roomInput?.("habits", args.trim(), say)) ? undefined : say("/habit takes add <name>, done <name>, undo <name>, remove <name> or rename <old> -> <new>.");
+        return showView("habits", say, setView);
+      case "tool": case "tools": case "toolbox":
+        // "/tool hash hello" runs it and shows the room.
+        if (args.trim() && !(await roomInput?.("toolbox", args.trim(), say))) return say(TOOL_USAGE);
+        return showView("toolbox", say, setView);
       case "chat": {
         // "/chat git" typed here does what it does at the prompt.
         const [sub, ...more] = args.trim().toLowerCase().split(/\s+/).filter(Boolean);

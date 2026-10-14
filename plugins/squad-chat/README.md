@@ -39,7 +39,7 @@ echo '{"supabase_url":"https://abcd1234.supabase.co","supabase_key":"sb_publisha
 3. Create a room and give the passcode to your friends: type `/room our-team some-passcode` in the pane. Friends join with the same line.
 4. Chat: type in the pane and press Enter. Esc goes back to the prompt.
 
-Before your chat rooms, built-in tabs need no server or sign-in: **Usage** (context, rate limits, cost, tool timings), **Git** (your branch, its PR and checks, through the `gh` CLI), **Agents** (every Claude Code session and its subagents), **Focus** (a Pomodoro timer), **Pet** (Clawd), **Snippets** and **Monitor**. Clipboard, Weather, Tech News, Stocks and Lo-fi wait until you add them with `/chat rooms +clipboard` and the like. [The docs](https://chrisluo5311.github.io/squad-chat/use/built-in-rooms/) show each one.
+Before your chat rooms, built-in tabs need no server or sign-in: **Usage** (context, rate limits, cost, tool timings), **Git** (your branch, its PR and checks, through the `gh` CLI), **Agents** (every Claude Code session and its subagents), **Focus** (a Pomodoro timer), **Habits** (daily habits, each with its streak), **Toolbox** (Base64, JWT, UUID, hashes, Unix times, cron and more), **Pet** (Clawd), **Snippets** and **Monitor**. Clipboard, Weather, Tech News, Stocks and Lo-fi wait until you add them with `/chat rooms +clipboard` and the like. [The docs](https://chrisluo5311.github.io/squad-chat/use/built-in-rooms/) show each one.
 
 In a terminal 110 columns wide or more (fullscreen), the pane docks on the right. In a narrower one it sits above the prompt. While the pane is closed, a line above the prompt shows the room, who's online and what's unread, with an **Open** button.
 
@@ -59,17 +59,19 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat-login <name>` | Sign in with just a name, where the server allows it |
 | `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
 | `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
-| `/chat-share to #room` | Send what's waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. |
+| `/chat-share to #room` | Send what's waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. In the pane, the preview's ‹ › arrows step through your rooms. |
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `focus` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a built-in room |
+| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a built-in room |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
-| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks and Lo-fi are off until you add them. |
+| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks and Lo-fi are off until you add them. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | The Focus room's Pomodoro timer, with a chime when focus or a break ends |
+| `/habit add <name> [x<times>]` / `done` / `undo` / `remove` / `rename <old> -> <new>` | The Habits room's goals, each checked off once a day (or a number of times) with its streak |
+| `/tool <name> [input]` | One of the Toolbox room's tools: `/tool uuid 5`, `/tool hash hello`, `/tool time 1739000000` |
 | `/chat store` / `install <id>` / `update [id]` / `uninstall <id>` | Rooms from the room store: list, install (a look first), update, remove |
 | `/chat set <room> [<setting> <value>]` | Show or change a room's settings, such as `/chat set weather cities Taipei, Tokyo` |
-| `/chat-share usage` / `git` / `agents` / `snippet` `[#room]` | Share a snapshot of a built-in room to a chat room |
+| `/chat-share usage` / `git` / `agents` / `habits` / `snippet` `[#room]` | Share a snapshot of a built-in room to a chat room |
 | `/snippet add <text>` | Save the text as a snippet. Snippets are numbered 1, 2, 3 and on |
 | `/snippet add` | Save the selection, or else Claude's last code block, to the Snippets room |
 | `/snippet rename <old> -> <new>` / `delete <name>` | Rename or delete a saved snippet |

@@ -1,11 +1,11 @@
 ---
 title: Write a room
-description: A room is one JSON file. How to write one, try it, and put it in the store.
+description: A room is a single JSON file. How to write one, test it, and publish it to the store.
 ---
 
 import BandGallery from "../../../components/BandGallery.astro";
 
-A room is one file, `room.json`: what it's called, which of squad-chat's providers feed it, the hosts they may reach, its settings, and how its cards look. There's no code in it, and there can't be. That's what lets anyone install a room without trusting whoever wrote it. If what you want needs a provider squad-chat doesn't have, open an issue or a pull request for the provider itself.
+A room is one file, `room.json`: what it is called, which of squad-chat's providers feed it, the hosts they may reach, its settings, and how its cards look. It contains no code and cannot contain any, which allows anyone to install a room without having to trust its author. If a room requires a provider that squad-chat does not offer, please open an issue or a pull request for the provider itself.
 
 ## A first room
 
@@ -36,26 +36,26 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 }
 ```
 
-## Try it
+## Test it
 
 1. Put it at `~/.config/squad-chat/rooms/<id>/room.json`. The folder's name must be the room's id.
 2. Run `/reload-plugins` (or restart Claude Code), then `/chat rooms +<id>` and `/chat <id>`.
-3. If it doesn't show, the reason is in the debug log (`claude --debug`), on a line that starts `squad-chat: room … skipped`.
+3. If it does not appear, the reason is recorded in the debug log (`claude --debug`), on a line that starts `squad-chat: room … skipped`.
 
 ## The fields
 
 | Field | What it is |
 | --- | --- |
 | `schema` | Always `1`. |
-| `id` | 2-24 lowercase letters, digits or `-`, starting with a letter. Not one squad-chat ships. |
-| `version` | Like `1.0.0`. Raise it with each change, so `/chat update` offers it. |
+| `id` | 2-24 lowercase letters, digits or `-`, starting with a letter. It must not match a room that squad-chat ships. |
+| `version` | Like `1.0.0`. Increase it with each change so that `/chat update` offers the update. |
 | `minSquadChat` | The oldest squad-chat it works with: `0.15.0` or newer, the first with the store. |
 | `name`, `icon`, `color` | Up to 20 characters, one character, and one of `sky`, `leaf`, `lilac`, `amber`, `coral`, `rose`, `teal`, `sand`, `red`. |
 | `description`, `author` | What it is, in up to 200 characters, and who wrote it. |
-| `permissions.hosts` | Every host its providers may reach, up to 10. A provider can't reach anything else, and installing shows this list. |
-| `settings` | Up to 8 settings, changed with `/chat set <room> <setting> <value>`: `list` (`"item": "url"` for links, which must stay on the room's hosts, `"add": true` to take what's typed as more of it, and `min` and `max` for how many it holds), `enum` (`values`), `string`, `bool` or `int` (`min`, `max`), each with a `default`. |
+| `permissions.hosts` | Every host its providers may reach, up to 10. A provider cannot reach any other host, and this list is shown during installation. |
+| `settings` | Up to 8 settings, changed with `/chat set <room> <setting> <value>`: `list` (`"item": "url"` for links, which must stay on the room's hosts, `"add": true` to take what is typed as more of it, and `min` and `max` for how many it holds), `enum` (`values`), `string`, `bool` or `int` (`min`, `max`), each with a `default`. |
 | `providers` | Up to 4: an `id` (used in the layout's paths), a `type`, `params` (a setting as `"$settings.<key>"`), and an `interval` (`visible` while the room is on show, `background` otherwise, at least `1s`). |
-| `layout` | `cards` (1-6), and optionally `inline`, `band`, `pills`, `snapshot`, `hint`, `placeholder`, `keys` and `add` (a list setting that what's typed in the room's box goes into, or `{ "action", "field" }`). |
+| `layout` | `cards` (1-6), and optionally `inline`, `band`, `pills`, `snapshot`, `hint`, `placeholder`, `keys` and `add` (a list setting that what is typed in the room's box goes into, or `{ "action", "field" }`). |
 
 ## Providers
 
@@ -64,17 +64,17 @@ A room is one file, `room.json`: what it's called, which of squad-chat's provide
 | `http-json` | `url`, `vars`, `rows`, `fields`, `values` (see [Any JSON API](#any-json-api)) | `rows[]` with each field formatted, the `values`, `count`, `updated` |
 | `rss` | `feeds`: feed URLs on the room's hosts | `items[]` (`title`, `url`, `source`, `meta`, `share`), `count`, `failed` |
 | `hn` | `list` (`top`, `best`, `new`, `off`), `count` | `items[]` as `rss` with `score`, `comments` and `age`, `count`, `list` |
-| `open-meteo` | `cities` (each new one looked up first, and refused if there's no such place), `units` (`metric` or `imperial`) | `cities[]` (`name`, `place` (with the country code), `query` (as the setting has it), `icon`, `desc`, `tempText`, `range`, `rain`, `rainText`, `rainNext` (the next 8 hours' chances), `aqi`, `aqiText`, `aqiTone`, `days[]`, …), `first`, `days[]`, `updated` |
+| `open-meteo` | `cities` (each new one looked up first, and rejected if no such place exists), `units` (`metric` or `imperial`) | `cities[]` (`name`, `place` (with the country code), `query` (as the setting has it), `icon`, `desc`, `tempText`, `range`, `rain`, `rainText`, `rainNext` (the next 8 hours' chances), `aqi`, `aqiText`, `aqiTone`, `days[]`, …), `first`, `days[]`, `updated` |
 | `quotes` | `watchlist`, `colors` (`market`, `red-up`, `green-up`), `move` | `quotes[]` (`symbol`, `name`, `priceText`, `pctText`, `arrow`, `color`, `spark`, `line` (the day's prices), `volText`, `when`), `markets`, `statusText`, `statusTone`, `band`, `note`, `updated` |
 | `local-list` | `max` | `items[]` (`id`, `name`, `lang`, `body`), `count`, `latest` (`name`, `lang`) |
 | `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu` (with `hist`, `tone`, `temp`), `mem` (with `tone`), `gpu`, `net`, `disk`, `battery` (with `charging`, `tone`), `band`, … (see the Monitor room's manifest) |
 | `player` | `stations` (https, on the room's hosts), `volume` | `now`, `playing`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
 
-Each provider can reach only the hosts it knows about, and only where the manifest names them too. `rss` and `http-json` read whatever they're pointed at, so for them the manifest's list alone decides. The rooms squad-chat ships, in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms), are full examples of each.
+Each provider can reach only the hosts it knows about, and only where the manifest names them too. `rss` and `http-json` read any URL they are given, so for them the manifest's list alone determines what they may reach. The rooms squad-chat ships, in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms), provide complete examples of each.
 
 ## Any JSON API
 
-`http-json` reads one https URL on the room's hosts and makes its answer fit the widgets, with no code. The Crypto room in the store reads CoinGecko like this:
+`http-json` reads one https URL on the room's hosts and maps the response to the widgets without any code. The Crypto room in the store reads CoinGecko as follows:
 
 ```json
 "params": {
@@ -95,7 +95,7 @@ Each provider can reach only the hosts it knows about, and only where the manife
 
 ## Alerts
 
-A room can toast when something crosses a line, once until it crosses back, and never during do not disturb:
+A room can show a notification when a value crosses a threshold. It notifies once until the value crosses back, and never during do not disturb:
 
 ```json
 "alerts": [
@@ -103,7 +103,7 @@ A room can toast when something crosses a line, once until it crosses back, and 
 ]
 ```
 
-`rows` and `field` watch each row, or `value` watches one number. `above`, `below` or `beyond` (either way) is the line: a number, or a setting, and a setting of `0` turns the alert off (a `0` written in the manifest is just zero). `text` and `id` are templates filled from the row, and the `id` decides what counts as the same alert.
+`rows` and `field` watch each row, or `value` watches one number. `above`, `below` or `beyond` (either way) is the threshold: a number, or a setting, and a setting of `0` turns the alert off (a `0` written directly in the manifest is treated as zero). `text` and `id` are templates filled from the row, and the `id` decides what counts as the same alert.
 
 ## Widgets
 
@@ -135,13 +135,13 @@ A card's `desktop` is a body the desktop app draws in place of `body`. The termi
 | `forecast` | `values` (a line over the hours), `bars`, `marks`, `caption`, `color`, `color2` |
 | `strip` | `items`, `title`, and optionally `icon`, `value`, `sub`, `note`, `lit`: items as columns, the `lit` one outlined |
 | `sun` | `rise`, `set`, `value` (0-100 through the day), `sub`, `note`: an arc with the sun on it |
-| `media` | `title`, `sub`, `progress`, `elapsed`, `total`, `live`, `playing`, `empty`: what's playing |
+| `media` | `title`, `sub`, `progress`, `elapsed`, `total`, `live`, `playing`, `empty`: what is playing |
 
 A `list` takes more fields there: `code` (the preview as a code block), `score` (a story as Hacker News shows it), `group` (rows under a chip per value), `open` (a link to open), `lit` with `pause` (the row playing), and `remove` (a ✕ that runs an action). `buttons` takes `split` and `level` to put a level between them ("− 60% +"). The Weather, Lo-fi, Tech News, Stocks, Monitor and Snippets rooms in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms) each have a `desktop` body to copy from.
 
 ## The band on the desktop
 
-In the terminal the band is the `band` line. In the desktop app it can be a row of pills, each a small drawing with a few words and a card on hover. Here is every room's band as the app draws it (the figures are made up, hover a pill to light it):
+In the terminal the band is the `band` line. In the desktop app it can be a row of pills, each a small drawing with a few words and a card on hover. Below is every room's band as the app renders it (the figures are illustrative, hover over a pill to highlight it):
 
 <BandGallery />
 
@@ -166,4 +166,4 @@ A room without `pills` shows its `band` line in the desktop's capsule too.
 
 1. Add it as `rooms/<id>/room.json` in a fork of [squad-chat](https://github.com/chrisluo5311/squad-chat).
 2. Run `node rooms/build-index.mjs`. It checks the room as the bridge will, and adds it to `rooms/index.json`.
-3. Open a pull request. CI runs the same check, and a review looks at what the room reaches. Once it's merged, `/chat store` lists it.
+3. Open a pull request. CI runs the same check, and the review examines which hosts the room reaches. Once it is merged, `/chat store` lists it.

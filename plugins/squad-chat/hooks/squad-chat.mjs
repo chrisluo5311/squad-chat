@@ -10,23 +10,28 @@
 //   fnviews.mjs   function rooms, drawn from the manifests the bridge loads
 //   metrics.mjs   this session's numbers, github.mjs the Git room's data,
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
-//   focus.mjs, clipboard.mjs, pet.mjs   the Focus, Clipboard and Pet rooms
+//   focus.mjs, habits.mjs, toolbox.mjs, clipboard.mjs, pet.mjs   the Focus, Habits, Toolbox, Clipboard and Pet rooms
 
 import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
-import { PRIVATE_ARGS, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
+import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
-import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls } from "./metrics.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, wantsOverhead, toolSummary } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
-import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge } from "./focus.mjs";
+import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge, dayOf } from "./focus.mjs";
+import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggleHabit, deleteHabit, undeleteHabit } from "./habits.mjs";
+import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
 
 state.focus = createFocus();
+state.habits = createHabits();
+state.toolbox = createToolbox();
 state.clipboard = createClipboard();
 state.pet = createPet();
 
 const PANE_ID = "squad-chat";
+const UNDO_MS = 10_000;   // how long Cancel stays beside "Removed …"
 
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
@@ -424,7 +429,7 @@ async function submitFromPane($, value) {
       refreshRoom: (id) => refreshRoom($, id),
       copy: (text) => copyText($, text, say),
       saveRooms: (list) => saveSysRooms($, list),
-      roomInput: (view, text) => roomInput($, view, text),
+      roomInput: (view, text, say, opts) => roomInput($, view, text, say, opts),
     });
     state.dividerAt.clear();   // they've replied: everything above is read
     state.chatScroll.back = 0;   // and they see what they just sent
@@ -571,9 +576,14 @@ async function restoreSessionUsage($) {
 
 async function refreshUsage($) {
   try {
-    const u = await $.session.usage(state.usage.showBreakdown ? { breakdown: "summary" } : {});
+    // The breakdown when it's open, and now and then for the Requests card's bedrock.
+    const breakdown = state.usage.showBreakdown || wantsOverhead(state.usage);
+    const u = await $.session.usage(breakdown ? { breakdown: "summary" } : {});
     applyMeasure(state.usage, u, Date.now());
-    if (u?.context?.breakdown) state.usage.breakdown = u.context.breakdown;
+    if (u?.context?.breakdown) {
+      state.usage.breakdown = u.context.breakdown;
+      applyOverhead(state.usage, u.context.breakdown);
+    }
     afterChange($);
   } catch (err) {
     $.ui.log(`squad-chat: could not read usage: ${err?.message ?? err}`, { to: "debug" });
@@ -648,6 +658,7 @@ async function restoreRooms($) {
     const now = await $.clock.now();
     const timer = state.sessionId ? await $.store.get(FOCUS_TIMER_PREFIX + state.sessionId) : null;
     restoreFocus(state.focus, await $.store.get("focus"), timer, now);
+    restoreHabits(state.habits, await $.store.get("habits"));
     restorePet(state.pet, await $.store.get("pet"));
     state.pet.lastBusyAt = Date.now();
     state.focusStatus = focusStatus(now);
@@ -723,10 +734,50 @@ function focusEnded($, ended, now) {
   focusChanged($, now);
 }
 
+// The Habits room's goals and days are every session's: read again before
+// a change, so one session's save doesn't undo another's, then kept. One
+// change at a time: two presses that overlap would both read the store
+// before either saved, and the second would put back what the first changed.
+let habitsBusy = Promise.resolve();
+function changeHabits($, fn) {
+  const run = habitsBusy.then(() => changeHabitsNow($, fn));
+  habitsBusy = run.catch(() => {});
+  return run;
+}
+
+async function changeHabitsNow($, fn) {
+  // The wall clock, as the drawing has it: a day is the calendar's.
+  const now = Date.now();
+  try { restoreHabits(state.habits, await $.store.get("habits")); } catch (err) {
+    $.ui.log(`squad-chat: could not read the habits: ${err?.message ?? err}`, { to: "debug" });
+  }
+  const said = fn(state.habits, now);
+  afterChange($);
+  try { await $.store.set("habits", habitsSaved(state.habits)); } catch (err) {
+    $.ui.log(`squad-chat: could not save the habits: ${err?.message ?? err}`, { to: "debug" });
+  }
+  return said;
+}
+
 // Words typed in a room of the mod's own: Focus's start, pause, skip, reset
-// or minutes; Clipboard's clear; Pet's moods. True when taken.
-async function roomInput($, view, text) {
+// or minutes; Habits' add, done, undo, remove, rename or a habit's name;
+// Toolbox's tool names and what they run on; Clipboard's clear; Pet's moods. True when taken; `say` answers. `typed`
+// is the room's own box, where a new habit needs no "add".
+async function roomInput($, view, text, say = () => {}, { typed = false } = {}) {
   const word = text.trim().toLowerCase();
+  if (view === "habits") {
+    const said = await changeHabits($, (h, now) => habitWords(h, text, now, { typed }));
+    if (said == null) return false;
+    say(said);
+    return true;
+  }
+  if (view === "toolbox") {
+    const said = await toolWords(state.toolbox, text, Date.now(), { typed });
+    if (said == null) return false;
+    if (said) say(said);
+    $.ui.invalidate("ui.render");
+    return true;
+  }
   if (view === "focus") {
     if (Object.hasOwn(FOCUS_DO, word)) { await focusAct($, word); return true; }
     const now = await $.clock.now();
@@ -786,6 +837,47 @@ async function readClipboard($, now) {
   }
 }
 
+// The clipboard read once, when the Toolbox's paste is pressed: the text,
+// or null when there's no reader here.
+async function readClipOnce($) {
+  const c = state.clipboard;
+  for (const argv of c.reader ? [c.reader] : CLIP_READERS) {
+    let r;
+    try { r = await $.process.run(argv, { timeoutMs: 2_000, env: CLIP_ENV }); } catch { continue; }
+    if (r.exitCode !== 0 && !c.reader) continue;
+    c.reader = argv;
+    return r.exitCode === 0 ? String(r.stdout ?? "") : "";
+  }
+  return null;
+}
+
+// The Toolbox's buttons: a tool picked, run again, a result copied, a
+// secret shown, the clipboard pasted in.
+async function toolAct($, fn) {
+  try { await fn(state.toolbox, Date.now()); } catch (err) {
+    $.ui.log(`squad-chat: the toolbox: ${err?.message ?? err}`, { to: "debug" });
+  }
+  $.ui.invalidate("ui.render");
+}
+
+async function copyTool($, text, surface) {
+  await copySnippet($, text, surface);
+  if (state.notice !== "Copied.") return;
+  const at = Date.now();
+  state.toolbox.copiedAt = at;
+  // The band says "copied" for a moment, then goes back to the result.
+  $.clock.sleep(5_000).then(() => { if (state.toolbox.copiedAt === at) $.ui.invalidate("ui.render"); }).catch(() => {});
+}
+
+async function pasteTool($) {
+  const text = await readClipOnce($);
+  if (text == null) { state.notice = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste)."; return $.ui.invalidate("ui.render"); }
+  if (!text.trim()) { state.notice = "The clipboard is empty."; return $.ui.invalidate("ui.render"); }
+  const cut = setToolInput(state.toolbox, text);
+  state.notice = cut ? `Pasted the first ${MAX_TOOL_INPUT.toLocaleString("en-US")} characters.` : "";
+  await toolAct($, (tb, now) => toolAgain(tb, now));
+}
+
 function clearClips($) {
   state.clipboard.items = [];
   $.ui.invalidate("ui.render");
@@ -812,9 +904,12 @@ async function petLoop($) {
 // the second only while a subagent runs (its spinner and timer); otherwise
 // the session's span and the spend buckets move by the minute. A redraw a
 // second for nothing made the desktop's input box flicker all through a turn.
+// Habits, Toolbox, Clipboard and Pet have nothing that moves by the second
+// (Clawd's frames have a loop of their own), so they keep to the minute too.
 let lastFrame = "";
-function frameKey(view, now) {
-  if (view === "usage" && !agentCounts(state.usage).running) return `usage:${Math.floor(now / 60_000)}`;
+const BY_MINUTE = new Set(["habits", "toolbox", "clipboard", "pet"]);
+export function frameKey(view, now) {
+  if (BY_MINUTE.has(view) || (view === "usage" && !agentCounts(state.usage).running)) return `${view}:${Math.floor(now / 60_000)}`;
   return `${view}:${Math.floor(now / 1000)}`;
 }
 
@@ -865,8 +960,10 @@ async function roomsTick($) {
   // Kept when something happened, and a minute at a time while you work.
   if (noted || (busy && wall - lastPetSave > 60_000)) { lastPetSave = wall; savePet($); }
   // Redraw when the badge or Clawd's mood changes (Clawd walks by the
-  // input box in every room).
-  const key = JSON.stringify([focusBadge(now)?.text ?? null, state.sysRooms.includes("pet") ? [petMood(wall), state.pet.log.length, state.pet.log[0]?.at] : null]);
+  // input box in every room), and at midnight, when every habit is undone
+  // again: its tab's count, its band and its ✓s.
+  const key = JSON.stringify([focusBadge(now)?.text ?? null, state.sysRooms.includes("pet") ? [petMood(wall), state.pet.log.length, state.pet.log[0]?.at] : null,
+    state.sysRooms.includes("habits") ? dayOf(wall) : null]);
   if (key !== lastRoomsKey) { lastRoomsKey = key; $.ui.invalidate("ui.render"); }
 }
 
@@ -884,7 +981,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -894,6 +991,8 @@ const COMMANDS = [
   { name: "chat-logout", description: "squad-chat: sign out on this computer" },
   { name: "lofi", description: "squad-chat: music in the background (lo-fi streams, YouTube, your files) through mpv, in the Lo-fi room", argumentHint: "play [name] | pause | next | prev | stop | vol <0-100> | add <url or path> | remove <name> | import" },
   { name: "focus", description: "squad-chat: a Pomodoro timer in the Focus room, with a chime when focus or a break ends", argumentHint: "start | pause | skip | reset | <focus min> [break min]" },
+  { name: "habit", description: "squad-chat: daily habits in the Habits room, each with its streak", argumentHint: "add <name> [x<times a day>] | done <name> | undo <name> | remove <name> | rename <old> -> <new>" },
+  { name: "tool", description: "squad-chat: developer tools in the Toolbox room: Base64, URL, JWT, UUID, hashes, Unix times, cron, JSON …", argumentHint: "<tool> [input] | base64|url|html|jwt|uuid|ulid|hash|password|lorem|time|base|cron|json|escape|count|case" },
   { name: "snippet", description: "squad-chat: save code you reuse (the selection, or Claude's last code block), then copy or share it from the Snippet room", argumentHint: "add <name> | rename <old> -> <new> | delete <name> | copy <name> | share <name> [#room]" },
 ];
 
@@ -990,6 +1089,19 @@ export function register(on, options) {
     const f = state.focus;
     say(f.phase === "idle" ? `Focus ${f.work} min, break ${f.rest} min.` : `${state.focusStatus} · ${f.work}/${f.rest} min`);
   }));
+  on("command.run", { command: "habit" }, ($, e) => answer($, async (call, say) => {
+    const args = String(e.args ?? "").trim();
+    if (!state.sysRooms.includes("habits")) return say("The Habits room is hidden. Bring it back with /chat rooms +habits.");
+    if (!args) { await setView($, "habits"); return openPane($); }
+    if (!(await roomInput($, "habits", args, say))) say("/habit takes add <name>, done <name>, undo <name>, remove <name> or rename <old> -> <new>.");
+  }));
+  on("command.run", { command: "tool" }, ($, e) => answer($, async (call, say) => {
+    const args = String(e.args ?? "").trim();
+    if (!state.sysRooms.includes("toolbox")) return say("The Toolbox room is hidden. Bring it back with /chat rooms +toolbox.");
+    if (args && !(await roomInput($, "toolbox", args, say))) return say(TOOL_USAGE);
+    await setView($, "toolbox");
+    return openPane($);
+  }));
   on("command.run", { command: "snippet" }, ($, e) => answer($, (call, say) => snippet(call, e.args, say, {
     sources: shareSources($),
     copy: (text) => copyText($, text, say),
@@ -1054,6 +1166,35 @@ export function register(on, options) {
       onFocusSkip: () => { void focusAct($, "skip"); },
       onFocusReset: () => { void focusAct($, "reset"); },
       onFocusAdjust: (which, dir) => { void changeFocus($, (f) => focusAdjust(f, which, dir)); },
+      onHabitToggle: (id) => { void changeHabits($, (h, now) => { toggleHabit(h, id, now); }); },
+      // ✕ deletes at once; Cancel beside the notice puts it back for 10 seconds.
+      onHabitDelete: (id) => {
+        void changeHabits($, (h) => {
+          const done = deleteHabit(h, id);
+          if (!done) return;
+          const undo = { text: done.said, label: "Cancel", until: Date.now() + UNDO_MS, kept: done.kept };
+          state.notice = done.said;
+          state.undo = undo;
+          $.clock.sleep(UNDO_MS).then(() => {
+            if (state.undo !== undo) return;
+            state.undo = null;
+            if (state.notice === undo.text) state.notice = "";
+            $.ui.invalidate("ui.render");
+          }).catch(() => {});
+        });
+      },
+      onUndo: () => {
+        const undo = state.undo;
+        if (!undo || Date.now() >= undo.until) return;
+        state.undo = null;
+        void changeHabits($, (h) => { state.notice = undeleteHabit(h, undo.kept); });
+      },
+      onHabitMark: (id, dir) => { if (dir) void changeHabits($, (h, now) => { markHabit(h, id, dir, now); }); },
+      onToolPick: (id) => { void toolAct($, (tb, now) => pickTool(tb, id, now)); },
+      onToolAgain: () => { void toolAct($, (tb, now) => toolAgain(tb, now)); },
+      onToolCopy: (text, surface) => { void copyTool($, text, surface); },
+      onToolReveal: () => { state.toolbox.reveal = !state.toolbox.reveal; $.ui.invalidate("ui.render"); },
+      onToolPaste: () => { void pasteTool($); },
       onClipCopy: (id, surface) => { void copyClip($, id, surface); },
       onClipRemove: (id) => { removeClip(state.clipboard, id); $.ui.invalidate("ui.render"); },
       onClipClear: () => clearClips($),
@@ -1100,13 +1241,13 @@ export function register(on, options) {
   on("turn.start", ($, e, next) => {
     const id = e.turnId;
     turn = id;
-    if (!e.agentId) { turnStarted(state.usage, Date.now()); sysChanged($); }
+    if (!e.agentId) { turnStarted(state.usage, Date.now()); stepPrompt(state.usage, e.text); sysChanged($); }
     void (async () => {
       await $.clock.sleep(LONG_TURN_MS);
       if (turn !== id || state.dnd !== "auto") return;
       state.working = true;
       quietChanged($);
-    })();
+    })().catch(() => {});   // the session may end while it waits
     return next(e);
   });
 
@@ -1135,6 +1276,31 @@ export function register(on, options) {
     return r;
   });
 
+  // Each request of the main loop, for the Usage room's Requests card: the
+  // tools it called as they stream, then the API's usage for it. The stream
+  // is passed on piece by piece, untouched.
+  on("turn.step", async function* ($, e, next) {
+    if (e.agentId) return yield* next(e);
+    let step = null;
+    try { step = stepStarted(state.usage, { turnId: e.turnId, index: e.index, at: Date.now() }); sysChanged($); }
+    catch { /* the request matters more than its tally */ }
+    // Ended either way: a stream that breaks or is dropped leaves it failed,
+    // not streaming for good.
+    let r = null;
+    try {
+      const stream = next(e);
+      for await (const c of stream) {
+        if (c.kind === "tool") stepToolUse(step, c.name);
+        yield c;
+      }
+      r = await stream.result;
+      return r;
+    } finally {
+      try { stepEnded(state.usage, step, r?.usage, r?.stopReason); sysChanged($); }
+      catch { /* as above */ }
+    }
+  });
+
   // The Usage room's figures, as the engine measures them.
   on("session.measure", async ($, e, next) => {
     const r = await next(e);
@@ -1155,6 +1321,8 @@ export function register(on, options) {
     } finally {
       try {
         toolEnded(state.usage, key, { at: Date.now(), isError: !r || !!r.isError || !!r.deny });
+        // Its answer goes back to the model with the next request: only its size is kept.
+        if (!e.agentId && r) stepToolResult(state.usage, e.tool, String(r.deny ?? r.text ?? (r.result === undefined ? "" : JSON.stringify(r.result) ?? "")).length, toolSummary(e.tool, e));
         sysChanged($);
         // A push or a new PR: the Git room catches up once GitHub has.
         if (e.tool === "Bash" && PUSHED.test(String(e.command ?? ""))) {
