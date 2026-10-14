@@ -204,3 +204,19 @@ test('Toolbox: what a tool runs on is cut to its limit', async () => {
   expect(tb.input.length).toBe(MAX_INPUT)
   expect(tb.out.rows[0].text).toBe(String(MAX_INPUT))
 })
+
+test('Requests strata: worked out once a change, then the same for every reader', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'look around')
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), usage(100_000, 100), 'end_turn')
+  const st = strata(u)
+  expect(strata(u)).toBe(st)
+  stepToolResult(u, 'Read', 4_000, 'a.mjs')                    // waiting for the next request: nothing drawn changes
+  expect(strata(u)).toBe(st)
+  const next = stepStarted(u, { turnId: 't', index: 1, at: 0 })
+  expect(strata(u)).toEqual(st)                                 // a request on its way isn't drawn either
+  stepEnded(u, next, usage(101_100, 100), 'end_turn')
+  expect(strata(u)).not.toBe(st)
+  expect(strata(u).sent).toBe(2)
+})

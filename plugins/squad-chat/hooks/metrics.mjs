@@ -331,7 +331,18 @@ export function wantsOverhead(u) {
 // comes after (a session hours long has hundreds of k of it). Column heights
 // are the API's own figures.
 const NAMED = 4;
+// Worked out again only when a request starts or ends or the overhead is
+// read: a redraw draws the card and its tips from one, not one each.
+const strataSeen = new WeakMap();   // usage → { sig, byCols: Map }
 export function strata(u, maxCols = 12) {
+  const sig = `${u.stepN}:${u.steps.map((s) => s.status[0]).join("")}:${u.overhead?.tokens ?? ""}`;
+  let seen = strataSeen.get(u);
+  if (seen?.sig !== sig) strataSeen.set(u, seen = { sig, byCols: new Map() });
+  if (!seen.byCols.has(maxCols)) seen.byCols.set(maxCols, layered(u, maxCols));
+  return seen.byCols.get(maxCols);
+}
+
+function layered(u, maxCols) {
   let from = 0;
   const done = u.steps.filter((s) => s.status === "done" && s.input != null);
   done.forEach((s, i) => { if (s.isCompacted) from = i; });
