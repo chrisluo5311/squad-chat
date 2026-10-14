@@ -1283,15 +1283,21 @@ export function register(on, options) {
     let step = null;
     try { step = stepStarted(state.usage, { turnId: e.turnId, index: e.index, at: Date.now() }); sysChanged($); }
     catch { /* the request matters more than its tally */ }
-    const stream = next(e);
-    for await (const c of stream) {
-      if (c.kind === "tool") stepToolUse(step, c.name);
-      yield c;
+    // Ended either way: a stream that breaks or is dropped leaves it failed,
+    // not streaming for good.
+    let r = null;
+    try {
+      const stream = next(e);
+      for await (const c of stream) {
+        if (c.kind === "tool") stepToolUse(step, c.name);
+        yield c;
+      }
+      r = await stream.result;
+      return r;
+    } finally {
+      try { stepEnded(state.usage, step, r?.usage, r?.stopReason); sysChanged($); }
+      catch { /* as above */ }
     }
-    const r = await stream.result;
-    try { stepEnded(state.usage, step, r?.usage, r?.stopReason); sysChanged($); }
-    catch { /* as above */ }
-    return r;
   });
 
   // The Usage room's figures, as the engine measures them.

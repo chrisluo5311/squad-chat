@@ -267,16 +267,23 @@ export function stepToolUse(step, name) {
   if (step && name) step.tools.push(name);
 }
 
+// A request that failed (no usage: the stream broke or was dropped) hands
+// what it carried to the next, which sends it again.
 export function stepEnded(u, step, usage, stopReason) {
   if (!step) return false;
   step.stopReason = stopReason ?? null;
-  if (!usage) { step.status = "failed"; return true; }
+  if (!usage) {
+    step.status = "failed";
+    u.stepIn = [...step.added, ...u.stepIn];
+    step.added = [];
+    return true;
+  }
   step.status = "done";
   step.input = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
   step.output = usage.output_tokens ?? 0;
   step.cacheRead = usage.cache_read_input_tokens ?? 0;
-  const i = u.steps.indexOf(step);
-  const prev = i > 0 ? u.steps[i - 1] : null;
+  // Grown since the last request that came back, a failed one between them aside.
+  const prev = u.steps.slice(0, u.steps.indexOf(step)).findLast((s) => s.status === "done") ?? null;
   if (prev?.input != null && prev.output != null) {
     if (step.input < prev.input) step.isCompacted = true;
     else step.grown = Math.max(0, step.input - prev.input - prev.output);

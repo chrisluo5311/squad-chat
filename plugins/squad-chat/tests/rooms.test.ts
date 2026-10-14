@@ -180,3 +180,19 @@ test('Toolbox: a run that ends after a newer one began is dropped', async () => 
   expect(tb.out.mode).toBe('v4 ×5')
   expect(tb.out.rows.every((r: any) => r.label === '')).toBe(true)
 })
+
+test('Requests: a request that fails hands what it carried to the retry, measured from the last that came back', () => {
+  const u = createUsage()
+  const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })
+  stepPrompt(u, 'look around')
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), usage(100_000, 100), 'tool_use')
+  stepToolResult(u, 'Read', 16_000, 'habits.mjs')
+  const broke = stepStarted(u, { turnId: 't', index: 1, at: 0 })
+  stepEnded(u, broke, null, null)                                    // the stream broke
+  expect(broke.status).toBe('failed')
+  const retry = stepStarted(u, { turnId: 't', index: 1, at: 0 })
+  expect(retry.added.map((p: any) => p.label)).toEqual(['Read habits.mjs'])
+  stepEnded(u, retry, usage(104_100, 100), 'end_turn')
+  expect(retry.grown).toBe(4_000)
+  expect(retry.added[0].tokens).toBe(4_000)
+})
