@@ -18,7 +18,7 @@ import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, wantsOverhead, toolSummary } from "./metrics.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
-import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge } from "./focus.mjs";
+import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge, dayOf } from "./focus.mjs";
 import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggleHabit, deleteHabit, undeleteHabit } from "./habits.mjs";
 import { createToolbox, toolWords, pickTool, rerun as toolAgain } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS } from "./clipboard.mjs";
@@ -959,8 +959,10 @@ async function roomsTick($) {
   // Kept when something happened, and a minute at a time while you work.
   if (noted || (busy && wall - lastPetSave > 60_000)) { lastPetSave = wall; savePet($); }
   // Redraw when the badge or Clawd's mood changes (Clawd walks by the
-  // input box in every room).
-  const key = JSON.stringify([focusBadge(now)?.text ?? null, state.sysRooms.includes("pet") ? [petMood(wall), state.pet.log.length, state.pet.log[0]?.at] : null]);
+  // input box in every room), and at midnight, when every habit is undone
+  // again: its tab's count, its band and its ✓s.
+  const key = JSON.stringify([focusBadge(now)?.text ?? null, state.sysRooms.includes("pet") ? [petMood(wall), state.pet.log.length, state.pet.log[0]?.at] : null,
+    state.sysRooms.includes("habits") ? dayOf(wall) : null]);
   if (key !== lastRoomsKey) { lastRoomsKey = key; $.ui.invalidate("ui.render"); }
 }
 
