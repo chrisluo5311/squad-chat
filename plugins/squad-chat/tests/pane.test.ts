@@ -2364,23 +2364,26 @@ test('Focus room: ▶ starts, a chime and a toast when focus ends, the break run
   await ui.press({ key: 'sys-focus' })
   expect(await ui.find({ type: 'Text', text: 'FOCUS' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '25:00' })).toBeDefined()
-  await ui.press({ key: 'rest-more' })                       // break 5 → 6 min
-  expect((store.focus as any).rest).toBe(6)
+  // The shortest round: each second the clock passes redraws the room, and
+  // 25 minutes of them made this test take 12 s of the file's 37.
+  await ui.input({ key: 'compose', text: '5 1' })
+  await ui.press({ key: 'rest-more' })                       // break 1 → 2 min
+  expect(store.focus).toMatchObject({ work: 5, rest: 2 })
   await ui.press({ key: 'focus-main' })
   await bridge.clock.advance(1_000)
-  expect(seen.statuses.at(-1)).toMatch(/^🍅 24:5\d$/)
+  expect(seen.statuses.at(-1)).toMatch(/^🍅 04:5\d$/)
   expect(store['focus:s-1']).toMatchObject({ phase: 'focus', paused: false })
 
-  for (let i = 0; i < 5; i++) await bridge.clock.advance(5 * 60_000)
+  await bridge.clock.advance(5 * 60_000)
   expect(played).toEqual(['sounds/focus-done.wav'])
-  expect(seen.toasts).toContain('🍅 Focus done (1 today). Break for 6 min.')
+  expect(seen.toasts).toContain('🍅 Focus done (1 today). Break for 2 min.')
   expect(seen.statuses.at(-1)).toMatch(/^☕ /)
   expect((store.focus as any).done).toBe(1)
   expect(Object.values((store.focus as any).history)).toEqual([1])
   expect((store.pet as any).log[0]).toMatchObject({ icon: '🎉', text: 'Finished a focus round' })
   expect((store.pet as any).xp).toBe(3)
 
-  for (let i = 0; i < 6; i++) await bridge.clock.advance(60_000)
+  for (let i = 0; i < 2; i++) await bridge.clock.advance(60_000)
   await bridge.clock.advance(1_000)
   expect(played).toEqual(['sounds/focus-done.wav', 'sounds/break-done.wav'])
   expect(seen.toasts.at(-1)).toMatch(/^☕ Break's over/)
