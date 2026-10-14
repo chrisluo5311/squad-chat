@@ -3,6 +3,7 @@ import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { state } from '../hooks/state.mjs'
+import { frameKey } from '../hooks/squad-chat.mjs'
 import { createHabits, addHabit, deleteHabit } from '../hooks/habits.mjs'
 import { toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, strata, contextTips } from '../hooks/metrics.mjs'
 
@@ -146,4 +147,11 @@ test('Habits: "x8" after a space counts the times a day; an x inside a word is t
   expect(h.goals.map((g: any) => [g.name, g.target])).toEqual([
     ['Water', 8], ['Tea', 3], ['Stretch', 2], ['Inbox 0', 1], ['Relax 5', 1], ['Fix 2', 1],
   ])
+})
+
+test('Redraws while Claude works: a second at a time only for rooms that move by the second', () => {
+  const at = 10 * MIN + 5_000
+  for (const view of ['habits', 'toolbox', 'clipboard', 'pet', 'usage']) expect(frameKey(view, at)).toBe(frameKey(view, at + 1_000))
+  for (const view of ['focus', 'agents', 'git']) expect(frameKey(view, at)).not.toBe(frameKey(view, at + 1_000))
+  expect(frameKey('habits', at)).not.toBe(frameKey('habits', at + MIN))   // a new day still shows
 })

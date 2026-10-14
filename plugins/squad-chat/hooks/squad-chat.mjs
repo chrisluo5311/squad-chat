@@ -903,9 +903,12 @@ async function petLoop($) {
 // the second only while a subagent runs (its spinner and timer); otherwise
 // the session's span and the spend buckets move by the minute. A redraw a
 // second for nothing made the desktop's input box flicker all through a turn.
+// Habits, Toolbox, Clipboard and Pet have nothing that moves by the second
+// (Clawd's frames have a loop of their own), so they keep to the minute too.
 let lastFrame = "";
-function frameKey(view, now) {
-  if (view === "usage" && !agentCounts(state.usage).running) return `usage:${Math.floor(now / 60_000)}`;
+const BY_MINUTE = new Set(["habits", "toolbox", "clipboard", "pet"]);
+export function frameKey(view, now) {
+  if (BY_MINUTE.has(view) || (view === "usage" && !agentCounts(state.usage).running)) return `${view}:${Math.floor(now / 60_000)}`;
   return `${view}:${Math.floor(now / 1000)}`;
 }
 
