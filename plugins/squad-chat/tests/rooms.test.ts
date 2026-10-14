@@ -139,3 +139,11 @@ test('Habits: ✕ deletes the habit pressed, even one named with a number', () =
   expect(done?.said).toBe('Removed 2 and its streak.')
   expect(h.goals.map((g: any) => g.name)).toEqual(['Read', 'Run'])
 })
+
+test('Habits: "x8" after a space counts the times a day; an x inside a word is the name', () => {
+  const h = createHabits()
+  for (const t of ['Water x8', 'Tea×3', 'Stretch *2', 'Inbox 0', 'Relax 5', 'Fix 2']) addHabit(h, t)
+  expect(h.goals.map((g: any) => [g.name, g.target])).toEqual([
+    ['Water', 8], ['Tea', 3], ['Stretch', 2], ['Inbox 0', 1], ['Relax 5', 1], ['Fix 2', 1],
+  ])
+})

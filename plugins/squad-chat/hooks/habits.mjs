@@ -76,8 +76,9 @@ export function findHabit(h, text) {
 }
 
 // "Water x8" (or ×8, *8): a name and how many times a day; once otherwise.
+// An x counts only after a space, so "Inbox 0" and "Relax 5" stay names.
 // Full-width text (an IME's "Ｗａｔｅｒ ｘ８") reads as the half-width it shows.
-const COUNTED = /^(.*?)\s*[x×*]\s*(\d{1,2})$/i;
+const COUNTED = /^(.*?\S)(?:\s+[x×*]|\s*[×*])\s*(\d{1,2})$/i;
 function parseGoal(text) {
   const t = String(text ?? "").normalize("NFKC").trim();
   const m = COUNTED.exec(t);
