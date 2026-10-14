@@ -817,9 +817,18 @@ test('a snapshot shared from a built-in room shows its preview there, and the ca
   await ui.press({ key: 'share-snapshot' })
   await settle()
   expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()   // drawn in the Usage room, not only in chat
-  expect(await ui.find({ key: 'to-r-design' })).toBeDefined()
-  await ui.press({ key: 'to-r-design' })
+  expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '1 / 2 · ' })).toBeDefined()
+  await ui.press({ key: 'to-prev' })                                    // wraps around to the last room
   await settle()
+  expect(await ui.find({ type: 'Text', text: ' #design ' })).toBeDefined()
+  await ui.press({ key: 'to-next' })                                    // and back
+  await settle()
+  expect(await ui.find({ type: 'Text', text: ' #lobby ' })).toBeDefined()
+  await ui.press({ key: 'to-next' })
+  await settle()
+  expect(await ui.find({ key: 'send' }) as any).toBeDefined()
+  expect((await ui.find({ key: 'send' }) as any)?.props?.label).toBe('Send to #design')
   await ui.press({ key: 'send' })
   await settle()
   const sent = bridge.calls.at(-1)

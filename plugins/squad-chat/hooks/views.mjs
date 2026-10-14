@@ -780,25 +780,24 @@ function sysHints(els, view, handlers) {
   ].filter(Boolean) });
 }
 
-// The rooms a waiting snippet can go to, the chosen one lit. Rooms that
-// don't fit the width are left out, except the chosen one.
-function shareTargets(els, p, width, handlers) {
+// Where a waiting snippet goes: "‹ #room ›", stepping through your rooms
+// (wrapping at either end), then its place in the list and who's there.
+function shareTargets(els, p, handlers) {
   const { Box, Text, Button } = els;
-  if (state.rooms.length < 2) return null;
-  let left = width - 4 - 4;   // inside the card, after "to: "
-  const picks = [];
-  for (const r of [...state.rooms].sort((a, b) => (b.id === p.room) - (a.id === p.room))) {
-    const w = r.slug.length + 2;
-    if (w > left && r.id !== p.room) continue;
-    left -= w;
-    picks.push(r);
-  }
-  picks.sort((a, b) => state.rooms.indexOf(a) - state.rooms.indexOf(b));
-  return Box({ key: "to", flexDirection: "row", children: [
-    Text({ key: "label", color: theme.muted, children: "to: " }),
-    ...picks.map((r) => Box({ key: `pick-${r.id}`, flexShrink: 0, children: [
-      Button({ key: `to-${r.id}`, plain: true, label: `#${r.slug} `, dimColor: r.id !== p.room, onPress: () => handlers.onShareTarget?.(r.id) }),
-    ] })),
+  const n = state.rooms.length;
+  if (n < 2) return null;
+  const i = Math.max(0, state.rooms.findIndex((r) => r.id === p.room));
+  const step = (d) => handlers.onShareTarget?.(state.rooms[(i + d + n) % n].id);
+  const here = (state.online.get(p.room) ?? []).filter((u) => u.user_id !== state.user?.id).length;
+  return Box({ key: "to", flexDirection: "row", alignItems: "center", gap: 1, children: [
+    Text({ key: "label", color: theme.muted, children: "to" }),
+    Box({ key: "stepper", flexDirection: "row", flexShrink: 0, children: [
+      Button({ key: "to-prev", plain: true, label: "‹", onPress: () => step(-1) }),
+      Text({ key: "room", bold: true, children: ` #${p.slug} ` }),
+      Button({ key: "to-next", plain: true, label: "›", onPress: () => step(1) }),
+    ] }),
+    Text({ key: "pos", color: theme.muted, wrap: "truncate-end", children: `${i + 1} / ${n} · ` }),
+    Text({ key: "here", color: here ? theme.online : theme.muted, wrap: "truncate-end", children: here ? `${here} here` : "just you" }),
   ] });
 }
 
@@ -808,7 +807,7 @@ function shareCard(els, handlers, width = 48) {
   const p = state.pendingShare;
   if (!p || Date.now() > p.until) return null;
   const { Box, Text, Button } = els;
-  const targets = shareTargets(els, p, width, handlers);
+  const targets = shareTargets(els, p, handlers);
   // A line of chat shows as it will read, a card with its title bar, other
   // snippets their first lines.
   let preview, rows;
