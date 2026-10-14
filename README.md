@@ -5,6 +5,7 @@
 [![Stars][stars-shield]][stars-url]
 [![Version][version-shield]][version-url]
 [![CI][ci-shield]][ci-url]
+[![OpenSSF Scorecard][scorecard-shield]][scorecard-url]
 [![License][license-shield]][license-url]
 [![Made for Claude Code][made-for-shield]][made-for-url]
 [![Node][node-shield]][node-url]
@@ -432,6 +433,8 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information
 [version-url]: plugins/squad-chat/.claude-plugin/plugin.json
 [ci-shield]: https://img.shields.io/github/actions/workflow/status/chrisluo5311/squad-chat/ci.yml?branch=main&style=for-the-badge&label=CI&logo=githubactions&logoColor=white
 [ci-url]: https://github.com/chrisluo5311/squad-chat/actions/workflows/ci.yml
+[scorecard-shield]: https://img.shields.io/ossf-scorecard/github.com/chrisluo5311/squad-chat?style=for-the-badge&label=openssf%20scorecard
+[scorecard-url]: https://scorecard.dev/viewer/?uri=github.com/chrisluo5311/squad-chat
 [license-shield]: https://img.shields.io/badge/license-MIT-3da639?style=for-the-badge
 [license-url]: LICENSE
 [made-for-shield]: https://img.shields.io/badge/made%20for-Claude%20Code-d97757?style=for-the-badge&logo=claude&logoColor=white

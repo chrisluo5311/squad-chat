@@ -42,7 +42,7 @@ description: Claude 可存取的內容、訊息的可見範圍，以及資料的
 
 ## 內建房間讀取的資料
 
-Usage 和 Agents 房間從 Claude Code 讀取此工作階段本身的數據：context、費用、速率限制、token 數、工具名稱與耗時，以及 subagent。Git 房間以您的身分，在工作階段的資料夾中執行 `git status` 和 `gh`。上述資料皆不會傳送至任何地方，也不會儲存任何 token。
+Usage 和 Agents 房間從 Claude Code 讀取此工作階段本身的數據：context、費用、速率限制、token 數、工具名稱與耗時，以及 subagent。Git 房間以您的身分，在工作階段的資料夾中執行 `git status` 和 `gh`，其中 `gh` 會以您自己的登入身分連線至 GitHub。除此之外，上述資料皆不會傳送至任何地方，也不會儲存任何 token。
 
 為了顯示其他工作階段，每個工作階段會在 `/tmp/squad-chat-<uid>/sessions/` 保留一個小型 heartbeat 檔，僅限您本人讀取。其內容包含資料夾名稱、分支、模型、目前的工作，以及最近數次工具呼叫的簡短說明（例如指令、檔名或搜尋樣式）。疑似密鑰的內容會加以遮蔽，prompt、回覆和工具輸出皆不會寫入。工作階段結束時，heartbeat 檔即會移除。
 

@@ -7,8 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "esbuild src/bridge.mjs --bundle --platform=node --target=node22 --format=esm --legal-comments=none --outfile=dist/bridge.mjs",
-    "test": "node --test ../../../bridge-tests/*.test.mjs"
+    "build": "esbuild src/bridge.mjs --bundle --platform=node --target=node22 --format=esm --legal-comments=none --outfile=dist/bridge.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "2.117.2",

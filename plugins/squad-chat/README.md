@@ -89,9 +89,50 @@ The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/lofi
 - **Where your data lives:**
   - Messages live in your squad's own Supabase database and are deleted after 30 days. Whoever hosts it can read it, like any database admin.
   - Only members of a room can read it. You become a member only with the room's passcode, and access is enforced in the database.
-- **The built-in rooms** read this session's figures from Claude Code, and `git` and `gh` in its folder as you. Nothing is sent anywhere. Each session keeps a small heartbeat in `/tmp/squad-chat-<uid>/sessions/`, readable only by you (folder name, branch, model, recent tool names with a few words each, secrets masked, never prompts or output), so the Agents room can show every session. The Clipboard room, once you add it, reads the clipboard every 2 seconds and keeps the last 30 items in this session's memory only, masks anything that looks like a secret, and never shares them.
+- **The built-in rooms** read this session's figures from Claude Code, and `git` and `gh` in its folder as you (`gh` talks to GitHub with your own sign-in). They send nothing of yours anywhere. Each session keeps a small heartbeat in `/tmp/squad-chat-<uid>/sessions/`, readable only by you (folder name, branch, model, recent tool names with a few words each, secrets masked, never prompts or output), so the Agents room can show every session. The Clipboard room, once you add it, reads the clipboard every 2 seconds and keeps the last 30 items in this session's memory only, masks anything that looks like a secret, and never shares them.
 - **On your computer:** your sign-in session is kept in `~/.config/squad-chat/session.json`, readable only by you. `/chat-logout` removes it.
 - **What others see:** your display name: the name you picked, or the part of your email before the `@` (`ann@example.com` → `ann`). Friends see it, plus whether you're online. They never see your email.
+
+## Network
+
+squad-chat connects only to the places below. Each room's `room.json` lists its hosts under `permissions.hosts`, and the bridge refuses any other host for that room, settings included.
+
+| What | Where it connects | What it sends |
+|---|---|---|
+| Chat | Your squad's Supabase project, the URL you set in `supabase_url` | Your sign-in, messages, presence and what you share |
+| Git room | GitHub, through your own `gh` CLI | Read-only requests about this repository: its pull requests and checks, workflow runs, your issues and its open Dependabot alerts |
+| Weather (off until added) | `api.open-meteo.com`, `geocoding-api.open-meteo.com`, `air-quality-api.open-meteo.com` | The city names you set |
+| Tech News (off until added) | `hacker-news.firebaseio.com` and the feeds `www.ithome.com.tw`, `www.theverge.com`, `feeds.arstechnica.com`, `techcrunch.com` | Nothing beyond the request |
+| Stocks (off until added) | `mis.twse.com.tw`, `query1.finance.yahoo.com` | The symbols on your watchlist |
+| Lo-fi (off until added) | `ice2.somafm.com` and `www.youtube.com`, played by your own `mpv` (and `yt-dlp` for YouTube), started only when you press play | Nothing beyond the stream request. Tracks you add play from wherever you point them |
+| Room store | `raw.githubusercontent.com/chrisluo5311/squad-chat/main/rooms` | Nothing beyond the request. A room installs only after you see its hosts and confirm |
+
+Nothing goes to Claude, to Anthropic or to the author of squad-chat.
+
+## What the mod runs
+
+Every program is named in the code, with fixed arguments, and none comes from a room or from the network.
+
+| Program | When | Why |
+|---|---|---|
+| `node --version`, then `node bridge/dist/bridge.mjs` | When Claude Code starts | Checks for Node 22 or newer, then starts the bridge, the one process that talks to Supabase and the room hosts above |
+| `git`, `gh` | Git room, `/chat-share diff` | Reads this folder's branch, diff, pull requests and checks |
+| `pbpaste`, `wl-paste` or `xclip` | Clipboard room, only once you add it | Reads the clipboard every 2 seconds |
+| `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg`, `macmon` (Mac), `nvidia-smi` (Linux) | Monitor room | Reads CPU, memory, disk, network, battery and GPU figures. No shell, no sudo |
+| `mpv`, and `yt-dlp` for YouTube | Lo-fi room, only when you press play | Plays the stream. A short `/bin/sh` loop around `mpv` stops it when the bridge exits, and downloads nothing to run |
+
+## What the mod hooks
+
+The mod watches Claude Code events to draw its rooms. It never asks for permissions, never changes a permission decision, and never adds to the conversation.
+
+| Event | What it does |
+|---|---|
+| `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `agent.spawn`, `session.measure` | Measures timings, tokens and tool names for the Usage and Agents rooms, then passes each event on unchanged |
+| `session.append` | For `/say`, `/room` and `/chat-login` only, replaces the arguments with a placeholder before the transcript stores them, so messages and passcodes stay out of it |
+| `command.run` | Answers squad-chat's own slash commands |
+| `ui.*`, `clock`, `branch`, `pr`, `session.start`, `session.end` | Draws the pane and band, registers the commands, and stops the bridge when the session ends |
+
+`/chat-share` reads your mouse selection, Claude's last code block or `git diff`. It shows you the preview, and sends to your room only when you confirm.
 
 ## How it works
 
