@@ -689,13 +689,26 @@ export function fnInline(els, id, w, handlers) {
 }
 
 // The band's line, as colored pieces.
-export function fnBandPieces(id) {
+export function fnBandPieces(id, width = 0) {
   const { room, data, loaded, error } = roomState(id);
   if (!room) return [];
   if (error && !loaded) return [{ text: `⚠ ${error}`, color: theme.warn }];
   if (!loaded) return [{ text: "loading…", color: theme.muted }];
   const l = room.manifest.layout;
-  return [{ text: fill(l.band ?? l.cards[0].meta ?? room.manifest.name, data), color: theme.muted }];
+  return [{ text: fitItems(fill(l.band ?? l.cards[0].meta ?? room.manifest.name, data), width), color: theme.muted }];
+}
+
+// A band's text cut at a " · " between items, never through one: the
+// Stocks band ran a quote off the end mid-number. "…" says some were left.
+function fitItems(text, width) {
+  if (!width || cells(text) <= width) return text;
+  const items = text.split(" · ");
+  let out = items[0];
+  for (const it of items.slice(1)) {
+    if (cells(`${out} · ${it} · …`) > width) break;
+    out = `${out} · ${it}`;
+  }
+  return cells(out) < cells(text) ? clip(`${out} · …`, width) : out;
 }
 
 // ---------------------------------------------------------------- the desktop band

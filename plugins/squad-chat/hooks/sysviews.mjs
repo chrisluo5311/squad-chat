@@ -1226,7 +1226,7 @@ export function forecast(pct) {
 // spent $1.21": the context as a forecast once measured, the 5-hour window,
 // and the spend once there is some.
 export function sysBandPieces(view, width = 0) {
-  if (!SYS[view]) return fnBandPieces(view);
+  if (!SYS[view]) return fnBandPieces(view, width);
   if (OWN[view]) return OWN[view].band(width);
   const sep = { text: " · ", color: theme.muted };
   const join = (list) => list.filter(Boolean).flatMap((p, i) => (i ? [sep, ...p] : p));
