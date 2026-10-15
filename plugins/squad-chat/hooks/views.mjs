@@ -962,7 +962,7 @@ export function bandView(els, props, { onOpen, onCycle }) {
   if (view !== "chat") {
     const meta = roomMeta(view);
     return Box({ flexDirection: "row", children: [
-      Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: [
+      Box({ key: "line", flexDirection: "row", columnGap: 1, flexGrow: 1, flexShrink: 1, children: [
         Box({ key: "room", flexShrink: 0, children: [Text({ key: "t", bold: true, color: meta.color, children: `${meta.icon} ${meta.label}` })] }),
         Box({ key: "sep", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: glyph.bar })] }),
         Box({ key: "msg", flexDirection: "row", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: sysBandPieces(view, Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16 - (onCycle ? CYCLE_CELLS : 0))).map((p, i) => (
@@ -1005,7 +1005,7 @@ export function bandView(els, props, { onOpen, onCycle }) {
     }
   }
   return Box({ flexDirection: "row", children: [
-    Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: bits }),
+    Box({ key: "line", flexDirection: "row", columnGap: 1, flexGrow: 1, flexShrink: 1, children: bits }),
     Box({ key: "open-box", flexDirection: "row", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [
       ...cycleButtons(els, onCycle),
       Button({ key: "open", label: "Open", variant: "primary", onPress: onOpen }),
