@@ -5,7 +5,7 @@
 
 import { state } from "./state.mjs";
 import { theme, palette, level, nameColor } from "./theme.mjs";
-import { rowsFor, meter, tiles, line, card, stackCards, stretchBar, barNode, bigNumber, lineChart, sparkline } from "./widgets.mjs";
+import { rowsFor, cells, clip, meter, tiles, line, card, stackCards, stretchBar, barNode, bigNumber, lineChart, sparkline } from "./widgets.mjs";
 import * as K from "./bandkit.mjs";
 import { capsule, draw, label as pLabel, value as pValue, sub as pSub, msg as pMsg, tag as pTag } from "./bands.mjs";
 
@@ -34,6 +34,8 @@ export function fill(template, data) {
 // A text widget's text: a line whose holes came out empty takes no room.
 const fillText = (template, data) => fill(template, data).split("\n").filter((l) => l.trim()).join("\n");
 
+// About the cells the ⧉ and ⇪ buttons take after a list row's text.
+const PEEK_BUTTONS = 12;
 const firstLine = (s) => String(s ?? "").split("\n").find((l) => l.trim()) ?? "";
 const color = (name, fallback) => palette[name] ?? fallback;
 const muted = (els, key, text) => els.Text({ key, color: theme.muted, wrap: "truncate-end", children: text });
@@ -536,7 +538,9 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
       // their first line follows the number, as a number alone says nothing.
       const numbered = room === "snippet" && /^\d+$/.test(show(lookup(item, b.title)));
       const title = numbered ? `#${show(lookup(item, b.title))}` : show(lookup(item, b.title));
-      const peek = numbered && per === 1 ? firstLine(lookup(item, b.preview ?? b.copy)) : "";
+      // Cut to the room left beside the number and the ⧉ ⇪ buttons: VS Code
+      // wraps a row whose text runs past the pane rather than cutting it.
+      const peek = numbered && per === 1 ? clip(firstLine(lookup(item, b.preview ?? b.copy)), w - cells(title) - 2 - PEEK_BUTTONS) : "";
       if (els.Svg && b.score) return nodes.push(...scoreRow(els, k, b, item, title, handlers, accent, i));
       if (els.Svg && b.lit) return nodes.push(...litRow(els, k, b, item, title, handlers, room, accent, i));
       if (els.Svg && b.code) return nodes.push(...codeRow(els, k, b, item, title, handlers, room));
