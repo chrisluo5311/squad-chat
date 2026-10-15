@@ -532,8 +532,11 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
           : dropSt ? { text: "", width: 1 } : null], { gap: 1 }));
         return;
       }
-      // Numbered snippets read "#2".
-      const title = room === "snippet" && /^\d+$/.test(show(lookup(item, b.title))) ? `#${show(lookup(item, b.title))}` : show(lookup(item, b.title));
+      // Numbered snippets read "#2", and on one row with no preview under it
+      // their first line follows the number, as a number alone says nothing.
+      const numbered = room === "snippet" && /^\d+$/.test(show(lookup(item, b.title)));
+      const title = numbered ? `#${show(lookup(item, b.title))}` : show(lookup(item, b.title));
+      const peek = numbered && per === 1 ? firstLine(lookup(item, b.preview ?? b.copy)) : "";
       if (els.Svg && b.score) return nodes.push(...scoreRow(els, k, b, item, title, handlers, accent, i));
       if (els.Svg && b.lit) return nodes.push(...litRow(els, k, b, item, title, handlers, room, accent, i));
       if (els.Svg && b.code) return nodes.push(...codeRow(els, k, b, item, title, handlers, room));
@@ -548,7 +551,8 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
         actOn != null ? { node: Button({ key: `act-${k}`, plain: true, label: b.act.label, onPress: () => handlers.onAction?.(room, { provider: b.act.provider, action: b.act.action, args: { [b.act.field.split(".").at(-1)]: actOn } }) }) } : null,
         actOn != null ? { text: " " } : null,
         mark != null ? { text: mark, width: 2, color: accent } : null,
-        { text: title, bold: true, grow: true },
+        { text: title, bold: true, grow: !peek },
+        peek ? { text: `  ${peek}`, color: theme.muted, grow: true } : null,
         tag ? { text: ` ${tag}`, color: theme.muted } : null,
         copyText ? { text: " " } : null,
         copyText ? { node: Button({ key: `copy-${k}`, plain: true, label: "⧉", onPress: (press) => handlers.onCopy?.(String(copyText), press?.surface) }) } : null,
