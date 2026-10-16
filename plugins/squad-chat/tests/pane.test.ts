@@ -1313,6 +1313,16 @@ test('band: a built-in room shows its one-line summary above the prompt', SLOW, 
   const narrow = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
   expect(narrow).toContain('☇ Storm 75% · 5-hour 40% · spent $2.00')
   await ui.unmount()
+
+  // VS Code's columns run short of the room the text has: it gets all of it,
+  // and its row ends it with "…" where the band runs out.
+  ui = await $.ui.mount({ ...BAND, surface: 'vscode', props: { ...bandProps, bodyColumns: 40 } })
+  const vsc = await ui.findAll({ type: 'Text' })
+  const all = vsc.map((x: any) => x.text).join('')
+  expect(all).toContain('☇ Storm 75% 150k/200k')          // what 40 columns would have cut
+  expect(all).toContain('· 5-hour 40% · spent $2.00')
+  expect(vsc.find((x: any) => x.text.includes('spent'))?.props?.wrap).toBe('truncate-end')
+  await ui.unmount()
 })
 
 // ---------------------------------------------------------------- function rooms

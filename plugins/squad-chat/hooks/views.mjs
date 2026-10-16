@@ -945,6 +945,26 @@ function chatBandDesktop(els, { onOpen, onCycle, columns }) {
   return capsule(els, { room: `${glyph.brand} #${room.slug}`, color: theme.accent, sections, onOpen, onCycle, columns });
 }
 
+// A band's text. The terminal cuts it to its columns, which are exact there.
+// VS Code counts columns in a proportional font's "0"s, too few for the room
+// the text has, so it draws all of it and the row ends it with "…" where the
+// band runs out, as wide or narrow as the panel is.
+function bandMsg(els, view, props, meta, onCycle) {
+  const { Box, Text } = els;
+  const terminal = props.surface === "terminal";
+  const pieces = sysBandPieces(view, terminal ? Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16 - (onCycle ? CYCLE_CELLS : 0)) : 0);
+  const text = (p, wrap) => Text({ key: "t", color: p.color, bold: p.bold, wrap, children: p.text });
+  if (terminal) return pieces.map((p, i) => Box({ key: `p${i}`, flexShrink: 0, children: [text(p)] }));
+  // Each piece sits beside a box of the ones after it, which gives way
+  // first: the band shortens from its end, one piece at a time, and only the
+  // piece where it runs out shows "…". Shrink weights alone squeezed them all.
+  const rest = (i) => i >= pieces.length ? [] : [
+    Box({ key: `p${i}`, flexShrink: 1, minWidth: 0, children: [text(pieces[i], "truncate-end")] }),
+    ...(i + 1 < pieces.length ? [Box({ key: `r${i + 1}`, flexDirection: "row", flexWrap: "nowrap", flexShrink: 10000, minWidth: 0, overflow: "hidden", children: rest(i + 1) })] : []),
+  ];
+  return rest(0);
+}
+
 // One line above the prompt while the pane can't be seen (terminal too
 // narrow, or the pane closed): room, who's online, unread, the latest message.
 // The desktop draws it as a capsule of small drawings (bands.mjs).
@@ -961,12 +981,12 @@ export function bandView(els, props, { onOpen, onCycle }) {
   }
   if (view !== "chat") {
     const meta = roomMeta(view);
-    return Box({ flexDirection: "row", children: [
-      Box({ key: "line", flexDirection: "row", columnGap: 1, flexGrow: 1, flexShrink: 1, children: [
+    // VS Code wraps a row that doesn't fit: these give way instead.
+    return Box({ flexDirection: "row", flexWrap: "nowrap", children: [
+      Box({ key: "line", flexDirection: "row", flexWrap: "nowrap", columnGap: 1, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [
         Box({ key: "room", flexShrink: 0, children: [Text({ key: "t", bold: true, color: meta.color, children: `${meta.icon} ${meta.label}` })] }),
         Box({ key: "sep", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: glyph.bar })] }),
-        Box({ key: "msg", flexDirection: "row", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: sysBandPieces(view, Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16 - (onCycle ? CYCLE_CELLS : 0))).map((p, i) => (
-          Box({ key: `p${i}`, flexShrink: 0, children: [Text({ key: "t", color: p.color, bold: p.bold, children: p.text })] }))) }),
+        Box({ key: "msg", flexDirection: "row", flexWrap: "nowrap", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: bandMsg(els, view, props, meta, onCycle) }),
       ] }),
       Box({ key: "open-box", flexDirection: "row", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [
         ...cycleButtons(els, onCycle),
