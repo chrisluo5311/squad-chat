@@ -9,7 +9,7 @@
 // Inline (above the prompt): one header line, the last few messages, input.
 // Band (pane not up): one line with an Open button.
 
-import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView, enabledRooms, roomIds } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, bandRoom, totalUnread, typingText, isQuiet, activeView, enabledRooms, roomIds } from "./state.mjs";
 import { theme, palette, nameColor, glyph } from "./theme.mjs";
 import { snippetTitle, snapshotCard, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
@@ -909,7 +909,7 @@ function inlineView(els, props, handlers) {
 // The chat room on the desktop: faces of who's online, what's new, and the
 // latest message (or who's typing).
 function chatBandDesktop(els, { onOpen, onCycle, columns }) {
-  const room = currentRoom();
+  const room = bandRoom();
   const others = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id);
   const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
   const unreadHere = room.unread ?? 0;
@@ -935,7 +935,7 @@ function chatBandDesktop(els, { onOpen, onCycle, columns }) {
       ] });
     }
     const typing = typingText(room.id);
-    const last = lastMessage();
+    const last = lastMessage(room.id);
     if (typing) sections.push({ key: "msg", color: theme.muted, grow: true, parts: [draw(K.typing(theme.muted), typing), pMsg(typing, { dim: true })] });
     else if (last) {
       const who = last.mine ? theme.you : nameColor(last.user_id);
@@ -994,12 +994,12 @@ export function bandView(els, props, { onOpen, onCycle }) {
       ] }),
     ] });
   }
-  const room = currentRoom();
+  const room = bandRoom();
   const here = (state.online.get(room?.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
   const unreadHere = room.unread ?? 0;
   const unreadElsewhere = totalUnread() - unreadHere;
   const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
-  const last = lastMessage();
+  const last = lastMessage(room.id);
   const typing = typingText(room.id);
   // Everything but the message keeps its size; the message gives way.
   const fixed = (key, children, style = {}) => Box({ key, flexShrink: 0, children: [Text({ key: "t", children, ...style })] });

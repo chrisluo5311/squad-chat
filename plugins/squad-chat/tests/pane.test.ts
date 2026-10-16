@@ -229,6 +229,32 @@ test('band: shows the room above the prompt while the pane is not up, and opens 
   await ui.unmount()
 })
 
+test('band: follows the room with the newest message, and Open goes there', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  const SIDE = { id: 'r-side', slug: 'side', last_read_id: 0, unread: 0 }
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, SIDE] })
+  bridge.emit(news(1, msg(1, 'bob', 'in the lobby')))
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◆ #lobby' })).toBeDefined()
+  await ui.unmount()
+
+  // A newer message in #side, while #lobby stays the current room.
+  bridge.emit({ ...msg(2, 'bob', 'over here'), message: { ...msg(2, 'bob', 'over here').message, room: SIDE.id, slug: 'side' }, counted: true, unread: 1 })
+  await settle()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◆ #side' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'over here' })).toBeDefined()
+  await ui.press({ key: 'open' })
+  await settle()
+  expect(bridge.calls.some((c: any) => c.path === '/room/select' && c.body.room === SIDE.id)).toBe(true)
+  expect(seen.opened).toEqual(['squad-chat'])
+  await ui.unmount()
+})
+
 test('band: stays out of the way while the pane is shown', SLOW, async ($, on) => {
   recordUi(on, { panes: [{ id: 'squad-chat', title: 'Squad Chat', isShown: true, isFocused: false, isPlaced: true }] })
   const bridge = fakeBridge(on)

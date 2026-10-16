@@ -12,7 +12,7 @@
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 //   focus.mjs, habits.mjs, toolbox.mjs, clipboard.mjs, pet.mjs   the Focus, Habits, Toolbox, Clipboard and Pet rooms
 
-import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
+import { state, applyEvent, resetBridgeState, currentRoom, bandRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, wantsOverhead, toolSummary } from "./metrics.mjs";
@@ -183,6 +183,13 @@ function redact(content) {
 }
 
 // ---------------------------------------------------------------- pane and commands
+
+// The band shows the room with the newest message: Open goes to that room.
+async function openFromBand($) {
+  const room = activeView() === "chat" && state.auth === "signed_in" ? bandRoom() : null;
+  if (room && room.id !== state.current) await callBridge($, "/room/select", { room: room.id }).catch(() => {});
+  await openPane($);
+}
 
 async function openPane($) {
   const opened = await $.ui.open({ id: PANE_ID, title: "Squad Chat", focus: true, rows: 12, columns: 52 });
@@ -1232,7 +1239,7 @@ export function register(on, options) {
     if (e.props?.hasSurvey || (activeView() === "chat" && !chatShown)) return next(e);
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
-    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openPane($); }, onCycle: (dir) => { void cycleBand($, dir); } });
+    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openFromBand($); }, onCycle: (dir) => { void cycleBand($, dir); } });
   });
 
   // "auto" do not disturb: a turn still running after LONG_TURN_MS goes quiet
