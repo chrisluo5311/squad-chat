@@ -185,6 +185,8 @@ function checkWidget(body, where, errors, uses) {
         if (c.grow != null && typeof c.grow !== "boolean") errors.push(`${where}.columns[${i}].grow: true or false`);
         if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
+        // "beats": the field holds a heartbeat ("uusx…", newest last), drawn as marks.
+        if (c.beats != null && typeof c.beats !== "boolean") errors.push(`${where}.columns[${i}].beats: true or false`);
       });
     }
     if (k === "act") {
@@ -203,6 +205,8 @@ function checkWidget(body, where, errors, uses) {
       else uses.push({ where: `${where}.pick`, setting: v.setting, settingType: "string" });
       if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.pick.field: not a path`);
       if (!(typeof v?.as === "string" && PATH.test(v.as))) errors.push(`${where}.pick.as: not a path`);
+      // "toggle": the row picked is pressed again to put the setting back to its default.
+      if (v?.toggle != null && typeof v.toggle !== "boolean") errors.push(`${where}.pick.toggle: true or false`);
     }
     if (k === "buttons") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
@@ -264,6 +268,14 @@ function checkHttpJson(params, where, errors) {
       if (spec?.format != null && !FORMATS.includes(spec.format)) errors.push(`${where}.${group}.${name}.format: one of ${FORMATS.join(", ")}`);
     }
   }
+}
+
+// ping's targets: what someone typed, never the manifest's own. They must
+// come from a list setting that starts empty, so a room can't aim it anywhere.
+function checkPing(params, where, settings, errors) {
+  const ref = typeof params.targets === "string" && /^\$settings\.(.+)$/.exec(params.targets);
+  const st = ref ? settings?.[ref[1]] : null;
+  if (!st || st.type !== "list" || !Array.isArray(st.default) || st.default.length) errors.push(`${where}.targets: "$settings.<key>" of a list setting that starts empty`);
 }
 
 // A manifest's alerts: a field in each row, or one value, past a threshold
@@ -328,6 +340,7 @@ export function checkManifest(m, providers) {
       };
       refs(p?.params ?? {}, `${where}.params`);
       if (p?.type === "http-json") checkHttpJson(p.params ?? {}, `${where}.params`, errors);
+      if (p?.type === "ping") checkPing(p.params ?? {}, `${where}.params`, m.settings, errors);
       if (p?.type === "player") checkStations(p.params?.stations, `${where}.params.stations`, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];

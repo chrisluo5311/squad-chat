@@ -464,6 +464,30 @@ function sunWidget(els, b, data, w, key) {
   ], height: 7 };
 }
 
+// A heartbeat ("uusx…", newest last) in `width` cells, the newest at the
+// right: up green, slow amber, down red, not yet checked faint. The terminal
+// draws a mark a cell; the desktop a rounded bar each, as Uptime Kuma does,
+// stretched across its column, which narrows before the name does in a
+// small pane.
+const BEAT_COLORS = { u: theme.online, s: theme.amber, x: theme.error };
+export function beatsNode(els, key, beats, width) {
+  const { Box, Text, Svg } = els;
+  const shown = beats.slice(-width).padStart(width, "n");
+  if (Svg) {
+    const W = width * 10, H = 14, step = W / width;
+    const rects = [...shown].map((b, i) => `<rect x="${(i * step + 1.5).toFixed(1)}" y="0" width="${(step - 3).toFixed(1)}" height="${H}" rx="1.5" fill="${BEAT_COLORS[b] ?? "#3D3D42"}"/>`).join("");
+    const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${rects}</svg>`;
+    return Svg({ key, source, alt: `${[...shown].filter((b) => b === "x").length} failed of the last ${width} checks`, height: H });
+  }
+  // Runs of one color, each a Text: a mark a cell.
+  const runs = [];
+  for (const b of shown) {
+    if (runs.length && runs.at(-1).b === b) runs.at(-1).n++;
+    else runs.push({ b, n: 1 });
+  }
+  return Box({ key, flexDirection: "row", flexShrink: 0, width, children: runs.map((r, i) => Text({ key: `r${i}`, color: BEAT_COLORS[r.b] ?? theme.muted, dimColor: !BEAT_COLORS[r.b], children: (BEAT_COLORS[r.b] ? "▮" : "·").repeat(r.n) })) });
+}
+
 const btnLabel = (x, data) => (x.alt && x.altWhen && lookup(data, x.altWhen) ? x.alt : x.label);
 // Buttons as tabs, as Toolbox's chips: the one whose `lit` path holds is
 // filled, and once any button has a `lit` the others are drawn plain.
@@ -513,6 +537,12 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     const dropList = dropSt ? state.fn.get(room)?.settings?.[b.drop.setting] ?? dropSt.default ?? [] : [];
     const canDrop = !!dropSt && dropList.length > (dropSt.min ?? 0);
     const picked = b.pick ? lookup(data, `${b.pick.as}.${b.pick.field}`) : null;
+    // On the desktop a heartbeat column takes the space the names leave, so
+    // the names get one width, the longest's, and every row lines up.
+    const growCol = b.type === "table" ? b.columns.findIndex((c, i) => grows(c, i)) : -1;
+    const nameCells = els.Svg && growCol >= 0 && b.columns.some((c) => c.beats)
+      ? Math.max(...items.slice(0, n).map((it) => cells(show(lookup(it, b.columns[growCol].field))))) + (b.pick?.toggle ? 2 : 0)
+      : 0;
     if (header) {
       nodes.push(line(els, `${key}-head`, [...b.columns.map((c, i) => (grows(c, i)
         ? { text: c.label ?? "", color: theme.muted, grow: true, right: c.right }
@@ -527,9 +557,16 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
         const dropOn = canDrop ? lookup(item, b.drop.field) : null;
         // With `pick`, the growing column is pressed to pick its row, and
         // the rows not picked are dimmed.
+        // With `toggle`, nothing is dimmed, and the row picked is pressed
+        // again to put the setting back (Ping's details close).
         const pickOn = b.pick ? lookup(item, b.pick.field) : null;
-        const pickBtn = (text) => Button({ key: `pick-${k}`, plain: true, label: text, dimColor: String(pickOn) !== String(picked), onPress: () => handlers.onSetSetting?.(room, b.pick.setting, String(pickOn)) });
-        nodes.push(line(els, k, [...b.columns.map((c, j) => (grows(c, j)
+        const isPicked = String(pickOn) === String(picked);
+        const pickBtn = (text) => Button({ key: `pick-${k}`, plain: true, label: b.pick.toggle && isPicked ? `▾ ${text}` : text, dimColor: !b.pick.toggle && !isPicked, onPress: () => handlers.onSetSetting?.(room, b.pick.setting, b.pick.toggle && isPicked ? "default" : String(pickOn)) });
+        nodes.push(line(els, k, [...b.columns.map((c, j) => (c.beats
+          ? { node: beatsNode(els, `beats-${j}`, String(lookup(item, c.field) ?? ""), c.width ?? 20), ...(els.Svg ? { basis: c.width ?? 20, shrink: 8, fill: true } : {}) }
+          : grows(c, j) && nameCells
+          ? { text: show(lookup(item, c.field)), basis: nameCells, color: tint(c), node: pickOn != null ? pickBtn(show(lookup(item, c.field))) : undefined }
+          : grows(c, j)
           ? { text: show(lookup(item, c.field)), grow: true, right: c.right, color: tint(c), node: pickOn != null ? pickBtn(show(lookup(item, c.field))) : undefined }
           : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) })),
         dropOn != null

@@ -313,11 +313,16 @@ export function pill(els, key, text, color, extra = {}) {
 // the others keep their size, so a status at the end of a row always shows
 // (`right` sets its text against the right edge).
 // One with `width` is a column of that many cells (`right` to right-align).
+// One with `basis` starts that many cells wide and gives way when the row
+// is short (`shrink`, how much faster than the others), and with `fill`
+// takes the space left too. Rows with the same pieces line up.
 // `gap` puts that many cells between the pieces, as a table's columns need.
 export function line(els, key, pieces, { gap = 0 } = {}) {
   const { Box, Text } = els;
   return Box({ key, flexDirection: "row", gap, children: pieces.filter(Boolean).map((p, i) => (p.width != null
     ? col(els, `p${i}`, p.text, p.width, { right: p.right, color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic })
+    : p.basis != null
+    ? Box({ key: `p${i}`, flexDirection: "column", width: p.basis, flexGrow: p.fill ? 1 : 0, flexShrink: p.shrink ?? 1, minWidth: 0, overflow: "hidden", children: [p.node ?? Text({ key: "t", wrap: "truncate-end", color: p.color, children: p.text })] })
     : p.grow
     ? Box({ key: `p${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: "hidden", justifyContent: p.right ? "flex-end" : "flex-start", children: [p.node ?? Text({ key: "t", wrap: "truncate-end", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, children: p.text })] })
     : Box({ key: `p${i}`, flexShrink: 0, children: [p.node ?? Text({ key: "t", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, backgroundColor: p.bg, children: p.text })] }))) });

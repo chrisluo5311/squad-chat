@@ -68,6 +68,7 @@ A room is one file, `room.json`: what it is called, which of squad-chat's provid
 | `quotes` | `watchlist`, `colors` (`market`, `red-up`, `green-up`), `move` | `quotes[]` (`symbol`, `name`, `priceText`, `pctText`, `arrow`, `color`, `spark`, `line` (the day's prices), `volText`, `when`), `markets`, `statusText`, `statusTone`, `band`, `note`, `updated` |
 | `local-list` | `max` | `items[]` (`id`, `name`, `lang`, `body`), `count`, `latest` (`name`, `lang`) |
 | `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu` (with `hist`, `tone`, `temp`), `mem` (with `tone`), `gpu`, `net`, `disk`, `battery` (with `charging`, `tone`), `band`, … (see the Monitor room's manifest) |
+| `ping` | `targets` (must be a list setting that starts empty: Ping checks only what someone typed), `slow_ms`, `alert_after`, `alerts`, `share_names`, `open` | `targets[]` (`id`, `name`, `kind`, `state`, `dot`, `tone`, `msText`, `beats`, `up24`, and for the details `avgText`, `jitterText`, `lossText`, `hist`, `split`, `cert`, `recent`, `why`), `up`, `slow`, `down`, `uptime24`, `incidents[]`, `band`, `share` (see the Ping room's manifest) |
 | `player` | `stations` (https, on the room's hosts), `volume` | `now`, `playing`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
 | `docker` | `container` (the name to show in `detail`) | `containers[]`, `images[]`, `volumes[]`, `networks[]`, `on` (the section shown), `detail`, `down`, `band`, `share`, and actions `containers`, `images`, `volumes`, `networks` (see the Docker room's manifest) |
 
@@ -113,7 +114,7 @@ A card has a `title`, an optional `meta`, `badge` (a few words before the meta, 
 | Widget | Fields |
 | --- | --- |
 | `list` | `items` (a path to a list), `title`, and optionally `mark` (a short field shown before the title, as Lo-fi's ♫), `tag`, `preview`, `copy` (⧉), `share` (⇪), `act` (a button on each row: `label`, `action`, `field`), `max`, `empty` |
-| `table` | `items`, `columns` (each a `field`, and optionally `label`, `width`, `grow`, `right`, `color` or `colorFrom`), `drop` (a ✕ on each row that takes it out of a list setting: `setting`, `field`), `pick` (a row pressed is kept in a string `setting` by its `field`, and shown at the path `as`, as Weather's cities pick `wx.first`), `max`, `empty` |
+| `table` | `items`, `columns` (each a `field`, and optionally `label`, `width`, `grow`, `right`, `color` or `colorFrom`, or `beats` for a field like `"uusx"` drawn as a heartbeat, newest last), `drop` (a ✕ on each row that takes it out of a list setting: `setting`, `field`), `pick` (a row pressed is kept in a string `setting` by its `field`, and shown at the path `as`, as Weather's cities pick `wx.first`. With `toggle`, nothing is dimmed and the row picked is pressed again to put the setting back to its default, as Ping's details close), `max`, `empty` |
 | `tiles` | `tiles`: up to 6, each a `value` and `sub` template |
 | `meter` | `label`, `value` (a path to a percent), `right`, `color` |
 | `text` | `text`, a template. A line whose holes all came out empty is left out. |

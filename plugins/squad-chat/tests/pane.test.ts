@@ -3199,3 +3199,64 @@ test('Docker room: the section shown is the filled tab, the others plain', SLOW,
   expect(b.images?.variant).toBe('primary')
   expect(b.containers?.plain).toBe(true)
 })
+
+// rooms/ping/room.json, as the bridge reports it.
+const PING_ROOM = {"schema": 1, "id": "ping", "version": "1.0.0", "name": "Ping", "icon": "⌁", "color": "sand", "description": "Whether your servers and devices answer and how fast: ping, a TCP port or an HTTP(S) URL, with a heartbeat, 24-hour uptime and 90 days of history.", "author": "squad-chat", "permissions": {"hosts": []}, "settings": {"targets": {"type": "list", "label": "Servers", "default": [], "max": 20, "add": true}, "slow_ms": {"type": "int", "label": "Slow at ms", "default": 500, "min": 1, "max": 60000}, "alert_after": {"type": "int", "label": "Down after this many failed checks", "default": 3, "min": 1, "max": 20}, "alerts": {"type": "bool", "label": "Alerts", "default": true}, "share_names": {"type": "bool", "label": "Share server names", "default": true}, "open": {"type": "string", "label": "Server open", "default": "none"}}, "providers": [{"id": "ping", "type": "ping", "params": {"targets": "$settings.targets", "slow_ms": "$settings.slow_ms", "alert_after": "$settings.alert_after", "alerts": "$settings.alerts", "share_names": "$settings.share_names", "open": "$settings.open"}, "interval": {"visible": "30s", "background": "1m"}}], "layout": {"cards": [{"title": "STATUS", "meta": "{ping.meta}", "body": {"type": "tiles", "tiles": [{"value": "● {ping.up}", "sub": "up", "color": "leaf"}, {"value": "◐ {ping.slow}", "sub": "slow", "tone": "ping.slowTone"}, {"value": "○ {ping.down}", "sub": "down", "tone": "ping.downTone"}, {"value": "{ping.uptime24}", "sub": "uptime 24h", "tone": "ping.uptimeTone"}]}}, {"title": "SERVERS", "meta": "{ping.checked}", "body": {"type": "table", "items": "ping.targets", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "name", "grow": true}, {"field": "kind", "width": 5}, {"field": "msText", "width": 7, "right": true, "colorFrom": "tone"}, {"field": "beats", "width": 20, "beats": true}, {"field": "up24", "width": 6, "right": true, "colorFrom": "upTone"}], "pick": {"setting": "open", "field": "id", "as": "ping.open", "toggle": true}, "drop": {"setting": "targets", "field": "target"}, "empty": "Nothing watched yet. Type a host, host:port or an http(s):// URL below."}, "desktop": {"type": "table", "items": "ping.targets", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "name", "grow": true}, {"field": "kind", "width": 5}, {"field": "msText", "width": 7, "right": true, "colorFrom": "tone"}, {"field": "beats", "width": 30, "beats": true}, {"field": "up24", "width": 6, "right": true, "colorFrom": "upTone"}], "pick": {"setting": "open", "field": "id", "as": "ping.open", "toggle": true}, "drop": {"setting": "targets", "field": "target"}, "empty": "Nothing watched yet. Type a host, host:port or an http(s):// URL below."}}, {"title": "DETAILS", "when": "ping.open", "badge": "{ping.open.name}", "badgeTone": "ping.open.tone", "meta": "{ping.open.kind} · {ping.open.checked}", "body": [{"type": "tiles", "tiles": [{"value": "{ping.open.nowText}", "sub": "now", "tone": "ping.open.tone"}, {"value": "{ping.open.avgText}", "sub": "avg 1h"}, {"value": "{ping.open.jitterText}", "sub": "jitter"}, {"value": "{ping.open.lossText}", "sub": "loss", "tone": "ping.open.lossTone"}]}, {"type": "chart", "values": "ping.open.hist", "color": "sand", "caption": "the last hour, ms"}, {"type": "text", "text": "{ping.open.why}", "color": "red"}, {"type": "text", "text": "{ping.open.split}\n{ping.open.cert}"}, {"type": "text", "text": "{ping.open.recent}"}, {"type": "buttons", "buttons": [{"label": "Check", "action": "check"}, {"label": "Pause", "alt": "Resume", "altWhen": "ping.open.paused", "action": "pause"}]}]}, {"title": "INCIDENTS", "when": "ping.hasIncidents", "body": {"type": "table", "items": "ping.incidents", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "text", "grow": true}, {"field": "when", "width": 14, "right": true}]}}], "inline": [{"type": "table", "items": "ping.inline", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "name", "grow": true}, {"field": "word", "width": 12, "right": true, "colorFrom": "tone"}, {"field": "beats", "width": 16, "beats": true}], "empty": "Nothing watched yet: /set targets example.com"}, {"type": "text", "text": "{ping.inlineMore}"}], "band": "{ping.band}", "pills": [{"each": "ping.bad", "max": 3, "draw": {"type": "dot"}, "colorFrom": "it.tone", "label": "{it.name}", "sub": "{it.word}"}, {"when": "ping.up", "draw": {"type": "dot"}, "color": "leaf", "value": "{ping.up}", "sub": "up"}, {"when": "ping.count", "value": "{ping.uptime24}", "sub": "24h", "tip": ["Uptime over the last 24 hours", "{ping.meta}"]}], "snapshot": "{ping.share}", "add": "targets", "keys": {"c": "check"}, "hint": "press a server for details · c checks now · /set slow_ms 300", "placeholder": "example.com · nas.local:5000 · https://site/health"}}
+const BEATS = 'u'.repeat(37) + 'xxx'
+const PING_ROW = (over: Record<string, unknown> = {}) => ({ id: 'db.internal:5432', name: 'db.internal:5432', target: 'db.internal:5432', kind: 'TCP', state: 'down', dot: '○', tone: 'red', msText: 'down', beats: BEATS, up24: '93.1%', upTone: 'red', paused: false, word: 'down 18m', nowText: 'down', avgText: '3.1 ms', jitterText: '0.4 ms', lossText: '20%', lossTone: 'red', hist: [3, 3.2, 2.9], recent: '14:20:31  lost · refused', split: '', cert: '', why: 'Down since 14:02 (18m): refused', checked: 'checked 14:20:31', ...over })
+const PING = {
+  targets: [PING_ROW(), PING_ROW({ id: '1.1.1.1', name: '1.1.1.1', target: '1.1.1.1', kind: 'ICMP', state: 'up', dot: '●', tone: 'leaf', msText: '10 ms', beats: 'n'.repeat(30) + 'u'.repeat(10), up24: '100%', upTone: null, word: '10 ms', why: '' })],
+  count: 2, up: 1, slow: 0, down: 1, uptime24: '96.5%', uptimeTone: 'red', downTone: 'red', slowTone: null, meta: '2 servers · slow at 500 ms', checked: 'checked 14:20:31',
+  bad: [], inline: [], inlineMore: '', incidents: [{ id: 'i1', dot: '○', tone: 'red', text: 'db.internal:5432 down · refused', when: '14:02 · 18m' }], hasIncidents: true,
+  band: 'db.internal:5432 down 18m · 1 up · 1.1.1.1 10 ms', share: 'Ping · last 90 days · 2 servers', open: null, alerts: [],
+}
+const pingLoaded = (open = 'none') => [
+  { type: 'fnrooms', rooms: [SNIPPET_ROOM, PING_ROOM], invalid: [] },
+  { type: 'fnsettings', id: 'ping', values: { targets: ['db.internal:5432', '1.1.1.1'], slow_ms: 500, alert_after: 3, alerts: true, share_names: true, open } },
+  { type: 'fnroom', id: 'ping', provider: 'ping', data: PING, at: Date.now() },
+]
+
+test('Ping room: a heartbeat per server, pressed open for its details and pressed again to close', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'ping', sysRooms: ['usage', 'ping'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...pingLoaded())
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } } })
+  await settle()
+  // The last 20 checks, a mark a cell: 17 up, then 3 failed.
+  expect(await ui.find({ type: 'Text', text: '▮'.repeat(17) })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '▮▮▮' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '··········' })).toBeDefined()         // not checked yet, faint
+  expect(await ui.find({ type: 'Text', text: 'INCIDENTS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'DETAILS' })).toBeUndefined()           // nothing open
+  // Nothing is dimmed while no row is picked.
+  expect((await ui.find({ key: 'pick-c1-1.1.1.1' }) as any)?.props?.dimColor).toBe(false)
+  bridge.replies['/fnroom/settings'] = (b) => [200, { values: { [b.key]: b.value } }]
+  await ui.press({ key: 'pick-c1-db.internal:5432' })
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/settings').at(-1)?.body).toEqual({ room: 'ping', key: 'open', value: 'db.internal:5432' })
+  await ui.unmount()
+  bridge.emit({ type: 'fnsettings', id: 'ping', values: { targets: ['db.internal:5432', '1.1.1.1'], slow_ms: 500, alert_after: 3, alerts: true, share_names: true, open: 'db.internal:5432' } })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 80 } } })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'DETAILS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Down since 14:02 (18m): refused' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '14:20:31  lost · refused' })).toBeDefined()
+  expect((await ui.find({ key: 'pick-c1-db.internal:5432' }) as any)?.props?.label).toBe('▾ db.internal:5432')
+  // Pressed again, the setting goes back to its default and the details close.
+  await ui.press({ key: 'pick-c1-db.internal:5432' })
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/settings').at(-1)?.body).toEqual({ room: 'ping', key: 'open', value: 'default' })
+  await ui.unmount()
+
+  // The desktop draws each check as a bar of its own.
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Svg', alt: '3 failed of the last 30 checks' })).toBeDefined()
+  await desk.unmount()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '⌁ Ping' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: 'db.internal:5432 down 18m · 1 up · 1.1.1.1 10 ms' })).toBeDefined()
+  await band.unmount()
+})

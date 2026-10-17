@@ -20,6 +20,7 @@ description: 位於聊天室之前的 Usage、Git、Agents、Focus、Habits、To
 | [☀ Weather](#-weather) | 現在、24 小時和一週天氣 | `/chat rooms +weather` |
 | [✦ Tech News](#-tech-news) | Hacker News 和科技新聞 feed | `/chat rooms +news` |
 | [$ Stocks](#-stocks) | 台股和美股報價 | `/chat rooms +stock` |
+| [⌁ Ping](#-ping) | 伺服器有沒有回應、回應多快 | `/chat rooms +ping` |
 | [♫ Lo-fi](#-lo-fi) | 工作時播放的音樂 | `/chat rooms +lofi` |
 | [◰ Docker](#-docker) | Containers、images、volumes、networks，以及 container 的 log | `/chat rooms +docker` |
 
@@ -141,6 +142,10 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 <figure class="shot pane"><img src="/squad-chat/media/rooms/stock.png" alt="Stocks 房間：加權指數、2330、0050、S&P 500、Apple 和 NVIDIA，各自有漲跌和當日走勢。" /></figure>
 
 台股和美股的自選股清單，每檔皆附當日走勢線。可使用 `/chat set stock watchlist TAIEX, 2330, AAPL` 設定（最多 12 檔）。報價可能有所延遲，所有內容皆不構成投資建議。
+
+## ⌁ Ping
+
+伺服器和裝置有沒有回應、回應多快。在房間的輸入框輸入一個目標：主機（`example.com`、`192.168.1.10`）用 ping，`host:port` 測試 TCP 連線，`http(s)://` 網址送一次 `GET`，從 DNS 計時到第一個位元組。每一列以心跳條顯示最近的檢查（綠色正常、黃色慢、紅色失敗），以及 24 小時的在線率。按一下某一列可查看它最近一小時的回應時間、時間花在哪裡和最近幾次檢查，再按一次即可收起。連續 3 次檢查失敗才算 down，down 和恢復時各通知一次。**⇪ Share** 會把最近 90 天以卡片分享出去，`/chat set ping share_names off` 可隱藏卡片上的名稱。`/chat set ping slow_ms 300` 設定多慢算慢。檢查結果和歷史紀錄都只留在這台電腦。
 
 ## ♫ Lo-fi
 

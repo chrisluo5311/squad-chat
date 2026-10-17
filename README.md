@@ -232,6 +232,7 @@ Tabs before your chat rooms. They need no server and no sign-in, and nothing in 
 | ☀ Weather | Now, 24 hours and the week | `/chat rooms +weather` |
 | ✦ Tech News | Hacker News and tech feeds | `/chat rooms +news` |
 | $ Stocks | Taiwan and US quotes | `/chat rooms +stock` |
+| ⌁ Ping | Whether your servers answer, and how fast | `/chat rooms +ping` |
 | ♫ Lo-fi | Music while you work | `/chat rooms +lofi` |
 | ◰ Docker | Containers, images, volumes, networks, and a container's logs | `/chat rooms +docker` |
 

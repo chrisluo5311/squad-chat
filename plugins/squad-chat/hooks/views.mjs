@@ -118,7 +118,7 @@ function withGroupTimes(rows) {
 }
 
 // A room's card, shared: its room's color.
-const CARD_COLORS = { usage: theme.usage, git: theme.git, agents: theme.agents, monitor: palette.teal };
+const CARD_COLORS = { usage: theme.usage, git: theme.git, agents: theme.agents, monitor: palette.teal, ping: palette.sand };
 
 // What a snippet draws: a title, and the lines under it. A room's card takes
 // its title from its first line and wears its room's color.
@@ -144,15 +144,16 @@ function diffColor(line) {
 }
 
 // A card's line: its label dimmed, a bar's fill in the room's color and its
-// track dimmed.
+// track dimmed, and Ping's days as its list draws them (▮ up, ▪ slow, ▯ down).
+const DAY_MARKS = { "▮": theme.online, "▪": theme.amber, "▯": theme.error };
 function cardLine(els, key, line, color) {
   const { Box, Text } = els;
   const m = /^\S(?:.*?\S)?( {2,})/.exec(line);
   const label = m && m[0].length <= 12 ? m[0] : "";
   const bits = [
     ...(label ? [{ text: label, color: theme.muted }] : []),
-    ...line.slice(label.length).split(/([━╸]+|─+)/).filter(Boolean)
-      .map((t) => ({ text: t, color: /^[━╸]/.test(t) ? color : t.startsWith("─") ? theme.muted : theme.theirText })),
+    ...line.slice(label.length).split(/([━╸]+|─+|▮+|▪+|▯+)/).filter(Boolean)
+      .map((t) => ({ text: t, color: DAY_MARKS[t[0]] ?? (/^[━╸]/.test(t) ? color : t.startsWith("─") ? theme.muted : theme.theirText) })),
   ];
   return Box({ key, flexDirection: "row", overflow: "hidden", children: bits.map((b, i) => (i === bits.length - 1
     ? Box({ key: `b${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", color: b.color, children: b.text })] })

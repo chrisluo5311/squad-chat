@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "id": "ping",
+  "version": "1.0.0",
+  "name": "Ping",
+  "icon": "⌁",
+  "color": "sand",
+  "description": "Whether your servers and devices answer and how fast: ping, a TCP port or an HTTP(S) URL, with a heartbeat, 24-hour uptime and 90 days of history.",
+  "author": "squad-chat",
+  "permissions": { "hosts": [] },
+  "settings": {
+    "targets": { "type": "list", "label": "Servers", "default": [], "max": 20, "add": true },
+    "slow_ms": { "type": "int", "label": "Slow at ms", "default": 500, "min": 1, "max": 60000 },
+    "alert_after": { "type": "int", "label": "Down after this many failed checks", "default": 3, "min": 1, "max": 20 },
+    "alerts": { "type": "bool", "label": "Alerts", "default": true },
+    "share_names": { "type": "bool", "label": "Share server names", "default": true },
+    "open": { "type": "string", "label": "Server open", "default": "none" }
+  },
+  "providers": [
+    { "id": "ping", "type": "ping", "params": { "targets": "$settings.targets", "slow_ms": "$settings.slow_ms", "alert_after": "$settings.alert_after", "alerts": "$settings.alerts", "share_names": "$settings.share_names", "open": "$settings.open" }, "interval": { "visible": "30s", "background": "1m" } }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "STATUS",
+        "meta": "{ping.meta}",
+        "body": { "type": "tiles", "tiles": [
+          { "value": "● {ping.up}", "sub": "up", "color": "leaf" },
+          { "value": "◐ {ping.slow}", "sub": "slow", "tone": "ping.slowTone" },
+          { "value": "○ {ping.down}", "sub": "down", "tone": "ping.downTone" },
+          { "value": "{ping.uptime24}", "sub": "uptime 24h", "tone": "ping.uptimeTone" }
+        ] }
+      },
+      {
+        "title": "SERVERS",
+        "meta": "{ping.checked}",
+        "body": { "type": "table", "items": "ping.targets",
+          "columns": [
+            { "field": "dot", "width": 2, "colorFrom": "tone" },
+            { "field": "name", "grow": true },
+            { "field": "kind", "width": 5 },
+            { "field": "msText", "width": 7, "right": true, "colorFrom": "tone" },
+            { "field": "beats", "width": 20, "beats": true },
+            { "field": "up24", "width": 6, "right": true, "colorFrom": "upTone" }
+          ],
+          "pick": { "setting": "open", "field": "id", "as": "ping.open", "toggle": true },
+          "drop": { "setting": "targets", "field": "target" },
+          "empty": "Nothing watched yet. Type a host, host:port or an http(s):// URL below." },
+        "desktop": { "type": "table", "items": "ping.targets",
+          "columns": [
+            { "field": "dot", "width": 2, "colorFrom": "tone" },
+            { "field": "name", "grow": true },
+            { "field": "kind", "width": 5 },
+            { "field": "msText", "width": 7, "right": true, "colorFrom": "tone" },
+            { "field": "beats", "width": 30, "beats": true },
+            { "field": "up24", "width": 6, "right": true, "colorFrom": "upTone" }
+          ],
+          "pick": { "setting": "open", "field": "id", "as": "ping.open", "toggle": true },
+          "drop": { "setting": "targets", "field": "target" },
+          "empty": "Nothing watched yet. Type a host, host:port or an http(s):// URL below." }
+      },
+      {
+        "title": "DETAILS",
+        "when": "ping.open",
+        "badge": "{ping.open.name}",
+        "badgeTone": "ping.open.tone",
+        "meta": "{ping.open.kind} · {ping.open.checked}",
+        "body": [
+          { "type": "tiles", "tiles": [
+            { "value": "{ping.open.nowText}", "sub": "now", "tone": "ping.open.tone" },
+            { "value": "{ping.open.avgText}", "sub": "avg 1h" },
+            { "value": "{ping.open.jitterText}", "sub": "jitter" },
+            { "value": "{ping.open.lossText}", "sub": "loss", "tone": "ping.open.lossTone" }
+          ] },
+          { "type": "chart", "values": "ping.open.hist", "color": "sand", "caption": "the last hour, ms" },
+          { "type": "text", "text": "{ping.open.why}", "color": "red" },
+          { "type": "text", "text": "{ping.open.split}\n{ping.open.cert}" },
+          { "type": "text", "text": "{ping.open.recent}" },
+          { "type": "buttons", "buttons": [
+            { "label": "Check", "action": "check" },
+            { "label": "Pause", "alt": "Resume", "altWhen": "ping.open.paused", "action": "pause" }
+          ] }
+        ]
+      },
+      {
+        "title": "INCIDENTS",
+        "when": "ping.hasIncidents",
+        "body": { "type": "table", "items": "ping.incidents",
+          "columns": [
+            { "field": "dot", "width": 2, "colorFrom": "tone" },
+            { "field": "text", "grow": true },
+            { "field": "when", "width": 14, "right": true }
+          ] }
+      }
+    ],
+    "inline": [
+      { "type": "table", "items": "ping.inline",
+        "columns": [
+          { "field": "dot", "width": 2, "colorFrom": "tone" },
+          { "field": "name", "grow": true },
+          { "field": "word", "width": 12, "right": true, "colorFrom": "tone" },
+          { "field": "beats", "width": 16, "beats": true }
+        ],
+        "empty": "Nothing watched yet: /set targets example.com" },
+      { "type": "text", "text": "{ping.inlineMore}" }
+    ],
+    "band": "{ping.band}",
+    "pills": [
+      { "each": "ping.bad", "max": 3, "draw": { "type": "dot" }, "colorFrom": "it.tone", "label": "{it.name}", "sub": "{it.word}" },
+      { "when": "ping.up", "draw": { "type": "dot" }, "color": "leaf", "value": "{ping.up}", "sub": "up" },
+      { "when": "ping.count", "value": "{ping.uptime24}", "sub": "24h", "tip": ["Uptime over the last 24 hours", "{ping.meta}"] }
+    ],
+    "snapshot": "{ping.share}",
+    "add": "targets",
+    "keys": { "c": "check" },
+    "hint": "press a server for details · c checks now · /set slow_ms 300",
+    "placeholder": "example.com · nas.local:5000 · https://site/health"
+  }
+}

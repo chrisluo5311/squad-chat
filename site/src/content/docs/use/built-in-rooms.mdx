@@ -20,6 +20,7 @@ These tabs appear before your chat rooms. They require no server and no sign-in,
 | [☀ Weather](#-weather) | Now, 24 hours and the week | `/chat rooms +weather` |
 | [✦ Tech News](#-tech-news) | Hacker News and tech feeds | `/chat rooms +news` |
 | [$ Stocks](#-stocks) | Taiwan and US quotes | `/chat rooms +stock` |
+| [⌁ Ping](#-ping) | Whether your servers answer, and how fast | `/chat rooms +ping` |
 | [♫ Lo-fi](#-lo-fi) | Music while you work | `/chat rooms +lofi` |
 | [◰ Docker](#-docker) | Containers, images, volumes, networks, and a container's logs | `/chat rooms +docker` |
 
@@ -141,6 +142,10 @@ Your cities from [Open-Meteo](https://open-meteo.com), no key: now, the next 24 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/stock.png" alt="The Stocks room: TAIEX, 2330, 0050, the S&P 500, Apple and NVIDIA, each with its change and the day's line." /></figure>
 
 A watchlist of Taiwan and US stocks, each with today's line. Set it with `/chat set stock watchlist TAIEX, 2330, AAPL` (up to 12). Prices may be delayed, and none of it is investment advice.
+
+## ⌁ Ping
+
+Whether your servers and devices answer, and how fast. Type one into the room's box: a host (`example.com`, `192.168.1.10`) is pinged, `host:port` gets a TCP connection, and an `http(s)://` URL gets one `GET`, timed from DNS to the first byte. Each row shows the last checks as a heartbeat (green up, amber slow, red failed) and the uptime over 24 hours. Press a row to see its last hour, where its time goes and its last checks, and press it again to close it. A server is down after 3 failed checks in a row, and you get a notification then and when it's back. **⇪ Share** posts the last 90 days as a card, and `/chat set ping share_names off` hides the names in it. `/chat set ping slow_ms 300` sets when a server counts as slow. The checks and their history stay on this computer.
 
 ## ♫ Lo-fi
 

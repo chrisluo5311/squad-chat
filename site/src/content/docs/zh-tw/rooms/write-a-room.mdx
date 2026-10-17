@@ -68,6 +68,7 @@ import BandGallery from "../../../../components/BandGallery.astro";
 | `quotes` | `watchlist`、`colors`（`market`、`red-up`、`green-up`）、`move` | `quotes[]`（`symbol`、`name`、`priceText`、`pctText`、`arrow`、`color`、`spark`、`line`（當日價格）、`volText`、`when`）、`markets`、`statusText`、`statusTone`、`band`、`note`、`updated` |
 | `local-list` | `max` | `items[]`（`id`、`name`、`lang`、`body`）、`count`、`latest`（`name`、`lang`） |
 | `sysinfo` | `alerts`、`cpu_temp`、`memory` | `cpu`（含 `hist`、`tone`、`temp`）、`mem`（含 `tone`）、`gpu`、`net`、`disk`、`battery`（含 `charging`、`tone`）、`band`…（請參閱 Monitor 房間的 manifest） |
+| `ping` | `targets`（必須是一個預設為空的清單設定：Ping 只檢查使用者自己輸入的目標）、`slow_ms`、`alert_after`、`alerts`、`share_names`、`open` | `targets[]`（`id`、`name`、`kind`、`state`、`dot`、`tone`、`msText`、`beats`、`up24`，詳情用的 `avgText`、`jitterText`、`lossText`、`hist`、`split`、`cert`、`recent`、`why`）、`up`、`slow`、`down`、`uptime24`、`incidents[]`、`band`、`share`（請參閱 Ping 房間的 manifest） |
 | `player` | `stations`（https，在房間的 host 上）、`volume` | `now`、`playing`、`entries[]`、`band`、`share`（請參閱 Lo-fi 房間的 manifest） |
 | `docker` | `container`（在 `detail` 顯示的名稱） | `containers[]`、`images[]`、`volumes[]`、`networks[]`、`on`（顯示中的分區）、`detail`、`down`、`band`、`share`，以及 action `containers`、`images`、`volumes`、`networks`（請參閱 Docker 房間的 manifest） |
 
@@ -113,7 +114,7 @@ import BandGallery from "../../../../components/BandGallery.astro";
 | 元件 | 欄位 |
 | --- | --- |
 | `list` | `items`（指向清單的路徑）、`title`，以及可選的 `mark`（標題前的短欄位，例如 Lo-fi 的 ♫）、`tag`、`preview`、`copy`（⧉）、`share`（⇪）、`act`（每列一個按鈕：`label`、`action`、`field`）、`max`、`empty` |
-| `table` | `items`、`columns`（每欄一個 `field`，以及可選的 `label`、`width`、`grow`、`right`、`color` 或 `colorFrom`）、`drop`（每列一個 ✕，將該列從清單設定中移除：`setting`、`field`）、`pick`（按下的列會依 `field` 存進字串 `setting`，並顯示在路徑 `as`，例如 Weather 的城市選 `wx.first`）、`max`、`empty` |
+| `table` | `items`、`columns`（每欄一個 `field`，以及可選的 `label`、`width`、`grow`、`right`、`color` 或 `colorFrom`，或用 `beats` 把像 `"uusx"` 的欄位畫成心跳條，最新的在右邊）、`drop`（每列一個 ✕，將該列從清單設定中移除：`setting`、`field`）、`pick`（按下的列會依 `field` 存進字串 `setting`，並顯示在路徑 `as`，例如 Weather 的城市選 `wx.first`。加上 `toggle` 時不會變暗，再按一次已選的列會把設定恢復預設，例如 Ping 的詳情收起）、`max`、`empty` |
 | `tiles` | `tiles`：最多 6 格，每格一個 `value` 和 `sub` 範本 |
 | `meter` | `label`、`value`（指向百分比的路徑）、`right`、`color` |
 | `text` | `text`，一個範本。所有空位都是空的那一行會被省略。 |

@@ -4396,8 +4396,8 @@ var require_RealtimeChannel = __commonJS({
       }
       /** @internal */
       _notThisChannelEvent(event, ref) {
-        const { close, error, leave, join: join9 } = constants_1.CHANNEL_EVENTS;
-        const events = [close, error, leave, join9];
+        const { close, error, leave, join: join10 } = constants_1.CHANNEL_EVENTS;
+        const events = [close, error, leave, join10];
         return ref && events.includes(event) && ref !== this.joinPush.ref;
       }
       /** @internal */
@@ -13906,9 +13906,9 @@ var require_main3 = __commonJS({
 
 // src/bridge.mjs
 import { createServer } from "node:http";
-import { mkdirSync as mkdirSync7, rmSync as rmSync5, chmodSync as chmodSync7, readFileSync as readFileSync8 } from "node:fs";
+import { mkdirSync as mkdirSync8, rmSync as rmSync5, chmodSync as chmodSync7, readFileSync as readFileSync9 } from "node:fs";
 import { homedir as homedir2, tmpdir } from "node:os";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -22827,8 +22827,8 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
 }
 
 // src/rooms/registry.mjs
-import { readdirSync as readdirSync2, readFileSync as readFileSync6, writeFileSync as writeFileSync6, renameSync as renameSync6, statSync as statSync3 } from "node:fs";
-import { join as join6 } from "node:path";
+import { readdirSync as readdirSync2, readFileSync as readFileSync7, writeFileSync as writeFileSync7, renameSync as renameSync7, statSync as statSync3 } from "node:fs";
+import { join as join7 } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { readFile, stat, readdir } from "node:fs/promises";
 import { connect } from "node:net";
@@ -23000,6 +23000,7 @@ function checkWidget(body, where, errors, uses) {
         if (c.grow != null && typeof c.grow !== "boolean") errors.push(`${where}.columns[${i}].grow: true or false`);
         if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
+        if (c.beats != null && typeof c.beats !== "boolean") errors.push(`${where}.columns[${i}].beats: true or false`);
       });
     }
     if (k === "act") {
@@ -23018,6 +23019,7 @@ function checkWidget(body, where, errors, uses) {
       else uses.push({ where: `${where}.pick`, setting: v.setting, settingType: "string" });
       if (!(typeof v?.field === "string" && PATH.test(v.field))) errors.push(`${where}.pick.field: not a path`);
       if (!(typeof v?.as === "string" && PATH.test(v.as))) errors.push(`${where}.pick.as: not a path`);
+      if (v?.toggle != null && typeof v.toggle !== "boolean") errors.push(`${where}.pick.toggle: true or false`);
     }
     if (k === "buttons") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
@@ -23079,6 +23081,11 @@ function checkHttpJson(params, where, errors) {
     }
   }
 }
+function checkPing(params, where, settings, errors) {
+  const ref = typeof params.targets === "string" && /^\$settings\.(.+)$/.exec(params.targets);
+  const st = ref ? settings?.[ref[1]] : null;
+  if (!st || st.type !== "list" || !Array.isArray(st.default) || st.default.length) errors.push(`${where}.targets: "$settings.<key>" of a list setting that starts empty`);
+}
 function checkAlerts(alerts, m, errors) {
   if (alerts == null) return;
   if (!Array.isArray(alerts) || alerts.length > 6) return errors.push("alerts: up to 6");
@@ -23133,6 +23140,7 @@ function checkManifest(m, providers) {
       };
       refs(p?.params ?? {}, `${where}.params`);
       if (p?.type === "http-json") checkHttpJson(p.params ?? {}, `${where}.params`, errors);
+      if (p?.type === "ping") checkPing(p.params ?? {}, `${where}.params`, m.settings, errors);
       if (p?.type === "player") checkStations(p.params?.stations, `${where}.params.stations`, Array.isArray(hosts) ? hosts.map((h) => String(h).toLowerCase()) : [], errors);
       for (const k of ["visible", "background"]) {
         const v = p?.interval?.[k];
@@ -24974,8 +24982,475 @@ var docker_default = {
   }]))
 };
 
+// src/rooms/providers/ping.mjs
+import { readFileSync as readFileSync6, writeFileSync as writeFileSync6, renameSync as renameSync6, mkdirSync as mkdirSync6 } from "node:fs";
+import { join as join6 } from "node:path";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+var MIN_GAP = 1e4;
+var TIMEOUT_MS2 = 5e3;
+var CHECKS = 120;
+var BEATS = 40;
+var DAYS = 90;
+var SHARE_ROWS = 6;
+var MAX_TARGETS = 20;
+var INCIDENTS = 30;
+var RECOVERED_MS = 10 * 6e4;
+var checkNow = /* @__PURE__ */ new Set();
+var HOSTNAME = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+var IPV6 = /^[0-9a-f:]+$/i;
+function parseTarget(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw || raw.length > 300 || /\s/.test(raw)) return null;
+  const key = raw.toLowerCase();
+  if (/^https?:\/\//i.test(raw)) {
+    let u;
+    try {
+      u = new URL(raw);
+    } catch {
+      return null;
+    }
+    const host2 = u.hostname.replace(/^\[|\]$/g, "");
+    if (!(HOSTNAME.test(host2) || host2.includes(":") && IPV6.test(host2))) return null;
+    if (u.username || u.password) return null;
+    const path = u.pathname === "/" ? "" : u.pathname;
+    return { key, kind: u.protocol === "https:" ? "HTTPS" : "HTTP", host: host2, url: u.href, name: `${u.hostname}${u.port ? `:${u.port}` : ""}${path}`.slice(0, 40) };
+  }
+  const tcp = /^(?:tcp:\/\/)?(\[[0-9a-f:]+\]|[^:/\s]+):(\d{1,5})$/i.exec(raw);
+  if (tcp) {
+    const host2 = tcp[1].replace(/^\[|\]$/g, "");
+    const port = Number(tcp[2]);
+    if (!(port >= 1 && port <= 65535)) return null;
+    if (!(HOSTNAME.test(host2) || host2.includes(":") && IPV6.test(host2))) return null;
+    return { key, kind: "TCP", host: host2, port, name: `${tcp[1]}:${port}`.slice(0, 40) };
+  }
+  if (HOSTNAME.test(raw) || (raw.match(/:/g) ?? []).length >= 2 && IPV6.test(raw)) {
+    return { key, kind: "ICMP", host: raw, name: raw.slice(0, 40) };
+  }
+  return null;
+}
+function parsePing(text) {
+  const times = [...String(text ?? "").matchAll(/time[=<]([\d.]+)\s*ms/g)].map((m) => Number(m[1]));
+  const sum = /(\d+) packets transmitted, (\d+) (?:packets )?received/.exec(String(text ?? ""));
+  const sent = sum ? Number(sum[1]) : times.length;
+  const got = sum ? Number(sum[2]) : times.length;
+  return { times, sent, got };
+}
+var median = (xs) => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+};
+function pingArgv(t, platform) {
+  const v6 = t.host.includes(":");
+  if (platform === "darwin") return [v6 ? "/sbin/ping6" : "/sbin/ping", "-c", "3", "-i", "0.2", ...v6 ? [] : ["-W", "2000"], "--", t.host];
+  return ["ping", ...v6 ? ["-6"] : [], "-c", "3", "-i", "0.2", "-W", "2", "--", t.host];
+}
+async function probeIcmp(t, ctx) {
+  if (ctx.platform !== "darwin" && ctx.platform !== "linux") return { ok: false, why: "ping needs macOS or Linux" };
+  const out = await ctx.run(pingArgv(t, ctx.platform), { timeoutMs: 8e3 });
+  const { times, sent, got } = parsePing(out);
+  if (!got || !times.length) return { ok: false, why: "no reply", loss: 1 };
+  return { ok: true, ms: median(times), loss: sent ? (sent - got) / sent : 0 };
+}
+function whyOf(err) {
+  const code = err?.code ?? "";
+  return {
+    ECONNREFUSED: "refused",
+    ENOTFOUND: "unknown host",
+    EAI_AGAIN: "DNS didn't answer",
+    ECONNRESET: "connection reset",
+    EHOSTUNREACH: "host unreachable",
+    ENETUNREACH: "network unreachable",
+    ETIMEDOUT: `no answer in ${TIMEOUT_MS2 / 1e3}s`,
+    CERT_HAS_EXPIRED: "certificate expired",
+    DEPTH_ZERO_SELF_SIGNED_CERT: "self-signed certificate",
+    SELF_SIGNED_CERT_IN_CHAIN: "self-signed certificate",
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: "certificate not trusted",
+    ERR_TLS_CERT_ALTNAME_INVALID: "certificate is for another name"
+  }[code] ?? (code || String(err?.message ?? err).slice(0, 60));
+}
+function probeTcp(t, ctx) {
+  return new Promise((resolve2) => {
+    const t0 = performance.now();
+    let done = false;
+    let sock;
+    const finish = (r) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try {
+        sock?.destroy();
+      } catch {
+      }
+      resolve2(r);
+    };
+    const timer = setTimeout(() => finish({ ok: false, why: `no answer in ${TIMEOUT_MS2 / 1e3}s` }), TIMEOUT_MS2);
+    try {
+      sock = ctx.connect({ host: t.host, port: t.port });
+      sock.on("connect", () => finish({ ok: true, ms: performance.now() - t0 }));
+      sock.on("error", (err) => finish({ ok: false, why: whyOf(err) }));
+    } catch (err) {
+      finish({ ok: false, why: whyOf(err) });
+    }
+  });
+}
+function httpProbe(url, { timeoutMs = TIMEOUT_MS2 } = {}) {
+  return new Promise((resolve2) => {
+    const u = new URL(url);
+    const t0 = performance.now();
+    const at = {};
+    let done = false;
+    let req;
+    const finish = (r) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try {
+        req?.destroy();
+      } catch {
+      }
+      resolve2(r);
+    };
+    const timer = setTimeout(() => finish({ ok: false, why: `no answer in ${timeoutMs / 1e3}s` }), timeoutMs);
+    const send = u.protocol === "https:" ? httpsRequest : httpRequest;
+    req = send(u, { method: "GET", agent: false, headers: { "user-agent": "squad-chat ping", accept: "*/*" } });
+    req.on("socket", (s) => {
+      s.on("lookup", () => {
+        at.dns = performance.now();
+      });
+      s.on("connect", () => {
+        at.tcp = performance.now();
+      });
+      s.on("secureConnect", () => {
+        at.tls = performance.now();
+        try {
+          const end = Date.parse(s.getPeerCertificate()?.valid_to);
+          if (Number.isFinite(end)) at.certEnd = end;
+        } catch {
+        }
+      });
+    });
+    req.on("response", (res) => {
+      const first = performance.now();
+      res.resume();
+      const dns = at.dns ? at.dns - t0 : 0;
+      const tcp = at.tcp ? at.tcp - (at.dns ?? t0) : 0;
+      const tls = at.tls && at.tcp ? at.tls - at.tcp : 0;
+      const wait = first - (at.tls ?? at.tcp ?? t0);
+      const code = res.statusCode;
+      finish({ ok: code < 400, ms: first - t0, code, why: code >= 400 ? `HTTP ${code}` : void 0, split: [dns, tcp, tls, wait].map((x) => Math.max(0, Math.round(x))), certEnd: at.certEnd });
+    });
+    req.on("error", (err) => finish({ ok: false, why: whyOf(err) }));
+    req.end();
+  });
+}
+function probe(t, ctx) {
+  if (t.kind === "ICMP") return probeIcmp(t, ctx);
+  if (t.kind === "TCP") return probeTcp(t, ctx);
+  return (ctx.httpProbe ?? httpProbe)(t.url, { timeoutMs: TIMEOUT_MS2 });
+}
+var emptyHistory = () => ({ v: 1, targets: {}, incidents: [], paused: [] });
+function loadHistory(dir) {
+  try {
+    const h = JSON.parse(readFileSync6(join6(dir, "history.json"), "utf8"));
+    if (h && typeof h === "object" && h.targets && typeof h.targets === "object") return { ...emptyHistory(), ...h };
+  } catch {
+  }
+  return emptyHistory();
+}
+function saveHistory(dir, h) {
+  mkdirSync6(dir, { recursive: true, mode: 448 });
+  const file = join6(dir, "history.json");
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync6(tmp, JSON.stringify(h), { mode: 384 });
+  renameSync6(tmp, file);
+}
+var pad2 = (n) => String(n).padStart(2, "0");
+var dayKey = (ms) => {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+var hourKey = (ms) => String(Math.floor(ms / 36e5) * 36e5);
+var clockOf = (ms) => {
+  const d = new Date(ms);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+};
+var hhmm = (ms) => clockOf(ms).slice(0, 5);
+function recordCheck(h, t, res, { at, slowMs, alertAfter }) {
+  const e = h.targets[t.key] ??= { checks: [], hours: {}, days: {}, fails: 0 };
+  const ok = !!res.ok;
+  const slow = ok && res.ms >= slowMs;
+  const beat = ok ? slow ? "s" : "u" : "x";
+  e.checks.push({ t: at, ms: ok ? Math.round(res.ms * 10) / 10 : null, b: beat, ...res.loss ? { loss: res.loss } : {}, ...res.code ? { code: res.code } : {}, ...res.why ? { why: res.why } : {} });
+  if (e.checks.length > CHECKS) e.checks.splice(0, e.checks.length - CHECKS);
+  for (const [bucket, k] of [[e.hours, hourKey(at)], [e.days, dayKey(at)]]) {
+    const b = bucket[k] ??= [0, 0, 0];
+    b[0]++;
+    if (ok) b[1]++;
+    if (slow) b[2]++;
+  }
+  for (const k of Object.keys(e.hours)) if (at - Number(k) > 25 * 36e5) delete e.hours[k];
+  const days = Object.keys(e.days).sort();
+  for (const k of days.slice(0, Math.max(0, days.length - DAYS))) delete e.days[k];
+  if (res.split) e.split = res.split;
+  if (res.certEnd) e.certEnd = res.certEnd;
+  if (ok) {
+    if (e.downSince) {
+      const open = h.incidents.find((x) => x.key === t.key && x.to == null);
+      if (open) open.to = at;
+    }
+    e.fails = 0;
+    e.failSince = null;
+    e.downSince = null;
+    e.why = null;
+  } else {
+    e.fails = (e.fails ?? 0) + 1;
+    e.failSince ??= at;
+    e.why = res.why ?? "no answer";
+    if (!e.downSince && e.fails >= alertAfter) {
+      e.downSince = e.failSince;
+      h.incidents.push({ key: t.key, name: t.name, from: e.failSince, to: null, why: e.why });
+      if (h.incidents.length > INCIDENTS) h.incidents.splice(0, h.incidents.length - INCIDENTS);
+    }
+  }
+}
+function fmtMs(v) {
+  if (v == null || !Number.isFinite(v)) return "\u2013";
+  return v < 10 ? `${Math.round(v * 10) / 10} ms` : `${Math.round(v)} ms`;
+}
+function fmtSpan(msLong) {
+  const m = Math.max(0, Math.floor(msLong / 6e4));
+  if (m < 1) return "<1m";
+  if (m < 60) return `${m}m`;
+  if (m < 48 * 60) return `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`;
+  return `${Math.floor(m / 1440)}d`;
+}
+var fmtPct = (ok, n) => n ? `${(Math.floor(ok / n * 1e3) / 10).toString()}%` : "\u2013";
+function dayBeat(buckets) {
+  let n = 0, ok = 0;
+  for (const b of buckets) if (b) {
+    n += b[0];
+    ok += b[1];
+  }
+  if (!n) return "n";
+  const r = ok / n;
+  return r >= 0.999 ? "u" : r >= 0.99 ? "s" : "x";
+}
+function dayBeats(e, now, per = 1) {
+  const out = [];
+  for (let i = DAYS - 1; i >= 0; i -= per) {
+    const group = [];
+    for (let j = 0; j < per && i - j >= 0; j++) group.push(e?.days?.[dayKey(now - (i - j) * 864e5)]);
+    out.push(dayBeat(group));
+  }
+  return out.join("");
+}
+var GLYPHS = { u: "\u25AE", s: "\u25AA", x: "\u25AF", n: "\xB7" };
+var glyphs = (beats) => [...beats].map((b) => GLYPHS[b] ?? "\xB7").join("");
+function targetRow(t, e, { now, slowMs, paused, sinceHour }) {
+  const checks = e?.checks ?? [];
+  const last = checks.at(-1) ?? null;
+  const hour = checks.filter((c) => c.t >= sinceHour);
+  const good = hour.filter((c) => c.ms != null).map((c) => c.ms);
+  const avg = good.length ? good.reduce((a, b) => a + b, 0) / good.length : null;
+  const jitter = good.length > 1 ? good.slice(1).reduce((a, v, i) => a + Math.abs(v - good[i]), 0) / (good.length - 1) : null;
+  const lossOf = (c) => c.ms == null ? 1 : c.loss ?? 0;
+  const loss = hour.length ? Math.round(hour.reduce((a, c) => a + lossOf(c), 0) / hour.length * 100) : null;
+  let n = 0, ok = 0;
+  for (const b of Object.values(e?.hours ?? {})) {
+    n += b[0];
+    ok += b[1];
+  }
+  const down = !!e?.downSince;
+  const failing = !down && last?.ms == null && !!last;
+  const slow = !down && !failing && last?.ms != null && last.ms >= slowMs;
+  const state = paused ? "paused" : !last ? "new" : down ? "down" : failing || slow ? "slow" : "up";
+  const tone2 = { down: "red", slow: "amber", up: "leaf" }[state] ?? null;
+  const dot = { down: "\u25CB", slow: "\u25D0", up: "\u25CF", paused: "\u2016", new: "\xB7" }[state];
+  const msText = state === "paused" ? "paused" : state === "new" ? "\u2026" : down ? "down" : failing ? "lost" : fmtMs(last.ms);
+  const beats = ("n".repeat(BEATS) + checks.map((c) => c.b).join("")).slice(-BEATS);
+  const certDays = e?.certEnd ? Math.floor((e.certEnd - now) / 864e5) : null;
+  const split = t.kind.startsWith("HTTP") && e?.split ? `dns ${e.split[0]} \xB7 connect ${e.split[1]}${t.kind === "HTTPS" ? ` \xB7 tls ${e.split[2]}` : ""} \xB7 first byte ${e.split[3]} ms` : "";
+  const recent = checks.slice(-5).reverse().map((c) => `${clockOf(c.t)}  ${c.ms == null ? `lost \xB7 ${c.why ?? "no answer"}` : `${c.code ? `${c.code}  ` : ""}${fmtMs(c.ms)}${c.loss ? ` \xB7 ${Math.round(c.loss * 100)}% lost` : ""}`}`).join("\n");
+  return {
+    id: t.key,
+    name: t.name,
+    target: t.raw,
+    kind: t.kind,
+    state,
+    dot,
+    tone: tone2,
+    msText,
+    beats,
+    up24: fmtPct(ok, n),
+    upTone: n && ok / n < 0.99 ? "red" : n && ok < n ? "amber" : null,
+    paused,
+    word: down ? `down ${fmtSpan(now - e.downSince)}` : failing ? `lost \xB7 ${e?.why ?? "no answer"}` : slow ? fmtMs(last.ms) : msText,
+    nowText: msText,
+    avgText: fmtMs(avg),
+    jitterText: fmtMs(jitter),
+    lossText: loss == null ? "\u2013" : `${loss}%`,
+    lossTone: loss ? loss >= 5 ? "red" : "amber" : null,
+    hist: checks.slice(-60).map((c) => c.ms).filter((v) => v != null),
+    recent,
+    split,
+    cert: certDays == null ? "" : certDays < 0 ? "certificate expired" : `certificate ends in ${certDays} day${certDays === 1 ? "" : "s"}`,
+    certTone: certDays != null && certDays < 14 ? certDays < 0 ? "red" : "amber" : null,
+    why: down ? `Down since ${hhmm(e.downSince)} (${fmtSpan(now - e.downSince)}): ${e.why ?? "no answer"}` : failing ? `Last check lost: ${e.why ?? "no answer"}` : "",
+    checked: last ? `checked ${clockOf(last.t)}` : "not checked yet"
+  };
+}
+var RANK = { down: 0, slow: 1, up: 2, new: 3, paused: 4 };
+function pingView(h, targets, { now, slowMs, shareNames = true, alerts = true, open = null }) {
+  const paused = new Set(h.paused ?? []);
+  const sinceHour = now - 36e5;
+  const rows = targets.map((t) => targetRow(t, h.targets[t.key], { now, slowMs, paused: paused.has(t.key), sinceHour })).map((r, i) => ({ ...r, order: i })).sort((a, b) => RANK[a.state] - RANK[b.state] || a.order - b.order);
+  const count = (s) => rows.filter((r) => r.state === s).length;
+  const up = count("up"), slow = count("slow"), down = count("down");
+  let n = 0, ok = 0;
+  for (const t of targets) for (const b of Object.values(h.targets[t.key]?.hours ?? {})) {
+    n += b[0];
+    ok += b[1];
+  }
+  const bad = rows.filter((r) => r.state === "down" || r.state === "slow");
+  const watched = rows.filter((r) => r.state !== "paused").length;
+  const names = new Map(rows.map((r, i) => [r.id, shareNames ? r.name : `server ${i + 1}`]));
+  const band = !targets.length ? "No servers yet \xB7 /set targets example.com" : [...bad.map((r) => `${r.name} ${r.word}`), up ? `${up} up` : null, ...rows.filter((r) => r.state === "up").slice(0, 3).map((r) => `${r.name} ${r.msText}`)].filter(Boolean).join(" \xB7 ");
+  const headline = !targets.length ? "Nothing watched yet" : down ? `${bad.filter((r) => r.state === "down").map((r) => names.get(r.id)).join(", ")} ${down === 1 ? "is" : "are"} down` : slow ? `${slow} slow, ${up} up` : `All ${up} up`;
+  const shareRows = rows.filter((r) => r.state !== "paused").slice(0, SHARE_ROWS);
+  const width = Math.max(4, ...shareRows.map((r) => [...names.get(r.id)].length));
+  const share = [
+    `Ping \xB7 last 90 days \xB7 ${watched} server${watched === 1 ? "" : "s"}`,
+    headline,
+    ...shareRows.map((r) => {
+      const e = h.targets[r.id];
+      let dn = 0, dok = 0;
+      for (const b of Object.values(e?.days ?? {})) {
+        dn += b[0];
+        dok += b[1];
+      }
+      return `${names.get(r.id).padEnd(width)}  ${glyphs(dayBeats(e, now, 3))}  ${fmtPct(dok, dn)}`;
+    }),
+    watched > shareRows.length ? `+ ${watched - shareRows.length} more` : null
+  ].filter(Boolean).join("\n");
+  const incidents = [...h.incidents ?? []].filter((x) => targets.some((t) => t.key === x.key)).reverse().slice(0, 5).map((x, i) => ({
+    id: `${x.key}-${x.from}-${i}`,
+    dot: x.to == null ? "\u25CB" : "\u25CF",
+    tone: x.to == null ? "red" : "leaf",
+    text: x.to == null ? `${x.name} down \xB7 ${x.why}` : `${x.name} back up \xB7 was down ${fmtSpan(x.to - x.from)}`,
+    when: x.to == null ? `${hhmm(x.from)} \xB7 ${fmtSpan(now - x.from)}` : `${dayKey(x.to) === dayKey(now) ? "" : `${dayKey(x.to).slice(5)} `}${hhmm(x.to)}`
+  }));
+  const out = [];
+  if (alerts) {
+    for (const r of rows) if (r.state === "down") out.push({ id: `down:${r.id}:${h.targets[r.id].downSince}`, text: `Ping: ${r.name} is down \xB7 ${h.targets[r.id].why ?? "no answer"}` });
+    for (const x of h.incidents ?? []) if (x.to != null && now - x.to < RECOVERED_MS && targets.some((t) => t.key === x.key)) out.push({ id: `up:${x.key}:${x.to}`, text: `Ping: ${x.name} is back up after ${fmtSpan(x.to - x.from)}` });
+  }
+  const lastCheck = Math.max(0, ...targets.map((t) => h.targets[t.key]?.checks.at(-1)?.t ?? 0));
+  const others = rows.length - Math.min(3, rows.length);
+  return {
+    targets: rows,
+    count: rows.length,
+    up,
+    slow,
+    down,
+    pausedCount: count("paused"),
+    upText: String(up),
+    uptime24: fmtPct(ok, n),
+    uptimeTone: n && ok / n < 0.99 ? "red" : n && ok < n ? "amber" : "leaf",
+    downTone: down ? "red" : null,
+    slowTone: slow ? "amber" : null,
+    checked: lastCheck ? `checked ${clockOf(lastCheck)}` : "",
+    meta: targets.length ? `${rows.length} server${rows.length === 1 ? "" : "s"} \xB7 slow at ${slowMs} ms` : "none yet",
+    bad,
+    inline: rows.slice(0, 3),
+    inlineMore: others > 0 ? `+ ${others} more \xB7 ${fmtPct(ok, n)} up over 24 h` : "",
+    incidents,
+    hasIncidents: incidents.length > 0,
+    band,
+    share,
+    open,
+    alerts: out
+  };
+}
+function targetsOf(params) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const raw of Array.isArray(params.targets) ? params.targets : []) {
+    const t = parseTarget(raw);
+    if (!t || seen.has(t.key)) continue;
+    seen.add(t.key);
+    out.push({ ...t, raw: String(raw).trim() });
+  }
+  return out.slice(0, MAX_TARGETS);
+}
+var settingsOf = (params) => ({
+  slowMs: Math.max(1, Number(params.slow_ms) || 500),
+  alertAfter: Math.max(1, Number(params.alert_after) || 3)
+});
+var ping_default = {
+  type: "ping",
+  hosts: [],
+  async fetch(params, ctx) {
+    const targets = targetsOf(params);
+    const { slowMs, alertAfter } = settingsOf(params);
+    const dir = ctx.dataDir;
+    const now = ctx.now();
+    const before = loadHistory(dir);
+    const paused = new Set(before.paused ?? []);
+    const all = checkNow.delete(dir);
+    const lastAt = (h2, t) => h2.targets[t.key]?.checks.at(-1)?.t ?? 0;
+    const due = targets.filter((t) => !paused.has(t.key) && (all || now - lastAt(before, t) >= MIN_GAP));
+    const results = await Promise.all(due.map(async (t) => ({ t, res: await probe(t, ctx).catch((err) => ({ ok: false, why: whyOf(err) })) })));
+    const at = ctx.now();
+    const h = await locked(dir, "history", () => {
+      const cur = loadHistory(dir);
+      for (const { t, res } of results) {
+        if (!all && at - lastAt(cur, t) < MIN_GAP) continue;
+        recordCheck(cur, t, res, { at, slowMs, alertAfter });
+      }
+      const keep = new Set(targets.map((t) => t.key));
+      for (const k of Object.keys(cur.targets)) if (!keep.has(k)) delete cur.targets[k];
+      cur.paused = (cur.paused ?? []).filter((k) => keep.has(k));
+      saveHistory(dir, cur);
+      return cur;
+    });
+    return pingView(h, targets, { now: at, slowMs, shareNames: params.share_names !== false, alerts: params.alerts !== false });
+  },
+  // A target added is one this can check, written as it was typed.
+  check: {
+    async targets(list) {
+      const bad = list.filter((x) => !parseTarget(x));
+      if (bad.length) throw new RoomError(400, `Can't watch ${bad.join(" or ")}. Use a host (example.com), host:port for a TCP port, or an http(s):// URL.`);
+      return list.map((x) => String(x).trim());
+    }
+  },
+  actions: {
+    // Everything checked now, not on the interval.
+    check(params, args, ctx) {
+      checkNow.add(ctx.dataDir);
+      return { ok: true };
+    },
+    // The open target (or the one named) stops being checked, or starts again.
+    pause(params, args, ctx) {
+      const want = String(args.name ?? params.open ?? "").toLowerCase();
+      const t = targetsOf(params).find((x) => x.key === want || x.name.toLowerCase() === want);
+      if (!t) throw new RoomError(404, "Open a server first, then pause it.");
+      return locked(ctx.dataDir, "history", () => {
+        const h = loadHistory(ctx.dataDir);
+        const paused = new Set(h.paused ?? []);
+        const now = !paused.delete(t.key);
+        if (now) paused.add(t.key);
+        h.paused = [...paused];
+        saveHistory(ctx.dataDir, h);
+        return { ok: true, paused: now, name: t.name };
+      });
+    }
+  }
+};
+
 // src/rooms/registry.mjs
-var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default, http_json_default, docker_default].map((p) => [p.type, p]));
+var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default, http_json_default, docker_default, ping_default].map((p) => [p.type, p]));
 function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
   return new Promise((resolve2) => {
     execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve2(err ? null : String(stdout)));
@@ -25026,17 +25501,17 @@ function readRooms(dir, providers) {
     return { rooms, invalid };
   }
   for (const name of names.sort()) {
-    const file = join6(dir, name, "room.json");
+    const file = join7(dir, name, "room.json");
     let m;
     try {
-      m = JSON.parse(readFileSync6(file, "utf8"));
+      m = JSON.parse(readFileSync7(file, "utf8"));
     } catch (err) {
-      invalid.push({ dir: join6(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
+      invalid.push({ dir: join7(dir, name), errors: [err.code === "ENOENT" ? "no room.json" : `room.json: ${err.message}`] });
       continue;
     }
     const errors = checkManifest(m, providers);
     if (!errors.length && m.id !== name) errors.push(`id: "${m.id}" but its folder is "${name}"`);
-    if (errors.length) invalid.push({ dir: join6(dir, name), errors });
+    if (errors.length) invalid.push({ dir: join7(dir, name), errors });
     else rooms.push(m);
   }
   return { rooms, invalid };
@@ -25054,8 +25529,8 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       const found = readRooms(dir, providers);
       bad.push(...found.invalid);
       for (const m of found.rooms) {
-        if (next.has(m.id)) bad.push({ dir: join6(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
-        else if (version4 && m.minSquadChat && compareVersions(m.minSquadChat, version4) > 0) bad.push({ dir: join6(dir, m.id), errors: [`needs squad-chat ${m.minSquadChat} or newer (this is ${version4})`] });
+        if (next.has(m.id)) bad.push({ dir: join7(dir, m.id), errors: [`id: "${m.id}" is already a room`] });
+        else if (version4 && m.minSquadChat && compareVersions(m.minSquadChat, version4) > 0) bad.push({ dir: join7(dir, m.id), errors: [`needs squad-chat ${m.minSquadChat} or newer (this is ${version4})`] });
         else {
           next.set(m.id, m);
           from.set(m.id, dir);
@@ -25076,7 +25551,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
   const queued = /* @__PURE__ */ new Map();
   const key = (id, pid) => `${id}/${pid}`;
   const hostsOf = (m) => (m.permissions?.hosts ?? []).map((h) => h.toLowerCase());
-  const settingsFile = (id) => join6(dataDir, id, "settings.json");
+  const settingsFile = (id) => join7(dataDir, id, "settings.json");
   const savedCache = /* @__PURE__ */ new Map();
   function savedSettings(id) {
     let stamp = "none";
@@ -25090,7 +25565,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     let data = {};
     if (stamp !== "none") {
       try {
-        const parsed = JSON.parse(readFileSync6(settingsFile(id), "utf8"));
+        const parsed = JSON.parse(readFileSync7(settingsFile(id), "utf8"));
         data = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
       } catch {
       }
@@ -25098,7 +25573,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     savedCache.set(id, { stamp, data });
     return { ...data };
   }
-  function settingsOf(id) {
+  function settingsOf2(id) {
     const m = rooms.get(id);
     const saved = savedSettings(id);
     const out = {};
@@ -25108,9 +25583,9 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     return out;
   }
   function emitSettings(id) {
-    if (rooms.get(id)?.settings) emit2({ type: "fnsettings", id, values: settingsOf(id) });
+    if (rooms.get(id)?.settings) emit2({ type: "fnsettings", id, values: settingsOf2(id) });
   }
-  function paramsOf(m, p, values = settingsOf(m.id)) {
+  function paramsOf(m, p, values = settingsOf2(m.id)) {
     const fill = (v) => {
       if (typeof v === "string") {
         const ref = /^\$settings\.(.+)$/.exec(v);
@@ -25122,7 +25597,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     };
     return fill(p.params ?? {});
   }
-  function manifestAlerts(m, pid, data, values = settingsOf(m.id)) {
+  function manifestAlerts(m, pid, data, values = settingsOf2(m.id)) {
     const out = [];
     const limit = (v) => typeof v === "string" ? Number(values[/^\$settings\.(.+)$/.exec(v)?.[1]]) : Number(v);
     const off = (v) => typeof v === "string" && limit(v) === 0;
@@ -25149,7 +25624,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     const def = providers[p.type];
     const hosts = allowedHosts(def.hosts, m.permissions?.hosts ?? []);
     return {
-      dataDir: join6(dataDir, m.id),
+      dataDir: join7(dataDir, m.id),
       platform: process.platform,
       run: runCommand,
       read: (file) => readFile(file, "utf8").catch(() => null),
@@ -25189,7 +25664,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
     const k = key(id, pid);
     clearTimeout(timers.get(k));
     try {
-      const values = settingsOf(m.id);
+      const values = settingsOf2(m.id);
       const data = clean(await providers[p.type].fetch(paramsOf(m, p, values), ctxFor(m, p)));
       const extra = m.alerts ? manifestAlerts(m, pid, data, values) : [];
       if (extra.length || m.alerts && data && typeof data === "object") data.alerts = [...Array.isArray(data.alerts) ? data.alerts : [], ...extra];
@@ -25228,7 +25703,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       const st = settings.get(String(k));
       const named = /* @__PURE__ */ new Map();
       if (st.type === "list" && enabled.has(id) && !/^default$/i.test(String(value ?? "").trim())) {
-        const before = settingsOf(id)[k] ?? [];
+        const before = settingsOf2(id)[k] ?? [];
         const added = parseSetting(st, value, before).filter((x) => !before.some((y) => y.toLowerCase() === x.toLowerCase()));
         for (const p of added.length ? m.providers : []) {
           const param = Object.entries(p.params ?? {}).find(([, v]) => v === `$settings.${k}`)?.[0];
@@ -25238,11 +25713,11 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
           added.forEach((x, i) => named.set(x.toLowerCase(), names[i] ?? x));
         }
       }
-      await locked(join6(dataDir, id), "settings", () => {
+      await locked(join7(dataDir, id), "settings", () => {
         const saved = savedSettings(id);
         if (/^default$/i.test(String(value ?? "").trim())) delete saved[k];
         else {
-          let v = parseSetting(st, value, settingsOf(id)[k]);
+          let v = parseSetting(st, value, settingsOf2(id)[k]);
           if (named.size) v = v.map((x) => named.get(x.toLowerCase()) ?? x).filter((x, i, all) => all.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
           const bad = settingError(st, v, hostsOf(m));
           if (bad) throw new RoomError(400, `${st.label ?? k}: ${bad}.`);
@@ -25250,14 +25725,14 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
           else saved[k] = v;
         }
         const tmp = `${settingsFile(id)}.${process.pid}.tmp`;
-        writeFileSync6(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
-        renameSync6(tmp, settingsFile(id));
+        writeFileSync7(tmp, JSON.stringify(saved, null, 1), { mode: 384 });
+        renameSync7(tmp, settingsFile(id));
         savedCache.delete(id);
       });
       emitSettings(id);
       const reads = m.providers.filter((p) => JSON.stringify(p).includes(`"$settings.${k}"`));
       if (enabled.has(id)) await Promise.all(reads.map((p) => run(id, p.id)));
-      return { ok: true, values: settingsOf(id) };
+      return { ok: true, values: settingsOf2(id) };
     },
     // The rooms' folders read again (a room installed, updated or removed):
     // a gone room stops, and a new or changed one with a tab runs now. The
@@ -25342,8 +25817,8 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
 
 // src/rooms/store.mjs
 import { createHash } from "node:crypto";
-import { mkdirSync as mkdirSync6, chmodSync as chmodSync6, writeFileSync as writeFileSync7, renameSync as renameSync7, rmSync as rmSync4, readFileSync as readFileSync7 } from "node:fs";
-import { join as join7 } from "node:path";
+import { mkdirSync as mkdirSync7, chmodSync as chmodSync6, writeFileSync as writeFileSync8, renameSync as renameSync8, rmSync as rmSync4, readFileSync as readFileSync8 } from "node:fs";
+import { join as join8 } from "node:path";
 var DEFAULT_STORE = "https://raw.githubusercontent.com/chrisluo5311/squad-chat/main/rooms";
 var INDEX_TTL_MS = 10 * 6e4;
 var PREVIEW_TTL_MS = 10 * 6e4;
@@ -25379,7 +25854,7 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
     const src = registry.source(id);
     if (src && !src.shipped) return src.manifest;
     try {
-      return JSON.parse(readFileSync7(join7(configDir2, "rooms", id, "room.json"), "utf8"));
+      return JSON.parse(readFileSync8(join8(configDir2, "rooms", id, "room.json"), "utf8"));
     } catch {
       return null;
     }
@@ -25447,13 +25922,13 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
       const p = pending.get(id);
       if (!p || p.sha !== sha || Date.now() - p.at > PREVIEW_TTL_MS) throw new RoomError(409, "Look at it again first: /chat install " + id);
       pending.delete(id);
-      const dir = join7(configDir2, "rooms", id);
-      mkdirSync6(dir, { recursive: true, mode: 448 });
+      const dir = join8(configDir2, "rooms", id);
+      mkdirSync7(dir, { recursive: true, mode: 448 });
       chmodSync6(dir, 448);
-      const file = join7(dir, "room.json");
+      const file = join8(dir, "room.json");
       const tmp = `${file}.${process.pid}.tmp`;
-      writeFileSync7(tmp, p.text, { mode: 384 });
-      renameSync7(tmp, file);
+      writeFileSync8(tmp, p.text, { mode: 384 });
+      renameSync8(tmp, file);
       registry.reload();
       return { ok: true, id, name: p.manifest.name, version: p.manifest.version, hosts: hostsOf(p.manifest) };
     },
@@ -25463,8 +25938,8 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
       if (src?.shipped) throw new RoomError(409, `${src.manifest.name} comes with squad-chat. /chat rooms -${id} hides it.`);
       if (!ID3.test(String(id ?? "")) || !installedManifest(id)) throw new RoomError(404, `No room called ${id} is installed.`);
       const name = installedManifest(id)?.name ?? id;
-      rmSync4(join7(configDir2, "rooms", id), { recursive: true, force: true });
-      rmSync4(join7(dataDir, id), { recursive: true, force: true });
+      rmSync4(join8(configDir2, "rooms", id), { recursive: true, force: true });
+      rmSync4(join8(dataDir, id), { recursive: true, force: true });
       registry.reload();
       return { ok: true, id, name };
     }
@@ -25488,11 +25963,11 @@ if (!token) {
 }
 var configured = !!(env.SQUAD_SUPABASE_URL && env.SQUAD_SUPABASE_KEY);
 if (!configured) emit({ type: "error", code: "unconfigured", message: "no server configured" });
-var configDir = env.SQUAD_CONFIG_DIR || join8(env.XDG_CONFIG_HOME || join8(homedir2(), ".config"), "squad-chat");
-var socketDir = env.SQUAD_SOCKET_DIR || join8(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
-mkdirSync7(socketDir, { recursive: true, mode: 448 });
+var configDir = env.SQUAD_CONFIG_DIR || join9(env.XDG_CONFIG_HOME || join9(homedir2(), ".config"), "squad-chat");
+var socketDir = env.SQUAD_SOCKET_DIR || join9(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
+mkdirSync8(socketDir, { recursive: true, mode: 448 });
 chmodSync7(socketDir, 448);
-var socketPath = join8(socketDir, `${process.pid}.sock`);
+var socketPath = join9(socketDir, `${process.pid}.sock`);
 rmSync5(socketPath, { force: true });
 var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
@@ -25502,18 +25977,18 @@ var chat = configured ? new Chat({
   log,
   debug: env.SQUAD_DEBUG === "1"
 }) : null;
-var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join8(socketDir, "sessions"), emit });
+var board = sessionBoard({ dir: env.SQUAD_SESSIONS_DIR || join9(socketDir, "sessions"), emit });
 var version3 = env.SQUAD_VERSION || null;
 if (!version3) {
   try {
-    version3 = JSON.parse(readFileSync8(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version;
+    version3 = JSON.parse(readFileSync9(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version;
   } catch {
   }
 }
 var fnRooms = roomRegistry({
   version: version3,
-  dirs: [env.SQUAD_ROOMS_DIR, join8(configDir, "rooms")],
-  dataDir: join8(configDir, "room-data"),
+  dirs: [env.SQUAD_ROOMS_DIR, join9(configDir, "rooms")],
+  dataDir: join9(configDir, "room-data"),
   runtimeDir: socketDir,
   emit,
   log
@@ -25521,7 +25996,7 @@ var fnRooms = roomRegistry({
 var store = roomStore({
   url: env.SQUAD_ROOM_STORE || DEFAULT_STORE,
   configDir,
-  dataDir: join8(configDir, "room-data"),
+  dataDir: join9(configDir, "room-data"),
   registry: fnRooms,
   providers: PROVIDERS,
   version: version3

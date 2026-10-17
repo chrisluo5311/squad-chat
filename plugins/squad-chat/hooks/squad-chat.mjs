@@ -988,7 +988,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|snippet|monitor|weather|news|stock|lofi|docker | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|snippet|monitor|weather|news|stock|lofi|docker|ping | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
