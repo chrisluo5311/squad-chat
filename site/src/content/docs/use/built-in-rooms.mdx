@@ -1,6 +1,6 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks, Lo-fi and Docker tabs that sit before your chat rooms.
 ---
 
 These tabs appear before your chat rooms. They require no server and no sign-in, and nothing in them reaches a chat room unless you share it.
@@ -21,8 +21,9 @@ These tabs appear before your chat rooms. They require no server and no sign-in,
 | [✦ Tech News](#-tech-news) | Hacker News and tech feeds | `/chat rooms +news` |
 | [$ Stocks](#-stocks) | Taiwan and US quotes | `/chat rooms +stock` |
 | [♫ Lo-fi](#-lo-fi) | Music while you work | `/chat rooms +lofi` |
+| [◰ Docker](#-docker) | Containers, images, volumes, networks, and a container's logs | `/chat rooms +docker` |
 
-Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last five access the network or your clipboard, so they must be added manually. In the desktop app, **+** in the header also adds one.
+Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last six access the network, your clipboard or Docker, so they must be added manually. In the desktop app, **+** in the header also adds one.
 
 ## ◔ Usage
 
@@ -146,6 +147,10 @@ A watchlist of Taiwan and US stocks, each with today's line. Set it with `/chat 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="The Lo-fi room: the player and its volume, and the stations." /></figure>
 
 Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`). Paste a link or a folder into the box to add your own. `p` plays or pauses, and `n` skips. Nothing plays until you press play.
+
+## ◰ Docker
+
+This computer's Docker, through the `docker` CLI: containers, images, volumes and networks, one section at a time. `1` to `4` switch between them, as do the buttons at the top. Press a container's name to see its CPU, memory and last five log lines below the list. The one needing a look (unhealthy or restarting) comes first and is shown until you pick another. It only reads, and works with Docker Desktop, OrbStack and colima.
 
 ## More rooms, sharing, hiding
 

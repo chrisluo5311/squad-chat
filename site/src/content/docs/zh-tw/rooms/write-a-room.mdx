@@ -69,6 +69,7 @@ import BandGallery from "../../../../components/BandGallery.astro";
 | `local-list` | `max` | `items[]`（`id`、`name`、`lang`、`body`）、`count`、`latest`（`name`、`lang`） |
 | `sysinfo` | `alerts`、`cpu_temp`、`memory` | `cpu`（含 `hist`、`tone`、`temp`）、`mem`（含 `tone`）、`gpu`、`net`、`disk`、`battery`（含 `charging`、`tone`）、`band`…（請參閱 Monitor 房間的 manifest） |
 | `player` | `stations`（https，在房間的 host 上）、`volume` | `now`、`playing`、`entries[]`、`band`、`share`（請參閱 Lo-fi 房間的 manifest） |
+| `docker` | `container`（在 `detail` 顯示的名稱） | `containers[]`、`images[]`、`volumes[]`、`networks[]`、`on`（顯示中的分區）、`detail`、`down`、`band`、`share`，以及 action `containers`、`images`、`volumes`、`networks`（請參閱 Docker 房間的 manifest） |
 
 每個 provider 只能連線至其支援的 host，且 manifest 必須同時列出這些 host。`rss` 和 `http-json` 會讀取任何指定的網址，因此僅由 manifest 的清單決定其可連線範圍。squad-chat 內建的房間放在 [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms)，提供每種 provider 的完整範例。
 
@@ -116,7 +117,7 @@ import BandGallery from "../../../../components/BandGallery.astro";
 | `tiles` | `tiles`：最多 6 格，每格一個 `value` 和 `sub` 範本 |
 | `meter` | `label`、`value`（指向百分比的路徑）、`right`、`color` |
 | `text` | `text`，一個範本。所有空位都是空的那一行會被省略。 |
-| `buttons` | `buttons`：最多 8 個，每個都有 `label` 和它的 provider 的一個 `action` |
+| `buttons` | `buttons`：最多 8 個，每個都有 `label` 和它的 provider 的一個 `action`，也可加上 `lit`（一個路徑：路徑有值時該按鈕填滿顯示，其他按鈕改為一般樣式，像分頁一樣） |
 
 表格欄位寬 `width` 格（未設定時是 12）。標記 `grow` 的欄位會佔用剩下的空間，沒有的話就是最後一個沒有 `width` 的欄位。
 

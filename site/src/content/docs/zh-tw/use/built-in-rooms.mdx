@@ -1,6 +1,6 @@
 ---
 title: 內建房間
-description: 位於聊天室之前的 Usage、Git、Agents、Focus、Habits、Toolbox、Clipboard、Pet、Snippets、Monitor、Weather、Tech News、Stocks 和 Lo-fi 分頁。
+description: 位於聊天室之前的 Usage、Git、Agents、Focus、Habits、Toolbox、Clipboard、Pet、Snippets、Monitor、Weather、Tech News、Stocks、Lo-fi 和 Docker 分頁。
 ---
 
 這些分頁位於聊天室之前，不需要伺服器，也不需要登入。除非主動分享，其中的內容皆不會傳送至聊天室。
@@ -21,8 +21,9 @@ description: 位於聊天室之前的 Usage、Git、Agents、Focus、Habits、To
 | [✦ Tech News](#-tech-news) | Hacker News 和科技新聞 feed | `/chat rooms +news` |
 | [$ Stocks](#-stocks) | 台股和美股報價 | `/chat rooms +stock` |
 | [♫ Lo-fi](#-lo-fi) | 工作時播放的音樂 | `/chat rooms +lofi` |
+| [◰ Docker](#-docker) | Containers、images、volumes、networks，以及 container 的 log | `/chat rooms +docker` |
 
-點選分頁即可開啟，或使用 `/chat <room>`（`/chat usage`、`/chat stock`）。最後五個房間會連線至網路或讀取剪貼簿，因此需手動加入。在桌面版 App 上，亦可透過標頭的 **+** 加入。
+點選分頁即可開啟，或使用 `/chat <room>`（`/chat usage`、`/chat stock`）。最後六個房間會連線至網路、讀取剪貼簿或 Docker，因此需手動加入。在桌面版 App 上，亦可透過標頭的 **+** 加入。
 
 ## ◔ Usage
 
@@ -146,6 +147,10 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 <figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="Lo-fi 房間：播放器和音量，以及電台。" /></figure>
 
 透過 [mpv](https://mpv.io) 和 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（`brew install mpv yt-dlp`）播放 Lofi Girl 和 SomaFM。在輸入框貼上連結或資料夾，即可加入自訂的音樂。`p` 播放或暫停，`n` 跳至下一首。按下播放前不會播放任何內容。
+
+## ◰ Docker
+
+透過 `docker` CLI 顯示這台電腦的 Docker：containers、images、volumes 和 networks，一次顯示一類。按 `1` 到 `4` 或上方的按鈕切換。點選 container 的名稱，清單下方會顯示它的 CPU、記憶體和最後五行 log。需要注意的 container（unhealthy 或 restarting）排在最前面，在您選擇其他 container 之前會一直顯示。此房間只讀取資料，支援 Docker Desktop、OrbStack 和 colima。
 
 ## 更多房間、分享、隱藏
 

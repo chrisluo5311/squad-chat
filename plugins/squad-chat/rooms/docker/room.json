@@ -1,0 +1,276 @@
+{
+  "schema": 1,
+  "id": "docker",
+  "version": "1.0.0",
+  "name": "Docker",
+  "icon": "◰",
+  "color": "sky",
+  "description": "This computer's Docker containers, images, volumes and networks, one section at a time, and a container's CPU, memory and last log lines. Read only.",
+  "author": "squad-chat",
+  "permissions": {
+    "hosts": []
+  },
+  "settings": {
+    "container": {
+      "type": "string",
+      "label": "Container shown",
+      "default": "first"
+    }
+  },
+  "providers": [
+    {
+      "id": "d",
+      "type": "docker",
+      "params": {
+        "container": "$settings.container"
+      },
+      "interval": {
+        "visible": "5s",
+        "background": "1m"
+      }
+    }
+  ],
+  "layout": {
+    "cards": [
+      {
+        "title": "DOCKER",
+        "meta": "{d.engine}",
+        "body": [
+          {
+            "type": "text",
+            "text": "{d.down}",
+            "color": "amber"
+          },
+          {
+            "type": "buttons",
+            "buttons": [
+              {
+                "label": "Containers",
+                "action": "containers",
+                "lit": "d.on.containers"
+              },
+              {
+                "label": "Images",
+                "action": "images",
+                "lit": "d.on.images"
+              },
+              {
+                "label": "Volumes",
+                "action": "volumes",
+                "lit": "d.on.volumes"
+              },
+              {
+                "label": "Networks",
+                "action": "networks",
+                "lit": "d.on.networks"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "CONTAINER",
+        "when": "d.detail",
+        "badge": "{d.detail.status}",
+        "badgeTone": "d.detail.tone",
+        "meta": "{d.detail.image}",
+        "body": [
+          {
+            "type": "text",
+            "text": "{d.detail.name}",
+            "color": "sky"
+          },
+          {
+            "type": "tiles",
+            "tiles": [
+              {
+                "value": "{d.detail.cpuText}",
+                "sub": "CPU",
+                "tone": "d.detail.cpuTone"
+              },
+              {
+                "value": "{d.detail.memText}",
+                "sub": "memory"
+              },
+              {
+                "value": "{d.detail.ports}",
+                "sub": "ports"
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "items": "d.detail.logs",
+            "columns": [
+              {
+                "field": "time",
+                "width": 8,
+                "color": "sand"
+              },
+              {
+                "field": "text",
+                "grow": true,
+                "colorFrom": "tone"
+              }
+            ],
+            "empty": "No log lines yet."
+          }
+        ]
+      },
+      {
+        "title": "CONTAINERS",
+        "when": "d.on.containers",
+        "meta": "{d.containersMeta}",
+        "body": {
+          "type": "table",
+          "items": "d.containers",
+          "columns": [
+            {
+              "field": "dot",
+              "width": 1,
+              "colorFrom": "tone"
+            },
+            {
+              "field": "name",
+              "grow": true
+            },
+            {
+              "field": "image",
+              "width": 18,
+              "color": "sand"
+            },
+            {
+              "field": "status",
+              "width": 12,
+              "right": true,
+              "colorFrom": "tone"
+            }
+          ],
+          "pick": {
+            "setting": "container",
+            "field": "name",
+            "as": "d.picked"
+          },
+          "empty": "No containers. docker run starts one."
+        }
+      },
+      {
+        "title": "IMAGES",
+        "when": "d.on.images",
+        "meta": "{d.imagesMeta}",
+        "body": {
+          "type": "table",
+          "items": "d.images",
+          "columns": [
+            {
+              "field": "name",
+              "grow": true
+            },
+            {
+              "field": "size",
+              "width": 8,
+              "right": true,
+              "color": "sand"
+            },
+            {
+              "field": "age",
+              "width": 4,
+              "right": true
+            },
+            {
+              "field": "use",
+              "width": 8,
+              "right": true,
+              "colorFrom": "useTone"
+            }
+          ],
+          "empty": "No images."
+        }
+      },
+      {
+        "title": "VOLUMES",
+        "when": "d.on.volumes",
+        "meta": "{d.volumesMeta}",
+        "body": {
+          "type": "table",
+          "items": "d.volumes",
+          "columns": [
+            {
+              "field": "name",
+              "grow": true
+            },
+            {
+              "field": "driver",
+              "width": 6
+            },
+            {
+              "field": "use",
+              "width": 6,
+              "right": true,
+              "colorFrom": "useTone"
+            }
+          ],
+          "empty": "No volumes."
+        }
+      },
+      {
+        "title": "NETWORKS",
+        "when": "d.on.networks",
+        "meta": "{d.networksMeta}",
+        "body": {
+          "type": "table",
+          "items": "d.networks",
+          "columns": [
+            {
+              "field": "name",
+              "grow": true
+            },
+            {
+              "field": "driver",
+              "width": 7
+            },
+            {
+              "field": "usersText",
+              "width": 12,
+              "right": true
+            }
+          ],
+          "empty": "No networks."
+        }
+      }
+    ],
+    "pills": [
+      {
+        "draw": {
+          "type": "dot"
+        },
+        "colorFrom": "d.tone",
+        "value": "{d.upText}",
+        "sub": "up",
+        "tip": [
+          "{d.counts}",
+          "{d.engine}"
+        ]
+      },
+      {
+        "when": "d.worst",
+        "draw": {
+          "type": "dot"
+        },
+        "color": "amber",
+        "value": "{d.worst.name}",
+        "sub": "{d.worst.status}"
+      }
+    ],
+    "keys": {
+      "1": "containers",
+      "2": "images",
+      "3": "volumes",
+      "4": "networks"
+    },
+    "band": "{d.band}",
+    "snapshot": "{d.share}",
+    "hint": "1-4 switch · a row shows its container · r refreshes",
+    "placeholder": "1 containers · 2 images · 3 volumes · 4 networks · /help"
+  }
+}

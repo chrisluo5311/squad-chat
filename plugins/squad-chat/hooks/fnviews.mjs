@@ -465,6 +465,9 @@ function sunWidget(els, b, data, w, key) {
 }
 
 const btnLabel = (x, data) => (x.alt && x.altWhen && lookup(data, x.altWhen) ? x.alt : x.label);
+// Buttons as tabs, as Toolbox's chips: the one whose `lit` path holds is
+// filled, and once any button has a `lit` the others are drawn plain.
+const btnLook = (b, x, data) => (!b.buttons.some((y) => y.lit) ? {} : x.lit && lookup(data, x.lit) ? { variant: "primary" } : { plain: true, dimColor: false });
 
 // One widget's rows, at most `limit` of them: { nodes, height }.
 function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w", room } = {}) {
@@ -472,7 +475,7 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
   if (b.type === "buttons" && els.Svg && b.split) {
     // The desktop: the first `split` buttons at the left, the rest at the
     // right around the level they move ("− 60% +").
-    const btn = (x, i) => Button({ key: `act-${key}-${i}`, label: btnLabel(x, data), onPress: () => handlers.onAction?.(room, { provider: x.provider, action: x.action, args: x.args ?? {} }) });
+    const btn = (x, i) => Button({ key: `act-${key}-${i}`, label: btnLabel(x, data), ...btnLook(b, x, data), onPress: () => handlers.onAction?.(room, { provider: x.provider, action: x.action, args: x.args ?? {} }) });
     const level = b.level != null ? Number(lookup(data, b.level)) : NaN;
     const right = b.buttons.slice(b.split).map((x, i) => btn(x, b.split + i));
     if (Number.isFinite(level) && right.length) right.splice(Math.ceil(right.length / 2), 0, Text({ key: "level", bold: true, color: accent, children: `${Math.round(level)}%` }));
@@ -484,7 +487,7 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
   }
   if (b.type === "buttons") {
     return { nodes: [Box({ key, flexDirection: "row", gap: 1, flexWrap: "wrap", children: b.buttons.map((btn, i) => Box({ key: `b${i}`, flexShrink: 0, children: [
-      Button({ key: `act-${key}-${i}`, label: btnLabel(btn, data), onPress: () => handlers.onAction?.(room, { provider: btn.provider, action: btn.action, args: btn.args ?? {} }) }),
+      Button({ key: `act-${key}-${i}`, label: btnLabel(btn, data), ...btnLook(b, btn, data), onPress: () => handlers.onAction?.(room, { provider: btn.provider, action: btn.action, args: btn.args ?? {} }) }),
     ] })) })], height: 1 };
   }
   if (b.type === "list" || b.type === "table") {

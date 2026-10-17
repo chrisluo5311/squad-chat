@@ -207,10 +207,12 @@ function checkWidget(body, where, errors, uses) {
     if (k === "buttons") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
       else v.forEach((btn, i) => {
-        if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
+        if (!str(btn?.label, 12)) errors.push(`${where}.buttons[${i}].label: 1-12 characters`);
         // A toggle: `alt` is the label while the path `altWhen` holds (⏸ while playing).
-        if (btn?.alt != null && !str(btn.alt, 8)) errors.push(`${where}.buttons[${i}].alt: 1-8 characters`);
+        if (btn?.alt != null && !str(btn.alt, 12)) errors.push(`${where}.buttons[${i}].alt: 1-12 characters`);
         if (btn?.altWhen != null && !(typeof btn.altWhen === "string" && PATH.test(btn.altWhen))) errors.push(`${where}.buttons[${i}].altWhen: not a path`);
+        // A tab: filled while the path `lit` holds, the other buttons plain.
+        if (btn?.lit != null && !(typeof btn.lit === "string" && PATH.test(btn.lit))) errors.push(`${where}.buttons[${i}].lit: not a path`);
         if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
         else uses.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
         if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);

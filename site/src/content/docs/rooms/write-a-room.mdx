@@ -69,6 +69,7 @@ A room is one file, `room.json`: what it is called, which of squad-chat's provid
 | `local-list` | `max` | `items[]` (`id`, `name`, `lang`, `body`), `count`, `latest` (`name`, `lang`) |
 | `sysinfo` | `alerts`, `cpu_temp`, `memory` | `cpu` (with `hist`, `tone`, `temp`), `mem` (with `tone`), `gpu`, `net`, `disk`, `battery` (with `charging`, `tone`), `band`, … (see the Monitor room's manifest) |
 | `player` | `stations` (https, on the room's hosts), `volume` | `now`, `playing`, `entries[]`, `band`, `share` (see the Lo-fi room's manifest) |
+| `docker` | `container` (the name to show in `detail`) | `containers[]`, `images[]`, `volumes[]`, `networks[]`, `on` (the section shown), `detail`, `down`, `band`, `share`, and actions `containers`, `images`, `volumes`, `networks` (see the Docker room's manifest) |
 
 Each provider can reach only the hosts it knows about, and only where the manifest names them too. `rss` and `http-json` read any URL they are given, so for them the manifest's list alone determines what they may reach. The rooms squad-chat ships, in [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms), provide complete examples of each.
 
@@ -116,7 +117,7 @@ A card has a `title`, an optional `meta`, `badge` (a few words before the meta, 
 | `tiles` | `tiles`: up to 6, each a `value` and `sub` template |
 | `meter` | `label`, `value` (a path to a percent), `right`, `color` |
 | `text` | `text`, a template. A line whose holes all came out empty is left out. |
-| `buttons` | `buttons`: up to 8, each a `label` and one of its provider's `action`s |
+| `buttons` | `buttons`: up to 8, each a `label` and one of its provider's `action`s, and optionally `lit` (a path: while it holds, the button is drawn filled and the others plain, as tabs) |
 
 A table column is `width` cells wide (12 if unset). The one marked `grow` takes the space left, or else the last column when it has no `width`.
 

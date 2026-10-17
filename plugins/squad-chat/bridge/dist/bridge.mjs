@@ -23022,9 +23022,10 @@ function checkWidget(body, where, errors, uses) {
     if (k === "buttons") {
       if (!Array.isArray(v) || !v.length || v.length > 8) errors.push(`${where}.buttons: 1-8 buttons`);
       else v.forEach((btn, i) => {
-        if (!str(btn?.label, 8)) errors.push(`${where}.buttons[${i}].label: 1-8 characters`);
-        if (btn?.alt != null && !str(btn.alt, 8)) errors.push(`${where}.buttons[${i}].alt: 1-8 characters`);
+        if (!str(btn?.label, 12)) errors.push(`${where}.buttons[${i}].label: 1-12 characters`);
+        if (btn?.alt != null && !str(btn.alt, 12)) errors.push(`${where}.buttons[${i}].alt: 1-12 characters`);
         if (btn?.altWhen != null && !(typeof btn.altWhen === "string" && PATH.test(btn.altWhen))) errors.push(`${where}.buttons[${i}].altWhen: not a path`);
+        if (btn?.lit != null && !(typeof btn.lit === "string" && PATH.test(btn.lit))) errors.push(`${where}.buttons[${i}].lit: not a path`);
         if (!(typeof btn?.action === "string" && ACTION.test(btn.action))) errors.push(`${where}.buttons[${i}].action: an action's name`);
         else uses.push({ where: `${where}.buttons[${i}]`, provider: btn.provider, action: btn.action });
         if (btn?.args != null && (typeof btn.args !== "object" || Array.isArray(btn.args) || JSON.stringify(btn.args).length > 200)) errors.push(`${where}.buttons[${i}].args: a small object`);
@@ -24753,8 +24754,228 @@ var http_json_default = {
   }
 };
 
+// src/rooms/providers/docker.mjs
+var SECTIONS = ["containers", "images", "volumes", "networks"];
+var sectionOf = /* @__PURE__ */ new Map();
+var DOCKERS = ["docker", "/usr/local/bin/docker", "/opt/homebrew/bin/docker"];
+var LOG_LINES = 5;
+function jsonLines(text) {
+  return String(text ?? "").split("\n").map((l) => l.trim()).filter(Boolean).flatMap((l) => {
+    try {
+      return [JSON.parse(l)];
+    } catch {
+      return [];
+    }
+  });
+}
+function shortImage(ref) {
+  const s = String(ref ?? "");
+  const parts = s.split("/");
+  return parts.length > 1 && /[.:]|^localhost$/.test(parts[0]) ? parts.slice(1).join("/") : s;
+}
+function publishedPorts(text) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const p of String(text ?? "").split(",")) {
+    const m = /:(\d+)->(\d+)\//.exec(p);
+    if (m) seen.add(m[1] === m[2] ? `:${m[1]}` : `:${m[1]}\u2192${m[2]}`);
+  }
+  return [...seen].join(" ");
+}
+function shortStatus(text) {
+  const units = { second: "s", minute: "m", hour: "h", day: "d", week: "w", month: "mo", year: "y" };
+  return String(text ?? "").replace(/\s*\((healthy|unhealthy|health: starting)\)/, "").replace(/About an? (hour|minute)/, "1 $1").replace(/Less than a second/, "0 seconds").replace(/(\d+) (second|minute|hour|day|week|month|year)s?/g, (_, n, u) => `${n}${units[u]}`).replace(/ ago$/, "").replace(/^\w/, (c) => c.toLowerCase());
+}
+function stateOf(c) {
+  const health = c.HealthStatus || (/\(unhealthy\)/.test(c.Status) ? "unhealthy" : "");
+  if (c.State === "running" && health === "unhealthy") return { dot: "\u25CF", tone: "amber", word: "unhealthy", rank: 0 };
+  if (c.State === "restarting") return { dot: "\u25CF", tone: "amber", word: "restarting", rank: 0 };
+  if (c.State === "running") return { dot: "\u25CF", tone: "leaf", word: shortStatus(c.Status), rank: 1 };
+  if (c.State === "paused") return { dot: "\u25D0", tone: "amber", word: "paused", rank: 2 };
+  if (c.State === "dead" || /^Exited \([1-9]\d*\)/.test(c.Status)) return { dot: "\u25CB", tone: "red", word: shortStatus(c.Status), rank: 3 };
+  return { dot: "\u25CB", tone: null, word: shortStatus(c.Status), rank: 4 };
+}
+function sizeOf(text) {
+  const m = /^([\d.]+)\s*([kMGT]?B)/i.exec(String(text ?? ""));
+  if (!m) return 0;
+  const mult = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12 }[m[2].toUpperCase()] ?? 1;
+  return Number(m[1]) * mult;
+}
+function humanSize(n) {
+  if (!(n > 0)) return "0 B";
+  const units = ["B", "kB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1e3 && i < units.length - 1) {
+    n /= 1e3;
+    i++;
+  }
+  return `${i === 0 ? Math.round(n) : n.toFixed(n >= 100 ? 0 : 1)} ${units[i]}`;
+}
+var label = (labels, key) => new RegExp(`(?:^|,)${key.replace(/\./g, "\\.")}=([^,]*)`).exec(String(labels ?? ""))?.[1] ?? "";
+var percent = (text) => {
+  const n = Number.parseFloat(String(text ?? ""));
+  return Number.isFinite(n) ? Math.round(n) : null;
+};
+var plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+async function findDocker(ctx) {
+  for (const d of DOCKERS) {
+    const v = await ctx.run([d, "version", "--format", "{{.Server.Version}}|{{.Server.Platform.Name}}"], { timeoutMs: 5e3 });
+    if (v != null) return { docker: d, version: v.trim() };
+  }
+  for (const d of DOCKERS) if (await ctx.run([d, "--version"]) != null) return { docker: d, version: null };
+  return null;
+}
+function containerRows(list) {
+  return list.map((c) => {
+    const st = stateOf(c);
+    return {
+      id: c.ID,
+      name: c.Names,
+      image: shortImage(c.Image),
+      ref: c.Image,
+      ports: publishedPorts(c.Ports),
+      dot: st.dot,
+      tone: st.tone,
+      status: st.word,
+      project: label(c.Labels, "com.docker.compose.project"),
+      networks: String(c.Networks ?? "").split(",").filter(Boolean),
+      running: c.State === "running",
+      rank: st.rank
+    };
+  }).sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+}
+function imageRows(list, containers = []) {
+  const named = new Set(containers.map((c) => c.ref));
+  return list.map((i) => {
+    const dangling = i.Repository === "<none>";
+    const used = Number(i.Containers) > 0 || named.has(`${i.Repository}:${i.Tag}`) || i.Tag === "latest" && named.has(i.Repository);
+    return {
+      id: `${i.ID}:${i.Tag}`,
+      name: dangling ? `<none> ${i.ID.slice(0, 12)}` : `${shortImage(i.Repository)}:${i.Tag}`,
+      size: i.Size,
+      bytes: sizeOf(i.Size),
+      age: shortStatus(i.CreatedSince),
+      use: dangling ? "dangling" : used ? "in use" : "",
+      useTone: dangling ? "amber" : used ? "leaf" : null,
+      dangling
+    };
+  }).sort((a, b) => b.bytes - a.bytes);
+}
+function shareText(engine, rows) {
+  const up = rows.filter((c) => c.running).length;
+  const bad = rows.filter((c) => c.tone === "amber" || c.tone === "red");
+  return [`Docker \xB7 ${engine}`, `${up} of ${rows.length} containers up`, ...bad.slice(0, 5).map((c) => `${c.dot} ${c.name} ${c.status}`)].join("\n");
+}
+function logRow(line, i) {
+  const m = /^(\d{4}-\d\d-\d\dT[\d:.]+Z)\s?(.*)$/.exec(line);
+  const at = m ? new Date(m[1]) : null;
+  const text = (m ? m[2] : line).replace(/\x1b\[[0-9;]*m/g, "").replace(/^\[?(\d{4}-\d\d-\d\d[T ])?\d\d:\d\d:\d\d([.,]\d+)?Z?\]?\s*/, "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const tone2 = /\b(error|err|fatal|panic|exception|failed)\b/i.test(text) ? "red" : /\bwarn(ing)?\b/i.test(text) ? "amber" : null;
+  const two = (n) => String(n).padStart(2, "0");
+  return { id: String(i), time: at && !Number.isNaN(at.getTime()) ? `${two(at.getHours())}:${two(at.getMinutes())}:${two(at.getSeconds())}` : "", text, tone: tone2 };
+}
+function memUse(text) {
+  const round2 = (x) => x.replace(/([\d.]+)\s*([KMGT]i?B)/g, (_, n, u) => `${Number(n) >= 10 ? Math.round(Number(n)) : Number(Number(n).toFixed(1))} ${u}`);
+  const [used, limit] = String(text ?? "").split("/").map((x) => round2(x.trim()));
+  return limit ? `${used} of ${limit}` : used ?? "";
+}
+async function detailOf(ctx, docker, c) {
+  if (!c) return null;
+  const [statsOut, logsOut] = await Promise.all([
+    c.running ? ctx.run([docker, "stats", "--no-stream", "--format", "json", c.id], { timeoutMs: 6e3 }) : null,
+    // docker logs writes the container's stderr to its own: 2>&1 keeps both.
+    ctx.run(["/bin/sh", "-c", `"$0" logs --tail ${LOG_LINES} --timestamps "$1" 2>&1`, docker, c.id], { timeoutMs: 4e3 })
+  ]);
+  const s = jsonLines(statsOut)[0];
+  const cpu = s ? percent(s.CPUPerc) : null;
+  return {
+    name: c.name,
+    image: c.image,
+    status: c.status,
+    tone: c.tone,
+    cpu,
+    cpuText: s ? s.CPUPerc : "\u2013",
+    cpuTone: cpu == null ? null : cpu >= 80 ? "amber" : "leaf",
+    mem: s ? percent(s.MemPerc) : null,
+    memText: s ? memUse(s.MemUsage) : "\u2013",
+    ports: c.ports || "\u2013",
+    logs: String(logsOut ?? "").split("\n").filter((l) => l.trim()).slice(-LOG_LINES).map(logRow).filter((r) => r.text)
+  };
+}
+var docker_default = {
+  type: "docker",
+  hosts: [],
+  async fetch(params, ctx) {
+    const section = sectionOf.get(ctx.dataDir) ?? "containers";
+    const on = Object.fromEntries(SECTIONS.map((s) => [s, s === section ? true : null]));
+    const found = await findDocker(ctx);
+    if (!found?.version) {
+      const down = found ? "Docker isn't running. Start Docker Desktop, OrbStack or colima." : "No docker command found. Install Docker Desktop or OrbStack.";
+      return { down, on, section, engine: found ? "not running" : "not installed", containers: [], images: [], volumes: [], networks: [], detail: null, band: down, share: `Docker \xB7 ${down}` };
+    }
+    const { docker } = found;
+    const [ver, platform] = found.version.split("|");
+    const engine = [`Docker ${ver}`, platform?.replace(/\s*\(\d+\)$/, "")].filter(Boolean).join(" \xB7 ");
+    const run = (...args) => ctx.run([docker, ...args], { timeoutMs: 8e3 });
+    const [psOut, imgOut, volOut, unusedOut, netOut] = await Promise.all([
+      run("ps", "-a", "--format", "json"),
+      run("images", "--format", "json"),
+      run("volume", "ls", "--format", "json"),
+      run("volume", "ls", "-q", "--filter", "dangling=true"),
+      run("network", "ls", "--format", "json")
+    ]);
+    if (psOut == null) throw new RoomError(502, "docker ps failed. Is the Docker daemon up?");
+    const containers = containerRows(jsonLines(psOut));
+    const images = imageRows(jsonLines(imgOut), containers);
+    const unused = new Set(String(unusedOut ?? "").split("\n").map((s) => s.trim()).filter(Boolean));
+    const volumes = jsonLines(volOut).map((v) => ({
+      name: v.Name,
+      driver: v.Driver,
+      project: label(v.Labels, "com.docker.compose.project"),
+      use: unused.has(v.Name) ? "unused" : "in use",
+      useTone: unused.has(v.Name) ? "amber" : "leaf"
+    })).sort((a, b) => a.use === b.use ? a.name.localeCompare(b.name) : a.use === "in use" ? -1 : 1);
+    const networks = jsonLines(netOut).map((n) => {
+      const users = containers.filter((c) => c.networks.includes(n.Name)).length;
+      return { name: n.Name, driver: n.Driver, scope: n.Scope, users, usersText: users ? plural(users, "container") : "" };
+    }).sort((a, b) => b.users - a.users || a.name.localeCompare(b.name));
+    const want = String(params.container ?? "").toLowerCase();
+    const picked = containers.find((c) => c.name.toLowerCase() === want) ?? containers[0] ?? null;
+    const detail = section === "containers" ? await detailOf(ctx, docker, picked) : null;
+    const up = containers.filter((c) => c.running).length;
+    const bad = containers.filter((c) => c.tone === "amber");
+    const dangling = images.filter((i) => i.dangling).length;
+    const imageBytes = images.reduce((n, i) => n + i.bytes, 0);
+    return {
+      down: "",
+      on,
+      section,
+      engine,
+      containers,
+      containersMeta: [`${up} running`, containers.length - up ? `${containers.length - up} stopped` : null].filter(Boolean).join(" \xB7 "),
+      picked,
+      detail,
+      images,
+      imagesMeta: [plural(images.length, "image"), humanSize(imageBytes), dangling ? `${dangling} dangling` : null].filter(Boolean).join(" \xB7 "),
+      volumes,
+      volumesMeta: [plural(volumes.length, "volume"), unused.size ? `${unused.size} unused` : null].filter(Boolean).join(" \xB7 "),
+      networks,
+      networksMeta: plural(networks.length, "network"),
+      counts: `${containers.length} containers \xB7 ${images.length} images \xB7 ${volumes.length} volumes \xB7 ${networks.length} networks`,
+      band: [`${up}/${containers.length} up`, ...bad.slice(0, 2).map((c) => `${c.name} ${c.status}`)].join(" \xB7 "),
+      upText: `${up}/${containers.length}`,
+      tone: bad.length ? "amber" : "leaf",
+      worst: bad[0] ? { name: bad[0].name, status: bad[0].status } : null,
+      share: shareText(engine, containers)
+    };
+  },
+  actions: Object.fromEntries(SECTIONS.map((s) => [s, async (params, args, ctx) => {
+    sectionOf.set(ctx.dataDir, s);
+    return { ok: true, section: s };
+  }]))
+};
+
 // src/rooms/registry.mjs
-var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default, http_json_default].map((p) => [p.type, p]));
+var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default, http_json_default, docker_default].map((p) => [p.type, p]));
 function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
   return new Promise((resolve2) => {
     execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve2(err ? null : String(stdout)));

@@ -3169,3 +3169,33 @@ test('the chat scrolls on its own: ▲ shows older messages, a new one leaves th
   expect(await ui.find({ type: 'Button', key: 'chat-newest' })).toBeUndefined()
   await ui.unmount()
 })
+
+// Buttons as tabs (the Docker room's sections): the one whose `lit` path
+// holds is filled, the others plain, whatever was pressed before.
+test('Docker room: the section shown is the filled tab, the others plain', SLOW, async ($, on) => {
+  const room = {
+    schema: 1, id: 'docker', version: '1.0.0', name: 'Docker', icon: '◰', color: 'sky', description: 'Docker.', author: 'squad-chat', permissions: { hosts: [] },
+    providers: [{ id: 'd', type: 'docker', params: {}, interval: { visible: '5s', background: '1m' } }],
+    layout: { cards: [{ title: 'DOCKER', body: { type: 'buttons', buttons: ['containers', 'images'].map((s) => ({ label: s[0].toUpperCase() + s.slice(1), lit: `d.on.${s}`, action: s })) } }] },
+  }
+  const bridge = fakeBridge(on, { store: { view: 'docker', sysRooms: ['docker'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [room], invalid: [] })
+  const look = async (shown: string) => {
+    bridge.emit({ type: 'fnroom', id: 'docker', provider: 'd', data: { on: { containers: shown === 'containers' || null, images: shown === 'images' || null } }, at: Date.now() })
+    await settle()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+    await settle()
+    const buttons = (await ui.findAll({ type: 'Button' })) as any[]
+    const props_ = (label: string) => buttons.find((x) => x.props.label === label)?.props
+    const out = { containers: props_('Containers'), images: props_('Images') }
+    await ui.unmount()
+    return out
+  }
+  let b = await look('containers')
+  expect(b.containers?.variant).toBe('primary')
+  expect(b.images?.plain).toBe(true)
+  b = await look('images')
+  expect(b.images?.variant).toBe('primary')
+  expect(b.containers?.plain).toBe(true)
+})
