@@ -334,77 +334,82 @@ export function requestsText() {
   ].join("\n");
 }
 
-// The layer at a height in a column, and the top one, for a cell's color.
-function layerAt(st, c, h) {
-  let acc = 0;
-  for (const [i, l] of st.layers.entries()) { acc += l.sizes[c]; if (h < acc) return i; }
-  return -1;
-}
-function topLayer(st, c) {
-  for (let i = st.layers.length - 1; i >= 0; i--) if (st.layers[i].sizes[c] > 0) return i;
-  return 0;
-}
-
-// Block cells: a full one where the column passes the cell, a half where it
-// ends in its lower part. Each named layer is labeled at its height beside
-// the last column, where there's room.
+// Half-cell strata, drawn as the desktop draws them: the columns stretch
+// across the card, each stratum carried on between them as a band, the
+// bedrock a bar under them, then the key of the named layers.
 function strataTerm(els, st, w, rows) {
-  const AX = 5;
-  const LBL = w >= 44 ? 15 : 0;
+  const { Box, Text } = els;
   const n = st.cols.length;
-  const cw = Math.min(5, Math.max(2, Math.floor((w - AX - LBL) / n)));
-  const block = cw - 1;
-  const max = Math.max(1, ...st.cols.map((c) => c.above));
-  const step = max / STRATA_ROWS;
-  const labels = new Map();
-  if (LBL) {
-    const last = n - 1;
+  // Each column's cells, the last few of its slot the band to the next.
+  const edge = (c) => Math.round((c * w) / n);
+  const gap = n > 1 ? Math.max(1, Math.round((w / n) * 0.18)) : 0;
+  // Each layer's thickness in half cells, rounded on its own and at least one,
+  // so a layer is as thick in every column it rides in and none drops out.
+  const HALVES = STRATA_ROWS * 2;
+  const stack = (unit) => st.cols.map((_, c) => {
     let acc = 0;
-    for (const [i, l] of st.layers.entries()) {
-      const size = l.sizes[last];
-      if (i && size > 0) {
-        let r = Math.min(STRATA_ROWS - 1, Math.floor((acc + size / 2) / step));
-        while (labels.has(r) && r < STRATA_ROWS - 1) r++;
-        if (!labels.has(r)) labels.set(r, i);
+    return st.layers.map((l) => { const t = l.sizes[c] > 0 ? Math.max(1, Math.round(l.sizes[c] / unit)) : 0; const span = [acc, acc + t]; acc += t; return span; });
+  });
+  let unit = Math.max(1, ...st.cols.map((c) => c.above)) / HALVES, spans = stack(unit);
+  for (let i = 0; i < 8 && Math.max(...spans.map((sp) => sp.at(-1)[1])) > HALVES; i++) spans = stack(unit *= 1.15);
+  // The layer at a height in a cell: in a column, the one there; in a band,
+  // the one whose band passes there, a layer in both columns only.
+  const at = (x, h) => {
+    const c = Math.min(n - 1, Math.floor((x * n) / w));
+    const into = x - (edge(c + 1) - gap);
+    if (c < n - 1 && into >= 0) {
+      const t = (into + 0.5) / gap;
+      for (const [i, l] of st.layers.entries()) {
+        if (!(l.sizes[c] > 0 && l.sizes[c + 1] > 0)) continue;
+        const [a0, a1] = spans[c][i], [b0, b1] = spans[c + 1][i];
+        if (h >= a0 + (b0 - a0) * t && h < a1 + (b1 - a1) * t) return i;
       }
-      acc += size;
+      return -1;
     }
-  }
+    return spans[c].findIndex(([lo, hi]) => h >= lo && h < hi);
+  };
   for (let r = STRATA_ROWS - 1; r >= 0; r--) {
-    const lo = r * step, hi = (r + 1) * step;
     const runs = [];
-    const push = (text, color) => { const prev = runs.at(-1); if (prev && prev.color === color) prev.text += text; else runs.push({ text, color }); };
-    st.cols.forEach((c, i) => {
-      if (c.above >= hi - step * 0.05) push("█".repeat(block), LAYER_COLORS[layerAt(st, i, (lo + hi) / 2)] ?? LAYER_COLORS[0]);
-      else if (c.above > lo + step * 0.25) push("▄".repeat(block), LAYER_COLORS[topLayer(st, i)] ?? LAYER_COLORS[0]);
-      else push(" ".repeat(block), undefined);
-      push(" ", undefined);
-    });
-    const li = labels.get(r);
-    rows.push(line(els, `s${r}`, [
-      { text: r === STRATA_ROWS - 1 ? fmtTokens(max) : "", width: AX - 1, right: true, color: theme.muted },
-      { text: " " },
-      ...runs.map((x) => ({ text: x.text, color: x.color })),
-      // The size first: a long name is cut at its end, never the number.
-      li != null ? { text: ` ${kTok(st.layers[li].sizes[n - 1])} ${st.layers[li].name}`, color: LAYER_COLORS[li], grow: true } : null,
-    ]));
+    for (let x = 0; x < w; x++) {
+      const up = at(x, 2 * r + 1.5), down = at(x, 2 * r + 0.5);
+      const cell = up < 0 && down < 0 ? { text: " " }
+        : up === down ? { text: "█", color: LAYER_COLORS[up] ?? LAYER_COLORS[0] }
+        : down < 0 ? { text: "▀", color: LAYER_COLORS[up] ?? LAYER_COLORS[0] }
+        : { text: "▄", color: LAYER_COLORS[down] ?? LAYER_COLORS[0], bg: up < 0 ? undefined : LAYER_COLORS[up] ?? LAYER_COLORS[0] };
+      const prev = runs.at(-1);
+      if (prev && prev.color === cell.color && prev.bg === cell.bg) prev.text += cell.text; else runs.push(cell);
+    }
+    rows.push(line(els, `s${r}`, runs));
   }
-  const span = n * cw - 1;
-  const old = st.earlier >= 1000 ? Math.min(span - 1, Math.max(1, Math.round((st.earlier / (st.bedrock + st.earlier)) * span))) : 0;
+  const old = st.earlier >= 1000 ? Math.min(w - 1, Math.max(1, Math.round((st.earlier / (st.bedrock + st.earlier)) * w))) : 0;
   rows.push(line(els, "bed", [
-    { text: "", width: AX },
-    { text: "▀".repeat(span - old), color: BEDROCK },
+    { text: "▀".repeat(w - old), color: BEDROCK },
     old ? { text: "▀".repeat(old), color: EARLIER } : null,
-    { text: ` ${contextSum(st)}`, color: theme.muted, grow: true },
   ]));
-  const first = st.cols[0].label;
+  // The sum sits between the first and next labels where it fits, else under them.
+  const first = st.cols[0].label, sum = contextSum(st);
+  const fits = cells(first) + cells(sum) + 8 <= w;
   rows.push(line(els, "x", [
-    { text: "", width: AX },
     { text: first, color: theme.muted },
-    { text: " ".repeat(Math.max(1, span - cells(first) - 4)) },
-    { text: "next", color: theme.usage },
+    { text: fits ? sum : "", color: theme.muted, grow: true, right: true },
+    { text: "  next", color: theme.usage },
   ]));
-  return STRATA_ROWS + 2;
+  // Under them it wraps, never cut: the total at its end is what it's for.
+  const sumRows = fits ? 0 : Math.ceil(cells(sum) / w);
+  if (!fits) rows.push(Box({ key: "sum", children: [Text({ key: "t", color: theme.muted, wrap: "wrap", children: sum })] }));
+  // The key wraps, a whole entry to a line; a long name is cut at its end, never its size.
+  const keys = st.layers.map((l, i) => ({ name: l.name, size: kTok(l.sizes.at(-1)), color: LAYER_COLORS[i], shown: i ? l.sizes.at(-1) > 0 : true }))
+    .filter((k) => k.shown).sort((a, b) => (a.name === "conversation") - (b.name === "conversation"))
+    .map((k) => ({ ...k, text: `■ ${clip(k.name, Math.max(4, w - cells(k.size) - 3))} ${k.size}` }));
+  let keyRows = 1, used = 0;
+  for (const k of keys) {
+    const kw = cells(k.text);
+    if (used && used + 2 + kw > w) { keyRows++; used = kw; } else used += (used ? 2 : 0) + kw;
+  }
+  rows.push(Box({ key: "key", flexDirection: "row", flexWrap: "wrap", columnGap: 2, children: keys.map((k, i) => Box({ key: `k${i}`, flexShrink: 0, children: [
+    Text({ key: "t", color: k.color, children: k.text }),
+  ] })) }));
+  return STRATA_ROWS + 2 + sumRows + keyRows;
 }
 
 // The desktop: the columns as one drawing that stretches to the card, each

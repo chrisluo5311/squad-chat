@@ -1005,9 +1005,9 @@ test('Usage room: the Requests card draws the context as strata, with plain-word
   expect(await ui.find({ type: 'Text', text: 'REQUESTS' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '2 requests' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /█/ })).toBeDefined()                   // the strata, in block cells
-  expect(await ui.find({ type: 'Text', text: /^ 2(\.\d)?k Read README\.md$/ })).toBeDefined()   // the file's layer, its size first, then what it read
-  expect(await ui.find({ type: 'Text', text: ' 54k fixed + 4.4k new = 59k' })).toBeDefined()   // the context as a sum: bedrock, then what came after
-  expect(await ui.find({ type: 'Text', text: 'next' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^■ Read README\.md 2(\.\d)?k$/ })).toBeDefined()   // the key under the strata, each layer with what it holds
+  expect(await ui.find({ type: 'Text', text: '54k fixed + 4.4k new = 59k' })).toBeDefined()   // the context as a sum: bedrock, then what came after
+  expect(await ui.find({ type: 'Text', text: '  next' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: ' (54k): sent with every request, 96% of the last request. Biggest: MCP tools (31k).' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: "Claude's reply" })).toBeDefined()         // 2.3k, more than the file's 2.1k
   expect(await ui.find({ type: 'Text', text: /#\d/ })).toBeUndefined()                // no request numbers to decode
