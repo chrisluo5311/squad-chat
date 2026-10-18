@@ -24994,7 +24994,7 @@ import { readFileSync as readFileSync6, writeFileSync as writeFileSync6, renameS
 import { join as join6 } from "node:path";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
-var MIN_GAP = 1e4;
+var MIN_GAP = 25e3;
 var TIMEOUT_MS2 = 5e3;
 var CHECKS = 120;
 var BEATS = 40;

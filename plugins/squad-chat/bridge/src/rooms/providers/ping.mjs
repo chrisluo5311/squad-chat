@@ -20,7 +20,11 @@ import { request as httpsRequest } from "node:https";
 import { RoomError } from "../net.mjs";
 import { locked } from "../lock.mjs";
 
-const MIN_GAP = 10_000;
+// A target checked this recently isn't checked again: another session just
+// did, or a setting changed (a server added) between the 30 s ticks, which
+// then checks only the new one rather than waiting on every slow server.
+// Ticks start 30 s after the last run ends, so each still checks them all.
+const MIN_GAP = 25_000;
 const TIMEOUT_MS = 5_000;
 const CHECKS = 120;     // the last checks kept: an hour at 30 s
 const BEATS = 40;       // the heartbeat drawn in the list

@@ -268,6 +268,15 @@ describe("ping: a run", () => {
     assert.equal(d.targets.find((r) => r.name === "1.1.1.1").beats.slice(-3), "uuu");
   });
 
+  it("checks only the server just added, not the others checked a moment ago", async () => {
+    await ping.fetch(params(), ctx());
+    clock += 15_000;
+    runs.length = 0;
+    const d = await ping.fetch(params({ targets: [...params().targets, "8.8.8.8"] }), ctx());
+    assert.deepEqual(runs.map((a) => a.at(-1)), ["8.8.8.8"]);
+    assert.equal(d.count, 5);
+  });
+
   it("pauses the open target, and forgets a target taken off the list", async () => {
     await ping.fetch(params(), ctx());
     const r = await ping.actions.pause(params(), {}, { ...ctx(), settings: { open: "1.1.1.1" } });
