@@ -1364,6 +1364,26 @@ const snippetsLoaded = (items = SNIPS) => [
   { type: 'fnroom', id: 'snippet', provider: 'list', data: { items, count: items.length }, at: Date.now() },
 ]
 
+test('Snippet room: a numbered snippet\'s first line leaves room for its tag', SLOW, async ($, on) => {
+  const body = `const answer = await fetch(url).then((r) => r.json()).catch(() => null) // ${'and a long tail '.repeat(20)}`
+  const bridge = fakeBridge(on, { store: { view: 'snippet' } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...snippetsLoaded([
+    { id: 'n1', name: '1', lang: null, body, at: '2026-10-09T01:00:00Z' },
+    { id: 'n2', name: '2', lang: 'typescript', body, at: '2026-10-09T02:00:00Z' },
+  ]))
+  await settle()
+  // The inline pane's list has no preview row, so the first line follows the number.
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  const peeks = (await ui.findAll({ type: 'Text', text: /^ {2}const answer/ })).map((x: any) => x.text)
+  expect(peeks).toHaveLength(2)
+  expect(peeks.every((t: string) => t.endsWith('…'))).toBe(true)
+  // ' typescript' takes 11 cells, so its row's first line is 11 shorter.
+  expect(Math.abs(peeks[0].length - peeks[1].length)).toBe(11)
+  await ui.unmount()
+})
+
 test('Snippet room: a tab, the list with copy and share, and the bridge told what is on show', SLOW, async ($, on) => {
   const copied: string[] = []
   on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })

@@ -578,9 +578,6 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
       // their first line follows the number, as a number alone says nothing.
       const numbered = room === "snippet" && /^\d+$/.test(show(lookup(item, b.title)));
       const title = numbered ? `#${show(lookup(item, b.title))}` : show(lookup(item, b.title));
-      // Cut to the room left beside the number and the ⧉ ⇪ buttons: VS Code
-      // wraps a row whose text runs past the pane rather than cutting it.
-      const peek = numbered && per === 1 ? clip(firstLine(lookup(item, b.preview ?? b.copy)), w - cells(title) - 2 - PEEK_BUTTONS) : "";
       if (els.Svg && b.score) return nodes.push(...scoreRow(els, k, b, item, title, handlers, accent, i));
       if (els.Svg && b.lit) return nodes.push(...litRow(els, k, b, item, title, handlers, room, accent, i));
       if (els.Svg && b.code) return nodes.push(...codeRow(els, k, b, item, title, handlers, room));
@@ -588,6 +585,9 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
       // the ♫ on the station playing.
       const mark = b.mark ? show(lookup(item, b.mark)) : null;
       const tag = b.tag ? lookup(item, b.tag) : null;
+      // Cut to the room left beside the number, the tag and the ⧉ ⇪ buttons:
+      // VS Code wraps a row whose text runs past the pane rather than cutting it.
+      const peek = numbered && per === 1 ? clip(firstLine(lookup(item, b.preview ?? b.copy)), w - cells(title) - 2 - (tag ? cells(String(tag)) + 1 : 0) - PEEK_BUTTONS) : "";
       const copyText = b.copy ? lookup(item, b.copy) : null;
       const shareText = b.share ? lookup(item, b.share) : null;
       const actOn = b.act ? lookup(item, b.act.field) : null;
