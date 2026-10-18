@@ -32,6 +32,7 @@ state.pet = createPet();
 
 const PANE_ID = "squad-chat";
 const UNDO_MS = 10_000;   // how long Cancel stays beside "Removed …"
+const NOTICE_MS = 5_000;  // how long a notice over the box stays
 
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
@@ -867,6 +868,20 @@ async function toolAct($, fn) {
   $.ui.invalidate("ui.render");
 }
 
+// A notice over the box goes NOTICE_MS after it's first drawn, unless
+// another has taken its place. One with Cancel beside it goes with its undo.
+let noticeDrawn = "";
+function fadeNotice($) {
+  if (state.notice === noticeDrawn) return;
+  const text = noticeDrawn = state.notice;
+  if (!text) return;
+  $.clock.sleep(NOTICE_MS).then(() => {
+    if (state.notice !== text || state.undo?.text === text) return;
+    state.notice = "";
+    $.ui.invalidate("ui.render");
+  }).catch(() => {});
+}
+
 async function copyTool($, text, surface) {
   await copySnippet($, text, surface);
   if (state.notice !== "Copied.") return;
@@ -1117,6 +1132,7 @@ export function register(on, options) {
 
   on("ui.render", { component: "Pane" }, ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e);
+    fadeNotice($);
     const props = e.props ?? {};
     state.paneFocused = props.isFocused === true;
     paneSurface = e.surface;

@@ -2748,6 +2748,8 @@ test('Habits room: goals added by typing, checked off, counted, renamed and remo
   expect((store.habits as any).goals[0].name).toBe('Read 20 min')
   await ui.input({ key: 'compose', text: 'add water' })
   expect(await ui.find({ type: 'Text', text: "There's already a habit called Water." })).toBeDefined()
+  await bridge.clock.advance(5_000)                                         // a notice goes after 5 seconds
+  expect(await ui.find({ type: 'Text', text: "There's already a habit called Water." })).toBeUndefined()
   await ui.input({ key: 'compose', text: 'Ｒｅａｄ ２０ ｍｉｎ。' })              // full-width, as an IME types it, and a stop
   expect(await ui.find({ type: 'Text', text: "There's already a habit called Read 20 min." })).toBeDefined()
   expect((store.habits as any).goals).toHaveLength(2)
@@ -2766,7 +2768,9 @@ test('Habits room: goals added by typing, checked off, counted, renamed and remo
   expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
   await ui.press({ key: 'habit-h3-delete' })
   expect(await ui.find({ type: 'Button', key: 'notice-undo', label: 'Cancel' })).toBeDefined()
-  await bridge.clock.advance(10_000)                                        // left alone, it goes after 10 seconds
+  await bridge.clock.advance(5_000)                                         // with Cancel beside it, it stays past 5
+  expect(await ui.find({ type: 'Button', key: 'notice-undo', label: 'Cancel' })).toBeDefined()
+  await bridge.clock.advance(5_000)                                         // left alone, it goes after 10 seconds
   expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'Removed Check email and its streak.' })).toBeUndefined()
   expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water'])
