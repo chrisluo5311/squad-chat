@@ -25346,7 +25346,9 @@ function pingView(h, targets, { now, slowMs, shareNames = true, alerts = true, o
     }),
     watched > shareRows.length ? `+ ${watched - shareRows.length} more` : null
   ].filter(Boolean).join("\n");
-  const incidents = [...h.incidents ?? []].filter((x) => targets.some((t) => t.key === x.key)).reverse().slice(0, 5).map((x, i) => ({
+  const latest = [...h.incidents ?? []].filter((x) => targets.some((t) => t.key === x.key)).reverse();
+  const going = latest.filter((x) => x.to == null);
+  const incidents = [...going, ...latest.filter((x) => x.to != null).slice(0, Math.max(0, 5 - going.length))].map((x, i) => ({
     id: `${x.key}-${x.from}-${i}`,
     dot: x.to == null ? "\u25CB" : "\u25CF",
     tone: x.to == null ? "red" : "leaf",

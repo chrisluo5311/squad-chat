@@ -169,6 +169,17 @@ describe("ping: history", () => {
     assert.match(anon, /server 1 is down/);
   });
 
+  it("lists every outage still going, then the latest ended ones up to five", () => {
+    const ts = ["a", "b", "c", "d", "e", "f", "g"].map((x) => target(`${x}.example`));
+    const h = { targets: {}, incidents: [], paused: [] };
+    ts.forEach((t, i) => h.incidents.push({ key: t.key, name: t.name, from: T0 + i, to: i === 6 ? T0 + 60_000 : null, why: "timeout" }));
+    let v = pingView(h, ts, { now: T0 + 120_000, slowMs: 500 });
+    assert.deepEqual(v.incidents.map((x) => x.text.split(" ")[0]), ["f.example", "e.example", "d.example", "c.example", "b.example", "a.example"]);
+    for (const x of h.incidents.slice(2)) x.to = T0 + 60_000;
+    v = pingView(h, ts, { now: T0 + 120_000, slowMs: 500 });
+    assert.deepEqual(v.incidents.map((x) => x.text.split(" ")[0]), ["b.example", "a.example", "g.example", "f.example", "e.example"]);
+  });
+
   it("counts 24-hour uptime over the hours that started in the last 24", () => {
     const t = target("a.example");
     const h = { targets: {}, incidents: [], paused: [] };

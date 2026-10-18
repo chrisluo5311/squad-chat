@@ -397,7 +397,10 @@ export function pingView(h, targets, { now, slowMs, shareNames = true, alerts = 
     watched > shareRows.length ? `+ ${watched - shareRows.length} more` : null,
   ].filter(Boolean).join("\n");
 
-  const incidents = [...(h.incidents ?? [])].filter((x) => targets.some((t) => t.key === x.key)).reverse().slice(0, 5).map((x, i) => ({
+  // Every outage still going, newest first, then the latest ended ones up to five.
+  const latest = [...(h.incidents ?? [])].filter((x) => targets.some((t) => t.key === x.key)).reverse();
+  const going = latest.filter((x) => x.to == null);
+  const incidents = [...going, ...latest.filter((x) => x.to != null).slice(0, Math.max(0, 5 - going.length))].map((x, i) => ({
     id: `${x.key}-${x.from}-${i}`,
     dot: x.to == null ? "○" : "●",
     tone: x.to == null ? "red" : "leaf",
