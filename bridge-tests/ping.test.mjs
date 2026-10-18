@@ -169,6 +169,17 @@ describe("ping: history", () => {
     assert.match(anon, /server 1 is down/);
   });
 
+  it("counts 24-hour uptime over the hours that started in the last 24", () => {
+    const t = target("a.example");
+    const h = { targets: {}, incidents: [], paused: [] };
+    recordCheck(h, t, { ok: false, why: "timeout" }, { at: T0 - 24.5 * 3_600_000, ...SETTINGS });
+    recordCheck(h, t, { ok: true, ms: 12 }, { at: T0, ...SETTINGS });
+    const v = pingView(h, [t], { now: T0, slowMs: 500 });
+    assert.equal(Object.keys(h.targets["a.example"].hours).length, 2);   // kept, but not counted
+    assert.equal(v.uptime24, "100%");
+    assert.equal(v.targets[0].up24, "100%");
+  });
+
   it("doesn't say all are up before any is checked, or when all are paused", () => {
     const ts = [target("a.example"), target("b.example")];
     const h = { targets: {}, incidents: [], paused: [] };

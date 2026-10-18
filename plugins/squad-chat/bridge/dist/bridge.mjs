@@ -25232,6 +25232,14 @@ function fmtSpan(msLong) {
   if (m < 48 * 60) return `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`;
   return `${Math.floor(m / 1440)}d`;
 }
+function last24(e, now) {
+  let n = 0, ok = 0;
+  for (const [k, b] of Object.entries(e?.hours ?? {})) if (now - Number(k) < 864e5) {
+    n += b[0];
+    ok += b[1];
+  }
+  return [n, ok];
+}
 var fmtPct = (ok, n) => n ? `${(Math.floor(ok / n * 1e3) / 10).toString()}%` : "\u2013";
 function dayBeat(buckets) {
   let n = 0, ok = 0;
@@ -25263,11 +25271,7 @@ function targetRow(t, e, { now, slowMs, paused, sinceHour }) {
   const jitter = good.length > 1 ? good.slice(1).reduce((a, v, i) => a + Math.abs(v - good[i]), 0) / (good.length - 1) : null;
   const lossOf = (c) => c.ms == null ? 1 : c.loss ?? 0;
   const loss = hour.length ? Math.round(hour.reduce((a, c) => a + lossOf(c), 0) / hour.length * 100) : null;
-  let n = 0, ok = 0;
-  for (const b of Object.values(e?.hours ?? {})) {
-    n += b[0];
-    ok += b[1];
-  }
+  const [n, ok] = last24(e, now);
   const down = !!e?.downSince;
   const failing = !down && last?.ms == null && !!last;
   const slow = !down && !failing && last?.ms != null && last.ms >= slowMs;
@@ -25315,9 +25319,10 @@ function pingView(h, targets, { now, slowMs, shareNames = true, alerts = true, o
   const count = (s) => rows.filter((r) => r.state === s).length;
   const up = count("up"), slow = count("slow"), down = count("down");
   let n = 0, ok = 0;
-  for (const t of targets) for (const b of Object.values(h.targets[t.key]?.hours ?? {})) {
-    n += b[0];
-    ok += b[1];
+  for (const t of targets) {
+    const [tn, tok] = last24(h.targets[t.key], now);
+    n += tn;
+    ok += tok;
   }
   const bad = rows.filter((r) => r.state === "down" || r.state === "slow");
   const watched = rows.filter((r) => r.state !== "paused").length;

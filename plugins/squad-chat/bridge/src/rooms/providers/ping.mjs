@@ -272,6 +272,14 @@ export function fmtSpan(msLong) {
   return `${Math.floor(m / 1440)}d`;
 }
 
+// A target's checks and good ones over the hours that started in the last
+// 24 h. More are kept (an hour is trimmed only at a check), so they're left out here.
+function last24(e, now) {
+  let n = 0, ok = 0;
+  for (const [k, b] of Object.entries(e?.hours ?? {})) if (now - Number(k) < 86_400_000) { n += b[0]; ok += b[1]; }
+  return [n, ok];
+}
+
 const fmtPct = (ok, n) => (n ? `${(Math.floor((ok / n) * 1000) / 10).toString()}%` : "–");
 
 // A day's or a run of days' mark on the 90-day line: the worst of them.
@@ -307,8 +315,7 @@ function targetRow(t, e, { now, slowMs, paused, sinceHour }) {
   const jitter = good.length > 1 ? good.slice(1).reduce((a, v, i) => a + Math.abs(v - good[i]), 0) / (good.length - 1) : null;
   const lossOf = (c) => (c.ms == null ? 1 : c.loss ?? 0);
   const loss = hour.length ? Math.round((hour.reduce((a, c) => a + lossOf(c), 0) / hour.length) * 100) : null;
-  let n = 0, ok = 0;
-  for (const b of Object.values(e?.hours ?? {})) { n += b[0]; ok += b[1]; }
+  const [n, ok] = last24(e, now);
   const down = !!e?.downSince;
   const failing = !down && last?.ms == null && !!last;
   const slow = !down && !failing && last?.ms != null && last.ms >= slowMs;
@@ -362,7 +369,7 @@ export function pingView(h, targets, { now, slowMs, shareNames = true, alerts = 
   const count = (s) => rows.filter((r) => r.state === s).length;
   const up = count("up"), slow = count("slow"), down = count("down");
   let n = 0, ok = 0;
-  for (const t of targets) for (const b of Object.values(h.targets[t.key]?.hours ?? {})) { n += b[0]; ok += b[1]; }
+  for (const t of targets) { const [tn, tok] = last24(h.targets[t.key], now); n += tn; ok += tok; }
   const bad = rows.filter((r) => r.state === "down" || r.state === "slow");
   const watched = rows.filter((r) => r.state !== "paused").length;
   const names = new Map(rows.map((r, i) => [r.id, shareNames ? r.name : `server ${i + 1}`]));
