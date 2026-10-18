@@ -157,6 +157,8 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
   it("shows who's typing, until they send or go quiet", async () => {
     const typing = (e, name) => e.type === "typing" && e.room === room.id && e.users.some((u) => u.name === name);
     const quiet = (e) => e.type === "typing" && e.room === room.id && e.users.length === 0;
+    // bob just restarted, and a broadcast sent before his channel is back is lost
+    await bob.waitFor((e) => e.type === "status" && e.room === room.id && e.status === "SUBSCRIBED", 15_000, "bob's channel");
 
     let after = since(bob);
     await alice.ok("POST", "/typing", { room: room.id });
