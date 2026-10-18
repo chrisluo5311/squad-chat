@@ -25177,6 +25177,9 @@ var clockOf = (ms) => {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 };
 var hhmm = (ms) => clockOf(ms).slice(0, 5);
+function closeIncidents(h, key, at) {
+  for (const x of h.incidents) if (x.key === key && x.to == null) x.to = at;
+}
 function recordCheck(h, t, res, { at, slowMs, alertAfter }) {
   const e = h.targets[t.key] ??= { checks: [], hours: {}, days: {}, fails: 0 };
   const ok = !!res.ok;
@@ -25196,10 +25199,7 @@ function recordCheck(h, t, res, { at, slowMs, alertAfter }) {
   if (res.split) e.split = res.split;
   if (res.certEnd) e.certEnd = res.certEnd;
   if (ok) {
-    if (e.downSince) {
-      const open = h.incidents.find((x) => x.key === t.key && x.to == null);
-      if (open) open.to = at;
-    }
+    if (e.downSince) closeIncidents(h, t.key, at);
     e.fails = 0;
     e.failSince = null;
     e.downSince = null;
@@ -25411,6 +25411,7 @@ var ping_default = {
       }
       const keep = new Set(targets.map((t) => t.key));
       for (const k of Object.keys(cur.targets)) if (!keep.has(k)) delete cur.targets[k];
+      for (const x of cur.incidents) if (!keep.has(x.key)) closeIncidents(cur, x.key, at);
       cur.paused = (cur.paused ?? []).filter((k) => keep.has(k));
       saveHistory(dir, cur);
       return cur;

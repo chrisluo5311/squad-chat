@@ -243,6 +243,20 @@ describe("ping: a run", () => {
     assert.equal(d.count, 1);
   });
 
+  it("ends a down target's incident when it's taken off the list, so adding it back starts clean", async () => {
+    await ping.fetch(params(), ctx());
+    clock += MIN_GAP;
+    await ping.fetch(params({ targets: ["1.1.1.1"] }), ctx());
+    const h = JSON.parse(readFileSync(join(dir, "history.json"), "utf8"));
+    assert.deepEqual(h.incidents.filter((x) => x.to == null), []);
+    assert.equal(h.incidents.find((x) => x.key === "nas.local").to, clock);
+    clock += MIN_GAP;
+    const d = await ping.fetch(params(), ctx());
+    const open = JSON.parse(readFileSync(join(dir, "history.json"), "utf8")).incidents.filter((x) => x.to == null);
+    assert.deepEqual(open.map((x) => x.key).sort(), ["db.internal:5432", "nas.local"]);
+    assert.equal(d.targets.find((r) => r.name === "nas.local").state, "down");
+  });
+
   it("says ping needs macOS or Linux elsewhere", async () => {
     const d = await ping.fetch(params({ targets: ["1.1.1.1"] }), { ...ctx(), platform: "win32" });
     assert.match(d.targets[0].why, /ping needs macOS or Linux/);

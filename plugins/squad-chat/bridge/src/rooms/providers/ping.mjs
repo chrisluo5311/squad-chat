@@ -214,6 +214,11 @@ const hourKey = (ms) => String(Math.floor(ms / 3_600_000) * 3_600_000);
 const clockOf = (ms) => { const d = new Date(ms); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
 const hhmm = (ms) => clockOf(ms).slice(0, 5);
 
+// A target's open incidents end at `at`.
+function closeIncidents(h, key, at) {
+  for (const x of h.incidents) if (x.key === key && x.to == null) x.to = at;
+}
+
 // One check's result added to a target's history. `alertAfter` failed
 // checks in a row make it down; the first good one after makes it up again.
 export function recordCheck(h, t, res, { at, slowMs, alertAfter }) {
@@ -235,10 +240,7 @@ export function recordCheck(h, t, res, { at, slowMs, alertAfter }) {
   if (res.split) e.split = res.split;
   if (res.certEnd) e.certEnd = res.certEnd;
   if (ok) {
-    if (e.downSince) {
-      const open = h.incidents.find((x) => x.key === t.key && x.to == null);
-      if (open) open.to = at;
-    }
+    if (e.downSince) closeIncidents(h, t.key, at);
     e.fails = 0;
     e.failSince = null;
     e.downSince = null;
@@ -466,9 +468,11 @@ export default {
         if (!all && at - lastAt(cur, t) < MIN_GAP) continue;
         recordCheck(cur, t, res, { at, slowMs, alertAfter });
       }
-      // A target taken off the list takes its history with it.
+      // A target taken off the list takes its history with it, and its
+      // outage, if it had one, ends there.
       const keep = new Set(targets.map((t) => t.key));
       for (const k of Object.keys(cur.targets)) if (!keep.has(k)) delete cur.targets[k];
+      for (const x of cur.incidents) if (!keep.has(x.key)) closeIncidents(cur, x.key, at);
       cur.paused = (cur.paused ?? []).filter((k) => keep.has(k));
       saveHistory(dir, cur);
       return cur;
