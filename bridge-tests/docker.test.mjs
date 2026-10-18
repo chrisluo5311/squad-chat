@@ -28,7 +28,7 @@ const NETWORKS = [
 ].map((x) => JSON.stringify(x)).join("\n");
 const STATS = JSON.stringify({ CPUPerc: "88.31%", MemPerc: "31.20%", MemUsage: "640MiB / 2GiB", Name: "web-app" });
 
-function fake({ daemon = true, installed = true } = {}) {
+function fake({ daemon = true, installed = true, ps = PS } = {}) {
   const runs = [];
   return {
     runs,
@@ -42,7 +42,7 @@ function fake({ daemon = true, installed = true } = {}) {
         if (cmd === "--version") return "Docker version 29.8.2\n";
         if (!daemon) return null;
         if (cmd === "version") return "29.8.2|Docker Desktop 4.94.0 (241994)\n";
-        if (cmd === "ps") return PS;
+        if (cmd === "ps") return ps;
         if (cmd === "images") return IMAGES;
         if (cmd === "volume") return argv.includes("-q") ? "leftover\n" : VOLUMES;
         if (cmd === "network") return NETWORKS;
@@ -126,6 +126,15 @@ describe("docker room", () => {
     assert.deepEqual(d.detail.logs.map((r) => [r.text, r.tone]), [["GET /health 200", null], ["Error: connect ECONNREFUSED :5432", "red"]]);
     assert.equal(d.band, "3/4 up · web-app unhealthy");
     assert.equal(d.tone, "amber");
+  });
+
+  it("counts a crashed container as needing a look, ahead of an unhealthy one", async () => {
+    const crashed = JSON.stringify({ ID: "ab12cd34ef56", Image: "postgres:17", Labels: "", Names: "pg", Networks: "bridge", Ports: "", State: "exited", Status: "Exited (1) 2 minutes ago", HealthStatus: "none" });
+    const { ctx } = fake({ ps: `${PS}\n${crashed}` });
+    const d = await docker.fetch({}, ctx);
+    assert.equal(d.band, "3/5 up · pg exited (1) 2m · web-app unhealthy");
+    assert.equal(d.tone, "red");
+    assert.deepEqual(d.worst, { name: "pg", status: "exited (1) 2m", tone: "red" });
   });
 
   it("details the container picked, with no stats for a stopped one", async () => {

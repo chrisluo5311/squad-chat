@@ -257,7 +257,7 @@
         "draw": {
           "type": "dot"
         },
-        "color": "amber",
+        "colorFrom": "d.worst.tone",
         "value": "{d.worst.name}",
         "sub": "{d.worst.status}"
       }

@@ -24950,7 +24950,7 @@ var docker_default = {
     const picked = containers.find((c) => c.name.toLowerCase() === want) ?? containers[0] ?? null;
     const detail = section === "containers" ? await detailOf(ctx, docker, picked) : null;
     const up = containers.filter((c) => c.running).length;
-    const bad = containers.filter((c) => c.tone === "amber");
+    const bad = [...containers.filter((c) => c.tone === "red"), ...containers.filter((c) => c.tone === "amber")];
     const dangling = images.filter((i) => i.dangling).length;
     const imageBytes = images.reduce((n, i) => n + i.bytes, 0);
     return {
@@ -24971,8 +24971,8 @@ var docker_default = {
       counts: `${containers.length} containers \xB7 ${images.length} images \xB7 ${volumes.length} volumes \xB7 ${networks.length} networks`,
       band: [`${up}/${containers.length} up`, ...bad.slice(0, 2).map((c) => `${c.name} ${c.status}`)].join(" \xB7 "),
       upText: `${up}/${containers.length}`,
-      tone: bad.length ? "amber" : "leaf",
-      worst: bad[0] ? { name: bad[0].name, status: bad[0].status } : null,
+      tone: bad[0]?.tone ?? "leaf",
+      worst: bad[0] ? { name: bad[0].name, status: bad[0].status, tone: bad[0].tone } : null,
       share: shareText(engine, containers)
     };
   },

@@ -239,7 +239,8 @@ export default {
     const detail = section === "containers" ? await detailOf(ctx, docker, picked) : null;
 
     const up = containers.filter((c) => c.running).length;
-    const bad = containers.filter((c) => c.tone === "amber");
+    // What needs a look: crashed first, then unhealthy, restarting or paused.
+    const bad = [...containers.filter((c) => c.tone === "red"), ...containers.filter((c) => c.tone === "amber")];
     const dangling = images.filter((i) => i.dangling).length;
     const imageBytes = images.reduce((n, i) => n + i.bytes, 0);
     return {
@@ -260,8 +261,8 @@ export default {
       counts: `${containers.length} containers · ${images.length} images · ${volumes.length} volumes · ${networks.length} networks`,
       band: [`${up}/${containers.length} up`, ...bad.slice(0, 2).map((c) => `${c.name} ${c.status}`)].join(" · "),
       upText: `${up}/${containers.length}`,
-      tone: bad.length ? "amber" : "leaf",
-      worst: bad[0] ? { name: bad[0].name, status: bad[0].status } : null,
+      tone: bad[0]?.tone ?? "leaf",
+      worst: bad[0] ? { name: bad[0].name, status: bad[0].status, tone: bad[0].tone } : null,
       share: shareText(engine, containers),
     };
   },
