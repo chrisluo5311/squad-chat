@@ -166,6 +166,19 @@ describe("docker room", () => {
     assert.deepEqual(d.networks.map((n) => [n.name, n.usersText]), [["bridge", "2 containers"], ["supabase_net", "2 containers"], ["host", ""]]);
   });
 
+  it("asks only the docker it found last time how it is", async () => {
+    const { ctx, runs } = fake();
+    await docker.fetch({}, ctx);
+    runs.length = 0;
+    await docker.fetch({}, ctx);
+    assert.deepEqual(runs.filter((r) => / (version|--version)/.test(r)), ["docker version --format {{.Server.Version}}|{{.Server.Platform.Name}}"]);
+    const down = fake({ daemon: false });
+    await docker.fetch({}, down.ctx);
+    down.runs.length = 0;
+    await docker.fetch({}, down.ctx);
+    assert.deepEqual(down.runs, ["docker version --format {{.Server.Version}}|{{.Server.Platform.Name}}", "docker --version"]);
+  });
+
   it("says so when the daemon is down, or docker isn't there", async () => {
     let d = await docker.fetch({}, fake({ daemon: false }).ctx);
     assert.match(d.down, /isn't running/);

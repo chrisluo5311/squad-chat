@@ -88,14 +88,24 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 // ---------------------------------------------------------------- reading
 
+// The docker found last time is asked first and alone, so a tick every 5s
+// spends one call on finding it, two with the daemon down. Only when that
+// one is gone are the others tried again.
+let lastDocker = null;
+
 async function findDocker(ctx) {
-  for (const d of DOCKERS) {
-    const v = await ctx.run([d, "version", "--format", "{{.Server.Version}}|{{.Server.Platform.Name}}"], { timeoutMs: 5_000 });
-    if (v != null) return { docker: d, version: v.trim() };
-  }
-  // Installed but the daemon is down: `docker version` fails, `--version` doesn't.
-  for (const d of DOCKERS) if ((await ctx.run([d, "--version"])) != null) return { docker: d, version: null };
-  return null;
+  const ask = async (list) => {
+    for (const d of list) {
+      const v = await ctx.run([d, "version", "--format", "{{.Server.Version}}|{{.Server.Platform.Name}}"], { timeoutMs: 5_000 });
+      if (v != null) return { docker: d, version: v.trim() };
+    }
+    // Installed but the daemon is down: `docker version` fails, `--version` doesn't.
+    for (const d of list) if ((await ctx.run([d, "--version"])) != null) return { docker: d, version: null };
+    return null;
+  };
+  const found = (lastDocker && await ask([lastDocker])) ?? await ask(DOCKERS);
+  lastDocker = found?.docker ?? null;
+  return found;
 }
 
 function containerRows(list) {
@@ -272,4 +282,5 @@ export default {
 // For tests: every room back on its containers.
 export function resetSections() {
   sectionOf.clear();
+  lastDocker = null;
 }

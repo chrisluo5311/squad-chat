@@ -24824,13 +24824,19 @@ var percent = (text) => {
   return Number.isFinite(n) ? Math.round(n) : null;
 };
 var plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+var lastDocker = null;
 async function findDocker(ctx) {
-  for (const d of DOCKERS) {
-    const v = await ctx.run([d, "version", "--format", "{{.Server.Version}}|{{.Server.Platform.Name}}"], { timeoutMs: 5e3 });
-    if (v != null) return { docker: d, version: v.trim() };
-  }
-  for (const d of DOCKERS) if (await ctx.run([d, "--version"]) != null) return { docker: d, version: null };
-  return null;
+  const ask = async (list) => {
+    for (const d of list) {
+      const v = await ctx.run([d, "version", "--format", "{{.Server.Version}}|{{.Server.Platform.Name}}"], { timeoutMs: 5e3 });
+      if (v != null) return { docker: d, version: v.trim() };
+    }
+    for (const d of list) if (await ctx.run([d, "--version"]) != null) return { docker: d, version: null };
+    return null;
+  };
+  const found = (lastDocker && await ask([lastDocker])) ?? await ask(DOCKERS);
+  lastDocker = found?.docker ?? null;
+  return found;
 }
 function containerRows(list) {
   return list.map((c) => {
