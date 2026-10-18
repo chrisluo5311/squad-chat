@@ -122,8 +122,18 @@ export class Bridge {
 
   async ok(method, path, body) {
     const res = await this.call(method, path, body);
-    if (res.status !== 200) throw new Error(`${this.name} ${method} ${path} → ${res.status} ${JSON.stringify(res.body)}`);
+    // A 500's details are in the bridge's debug log, its stderr, gone with
+    // the test's folders: they go with the error.
+    const log = res.status >= 500 && this.stderr ? `\nstderr: ${this.stderr.slice(-2000)}` : "";
+    if (res.status !== 200) throw new Error(`${this.name} ${method} ${path} → ${res.status} ${JSON.stringify(res.body)}${log}`);
     return res.body;
+  }
+
+  // Resolves once the room's channel last said SUBSCRIBED: new messages
+  // then arrive live, not by the backfill after a rejoin.
+  subscribed(roomId, timeout = 30_000) {
+    const last = () => this.events.filter((e) => e.type === "status" && e.room === roomId).at(-1);
+    return this.waitFor(() => last()?.status === "SUBSCRIBED", timeout, `${roomId}'s channel subscribed`);
   }
 
   async login(email) {
@@ -144,6 +154,24 @@ export class Bridge {
   cleanup() {
     rmSync(this.configDir, { recursive: true, force: true });
     rmSync(this.socketDir, { recursive: true, force: true });
+  }
+}
+
+// The local Realtime stops when no one has been connected for a minute, and
+// its first channels after that can drop and rejoin while it starts. A
+// throwaway channel waiting for live inserts brings it up before a test does.
+export async function warmRealtime(timeout = 30_000) {
+  const { createClient } = await import("../plugins/squad-chat/bridge/node_modules/@supabase/supabase-js/dist/index.mjs");
+  const sb = createClient(LOCAL_URL, LOCAL_KEY, { auth: { persistSession: false } });
+  const channel = sb.channel(`warm-${runId()}`, { config: { postgres_changes_options: { wait: true } } })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => {});
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Realtime didn't come up in ${timeout} ms`)), timeout);
+      channel.subscribe((status) => { if (status === "SUBSCRIBED") { clearTimeout(timer); resolve(); } });
+    });
+  } finally {
+    await sb.removeAllChannels();
   }
 }
 
