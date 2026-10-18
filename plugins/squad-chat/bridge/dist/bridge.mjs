@@ -24863,7 +24863,8 @@ function imageRows(list, containers = []) {
     const dangling = i.Repository === "<none>";
     const used = Number(i.Containers) > 0 || named.has(`${i.Repository}:${i.Tag}`) || i.Tag === "latest" && named.has(i.Repository);
     return {
-      id: `${i.ID}:${i.Tag}`,
+      // One image can carry the same tag in two repositories.
+      id: `${i.ID}:${i.Repository}:${i.Tag}`,
       name: dangling ? `<none> ${i.ID.slice(0, 12)}` : `${shortImage(i.Repository)}:${i.Tag}`,
       size: i.Size,
       bytes: sizeOf(i.Size),

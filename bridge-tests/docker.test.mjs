@@ -28,7 +28,7 @@ const NETWORKS = [
 ].map((x) => JSON.stringify(x)).join("\n");
 const STATS = JSON.stringify({ CPUPerc: "88.31%", MemPerc: "31.20%", MemUsage: "640MiB / 2GiB", Name: "web-app" });
 
-function fake({ daemon = true, installed = true, ps = PS } = {}) {
+function fake({ daemon = true, installed = true, ps = PS, images = IMAGES } = {}) {
   const runs = [];
   return {
     runs,
@@ -43,7 +43,7 @@ function fake({ daemon = true, installed = true, ps = PS } = {}) {
         if (!daemon) return null;
         if (cmd === "version") return "29.8.2|Docker Desktop 4.94.0 (241994)\n";
         if (cmd === "ps") return ps;
-        if (cmd === "images") return IMAGES;
+        if (cmd === "images") return images;
         if (cmd === "volume") return argv.includes("-q") ? "leftover\n" : VOLUMES;
         if (cmd === "network") return NETWORKS;
         if (cmd === "stats") return STATS;
@@ -156,6 +156,16 @@ describe("docker room", () => {
     assert.ok(!runs.some((r) => r.includes(" logs ")));
     assert.deepEqual(d.images.map((i) => [i.name, i.use]), [["supabase/postgres:17.11.0.003", "in use"], ["node:20", "in use"], ["<none> 77aa88bb99cc", "dangling"], ["redis:latest", "in use"]]);
     assert.equal(d.imagesMeta, "4 images · 3.2 GB · 1 dangling");
+  });
+
+  it("keeps an image tagged in two repositories as two rows", async () => {
+    const twice = [IMAGES, JSON.stringify({ Containers: "0", CreatedSince: "3 weeks ago", ID: "55dd66ee77ff", Repository: "registry.local/redis", Size: "117MB", Tag: "latest" })].join("\n");
+    const { ctx } = fake({ images: twice });
+    await docker.actions.images({}, {}, ctx);
+    const d = await docker.fetch({}, ctx);
+    const ids = d.images.map((i) => i.id);
+    assert.equal(ids.length, 5);
+    assert.equal(new Set(ids).size, 5);
   });
 
   it("marks unused volumes and counts each network's containers", async () => {
