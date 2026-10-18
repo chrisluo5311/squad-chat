@@ -25323,7 +25323,7 @@ function pingView(h, targets, { now, slowMs, shareNames = true, alerts = true, o
   const watched = rows.filter((r) => r.state !== "paused").length;
   const names = new Map(rows.map((r, i) => [r.id, shareNames ? r.name : `server ${i + 1}`]));
   const band = !targets.length ? "No servers yet \xB7 /set targets example.com" : [...bad.map((r) => `${r.name} ${r.word}`), up ? `${up} up` : null, ...rows.filter((r) => r.state === "up").slice(0, 3).map((r) => `${r.name} ${r.msText}`)].filter(Boolean).join(" \xB7 ");
-  const headline = !targets.length ? "Nothing watched yet" : down ? `${bad.filter((r) => r.state === "down").map((r) => names.get(r.id)).join(", ")} ${down === 1 ? "is" : "are"} down` : slow ? `${slow} slow, ${up} up` : `All ${up} up`;
+  const headline = !targets.length ? "Nothing watched yet" : down ? `${bad.filter((r) => r.state === "down").map((r) => names.get(r.id)).join(", ")} ${down === 1 ? "is" : "are"} down` : slow ? `${slow} slow, ${up} up` : !watched ? "All paused" : up === watched ? `All ${up} up` : up ? `${up} up, ${watched - up} not checked yet` : "Not checked yet";
   const shareRows = rows.filter((r) => r.state !== "paused").slice(0, SHARE_ROWS);
   const width = Math.max(4, ...shareRows.map((r) => [...names.get(r.id)].length));
   const share = [

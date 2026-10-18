@@ -372,7 +372,10 @@ export function pingView(h, targets, { now, slowMs, shareNames = true, alerts = 
 
   const headline = !targets.length ? "Nothing watched yet"
     : down ? `${bad.filter((r) => r.state === "down").map((r) => names.get(r.id)).join(", ")} ${down === 1 ? "is" : "are"} down`
-    : slow ? `${slow} slow, ${up} up` : `All ${up} up`;
+    : slow ? `${slow} slow, ${up} up`
+    : !watched ? "All paused"
+    : up === watched ? `All ${up} up`
+    : up ? `${up} up, ${watched - up} not checked yet` : "Not checked yet";
   const shareRows = rows.filter((r) => r.state !== "paused").slice(0, SHARE_ROWS);
   const width = Math.max(4, ...shareRows.map((r) => [...names.get(r.id)].length));
   const share = [

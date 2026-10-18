@@ -169,6 +169,18 @@ describe("ping: history", () => {
     assert.match(anon, /server 1 is down/);
   });
 
+  it("doesn't say all are up before any is checked, or when all are paused", () => {
+    const ts = [target("a.example"), target("b.example")];
+    const h = { targets: {}, incidents: [], paused: [] };
+    assert.equal(pingView(h, ts, { now: T0, slowMs: 500 }).share.split("\n")[1], "Not checked yet");
+    recordCheck(h, ts[0], { ok: true, ms: 12 }, { at: T0, ...SETTINGS });
+    assert.equal(pingView(h, ts, { now: T0, slowMs: 500 }).share.split("\n")[1], "1 up, 1 not checked yet");
+    recordCheck(h, ts[1], { ok: true, ms: 12 }, { at: T0, ...SETTINGS });
+    assert.equal(pingView(h, ts, { now: T0, slowMs: 500 }).share.split("\n")[1], "All 2 up");
+    h.paused = ["a.example", "b.example"];
+    assert.equal(pingView(h, ts, { now: T0, slowMs: 500 }).share.split("\n")[1], "All paused");
+  });
+
   it("says what to do when nothing is watched", () => {
     const v = pingView({ targets: {}, incidents: [], paused: [] }, [], { now: T0, slowMs: 500 });
     assert.equal(v.count, 0);
