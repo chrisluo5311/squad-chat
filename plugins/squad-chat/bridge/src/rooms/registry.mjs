@@ -395,7 +395,9 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, data: Object.fromEntries(m.providers.map((p) => [p.id, last.get(key(id, p.id))?.data ?? null])) };
     },
-    // One of a provider's actions; the provider runs again after it.
+    // One of a provider's actions; the provider runs again after it. The
+    // action sees the room's settings too, so a setting only an action reads
+    // (Ping's open server) needn't be a param that refetches on every pick.
     async action({ room: id, provider: pid, action, args = {} } = {}) {
       const m = rooms.get(id);
       if (!m) throw new RoomError(404, `no room called ${id}`);
@@ -404,7 +406,7 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       const table = actionTable(providers[p.type]);
       const name = String(action);
       if (!table.has(name)) throw new RoomError(404, `${p.type} has no action ${name}`);
-      const r = await table.get(name)(paramsOf(m, p), args && typeof args === "object" ? args : {}, ctxFor(m, p));
+      const r = await table.get(name)(paramsOf(m, p), args && typeof args === "object" ? args : {}, { ...ctxFor(m, p), settings: settingsOf(id) });
       await run(id, p.id);
       return clean(r ?? { ok: true });
     },

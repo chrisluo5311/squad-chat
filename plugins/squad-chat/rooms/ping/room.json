@@ -17,7 +17,7 @@
     "open": { "type": "string", "label": "Server open", "default": "none" }
   },
   "providers": [
-    { "id": "ping", "type": "ping", "params": { "targets": "$settings.targets", "slow_ms": "$settings.slow_ms", "alert_after": "$settings.alert_after", "alerts": "$settings.alerts", "share_names": "$settings.share_names", "open": "$settings.open" }, "interval": { "visible": "30s", "background": "1m" } }
+    { "id": "ping", "type": "ping", "params": { "targets": "$settings.targets", "slow_ms": "$settings.slow_ms", "alert_after": "$settings.alert_after", "alerts": "$settings.alerts", "share_names": "$settings.share_names" }, "interval": { "visible": "30s", "background": "1m" } }
   ],
   "layout": {
     "cards": [

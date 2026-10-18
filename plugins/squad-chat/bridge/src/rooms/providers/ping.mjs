@@ -495,7 +495,7 @@ export default {
     },
     // The open target (or the one named) stops being checked, or starts again.
     pause(params, args, ctx) {
-      const want = String(args.name ?? params.open ?? "").toLowerCase();
+      const want = String(args.name ?? ctx.settings?.open ?? "").toLowerCase();
       const t = targetsOf(params).find((x) => x.key === want || x.name.toLowerCase() === want);
       if (!t) throw new RoomError(404, "Open a server first, then pause it.");
       return locked(ctx.dataDir, "history", () => {

@@ -197,7 +197,7 @@ describe("ping: a run", () => {
     connect: ({ port }) => fakeSocket(port === 5432 ? "ECONNREFUSED" : null),
     httpProbe: async (url) => ({ ok: true, ms: 120, code: 200, split: [10, 20, 30, 60] }),
   });
-  const params = (extra = {}) => ({ targets: ["1.1.1.1", "db.internal:5432", "https://example.com", "nas.local"], slow_ms: 500, alert_after: 1, alerts: true, share_names: true, open: "none", ...extra });
+  const params = (extra = {}) => ({ targets: ["1.1.1.1", "db.internal:5432", "https://example.com", "nas.local"], slow_ms: 500, alert_after: 1, alerts: true, share_names: true, ...extra });
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "ping-")); clock = T0; runs.length = 0; resetPing(); });
   after(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -229,7 +229,7 @@ describe("ping: a run", () => {
 
   it("pauses the open target, and forgets a target taken off the list", async () => {
     await ping.fetch(params(), ctx());
-    const r = await ping.actions.pause(params({ open: "1.1.1.1" }), {}, ctx());
+    const r = await ping.actions.pause(params(), {}, { ...ctx(), settings: { open: "1.1.1.1" } });
     assert.deepEqual(r, { ok: true, paused: true, name: "1.1.1.1" });
     clock += MIN_GAP;
     runs.length = 0;
@@ -237,7 +237,7 @@ describe("ping: a run", () => {
     assert.equal(runs.some((a) => a.at(-1) === "1.1.1.1"), false);
     assert.equal(d.targets.at(-1).state, "paused");
     assert.equal(d.targets.at(-1).paused, true);
-    await assert.rejects(Promise.resolve().then(() => ping.actions.pause(params(), {}, ctx())), { status: 404 });
+    await assert.rejects(Promise.resolve().then(() => ping.actions.pause(params(), {}, { ...ctx(), settings: { open: "none" } })), { status: 404 });
     d = await ping.fetch(params({ targets: ["nas.local"] }), ctx());
     assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(dir, "history.json"), "utf8")).targets), ["nas.local"]);
     assert.equal(d.count, 1);
@@ -266,6 +266,10 @@ describe("ping: a run", () => {
 describe("ping: the room's manifest", () => {
   it("checks out", () => {
     assert.deepEqual(checkManifest(ROOM, PROVIDERS), []);
+  });
+
+  it("doesn't fetch on the server open: picking a row checks nothing", () => {
+    assert.equal(JSON.stringify(ROOM.providers).includes('"$settings.open"'), false);
   });
 
   it("can only watch what someone typed: targets from a list setting that starts empty", () => {

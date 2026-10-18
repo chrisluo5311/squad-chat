@@ -25434,7 +25434,7 @@ var ping_default = {
     },
     // The open target (or the one named) stops being checked, or starts again.
     pause(params, args, ctx) {
-      const want = String(args.name ?? params.open ?? "").toLowerCase();
+      const want = String(args.name ?? ctx.settings?.open ?? "").toLowerCase();
       const t = targetsOf(params).find((x) => x.key === want || x.name.toLowerCase() === want);
       if (!t) throw new RoomError(404, "Open a server first, then pause it.");
       return locked(ctx.dataDir, "history", () => {
@@ -25789,7 +25789,9 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       await Promise.all(m.providers.map((p) => run(id, p.id)));
       return { ok: true, data: Object.fromEntries(m.providers.map((p) => [p.id, last.get(key(id, p.id))?.data ?? null])) };
     },
-    // One of a provider's actions; the provider runs again after it.
+    // One of a provider's actions; the provider runs again after it. The
+    // action sees the room's settings too, so a setting only an action reads
+    // (Ping's open server) needn't be a param that refetches on every pick.
     async action({ room: id, provider: pid, action, args = {} } = {}) {
       const m = rooms.get(id);
       if (!m) throw new RoomError(404, `no room called ${id}`);
@@ -25798,7 +25800,7 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       const table = actionTable(providers[p.type]);
       const name = String(action);
       if (!table.has(name)) throw new RoomError(404, `${p.type} has no action ${name}`);
-      const r = await table.get(name)(paramsOf(m, p), args && typeof args === "object" ? args : {}, ctxFor(m, p));
+      const r = await table.get(name)(paramsOf(m, p), args && typeof args === "object" ? args : {}, { ...ctxFor(m, p), settings: settingsOf2(id) });
       await run(id, p.id);
       return clean(r ?? { ok: true });
     },
