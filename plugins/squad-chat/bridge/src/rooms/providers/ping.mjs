@@ -41,7 +41,6 @@ const IPV6 = /^[0-9a-f:]+$/i;
 export function parseTarget(text) {
   const raw = String(text ?? "").trim();
   if (!raw || raw.length > 300 || /\s/.test(raw)) return null;
-  const key = raw.toLowerCase();
   if (/^https?:\/\//i.test(raw)) {
     let u;
     try { u = new URL(raw); } catch { return null; }
@@ -49,6 +48,9 @@ export function parseTarget(text) {
     if (!(HOSTNAME.test(host) || (host.includes(":") && IPV6.test(host)))) return null;
     if (u.username || u.password) return null;
     const path = u.pathname === "/" ? "" : u.pathname;
+    // One key however it's written: no "/" alone at the end, no default port.
+    // The path keeps its case: a server may tell /Health from /health.
+    const key = `${u.protocol}//${u.host}${path}${u.search}`;
     return { key, kind: u.protocol === "https:" ? "HTTPS" : "HTTP", host, url: u.href, name: `${u.hostname}${u.port ? `:${u.port}` : ""}${path}`.slice(0, 40) };
   }
   const tcp = /^(?:tcp:\/\/)?(\[[0-9a-f:]+\]|[^:/\s]+):(\d{1,5})$/i.exec(raw);
@@ -57,10 +59,10 @@ export function parseTarget(text) {
     const port = Number(tcp[2]);
     if (!(port >= 1 && port <= 65535)) return null;
     if (!(HOSTNAME.test(host) || (host.includes(":") && IPV6.test(host)))) return null;
-    return { key, kind: "TCP", host, port, name: `${tcp[1]}:${port}`.slice(0, 40) };
+    return { key: `${tcp[1]}:${port}`.toLowerCase(), kind: "TCP", host, port, name: `${tcp[1]}:${port}`.slice(0, 40) };
   }
   if (HOSTNAME.test(raw) || ((raw.match(/:/g) ?? []).length >= 2 && IPV6.test(raw))) {
-    return { key, kind: "ICMP", host: raw, name: raw.slice(0, 40) };
+    return { key: raw.toLowerCase(), kind: "ICMP", host: raw, name: raw.slice(0, 40) };
   }
   return null;
 }
@@ -492,12 +494,13 @@ export default {
     });
     return pingView(h, targets, { now: at, slowMs, shareNames: params.share_names !== false, alerts: params.alerts !== false });
   },
-  // A target added is one this can check, written as it was typed.
+  // A target added is one this can check, kept as its key, so the same
+  // server written two ways (tcp://host:443 and host:443) is added once.
   check: {
     async targets(list) {
       const bad = list.filter((x) => !parseTarget(x));
       if (bad.length) throw new RoomError(400, `Can't watch ${bad.join(" or ")}. Use a host (example.com), host:port for a TCP port, or an http(s):// URL.`);
-      return list.map((x) => String(x).trim());
+      return list.map((x) => parseTarget(x).key);
     },
   },
   actions: {

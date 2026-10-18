@@ -54,6 +54,13 @@ describe("ping: targets", () => {
     }
   });
 
+  it("keys a server the same however it's written, keeping a URL path's case", async () => {
+    for (const [a, b] of [["tcp://GitHub.com:443", "github.com:443"], ["https://www.google.com/", "HTTPS://WWW.GOOGLE.COM:443"], ["NAS.local", "nas.local"]]) {
+      assert.equal(parseTarget(a).key, parseTarget(b).key, `${a} = ${b}`);
+    }
+    assert.deepEqual(await ping.check.targets(["tcp://GitHub.com:443", "https://Example.com/Health/"]), ["github.com:443", "https://example.com/Health/"]);
+  });
+
   it("checks what's added to the setting, and says how to write one", async () => {
     assert.deepEqual(await ping.check.targets([" example.com "]), ["example.com"]);
     await assert.rejects(ping.check.targets(["example.com", "-rf"]), { status: 400, message: /Can't watch -rf/ });
