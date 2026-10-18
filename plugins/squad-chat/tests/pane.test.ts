@@ -2113,6 +2113,22 @@ test('Stock room: stays off until asked for; then a watchlist colored by each ro
   expect(await band.find({ type: 'Text', text: Q.band })).toBeDefined()
   await band.unmount()
 
+  // Too wide for the band, it ends on a whole item, and a band of one
+  // sentence is cut short too, both with "…".
+  const narrow = { ...bandProps, bodyColumns: 40 }
+  let cut = await $.ui.mount({ ...BAND, surface: 'terminal', props: narrow })
+  expect(await cut.find({ type: 'Text', text: /^2330 2,550 ▼1\.35% ·.*…$/ })).toBeDefined()
+  await cut.unmount()
+  bridge.emit({ type: 'fnroom', id: 'stock', provider: 'q', data: { ...Q, band: 'Quotes are late today because the exchange feed is down' }, at: Date.now() })
+  await settle()
+  cut = await $.ui.mount({ ...BAND, surface: 'terminal', props: narrow })
+  const one = await cut.find({ type: 'Text', text: /^Quotes are late/ })
+  expect(one?.text.endsWith('…')).toBe(true)
+  expect(one?.text.length).toBeLessThan(40)
+  await cut.unmount()
+  bridge.emit({ type: 'fnroom', id: 'stock', provider: 'q', data: Q, at: Date.now() })
+  await settle()
+
   await $.command.run({ command: 'chat-share', args: 'stock' })
   await $.command.run({ command: 'chat', args: 'set stock' })
   expect(logs.slice(-5)).toEqual(['Stocks settings:', '  watchlist: TAIEX, 2330, 0050, ^GSPC, AAPL, NVDA', '  colors: market', '  move: 5', 'Change one with /chat set stock <setting> <value>.'])

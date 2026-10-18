@@ -748,7 +748,7 @@ function fitItems(text, width) {
     if (cells(`${out} · ${it} · …`) > width) break;
     out = `${out} · ${it}`;
   }
-  return cells(out) < cells(text) ? clip(`${out} · …`, width) : out;
+  return clip(cells(out) < cells(text) ? `${out} · …` : out, width);
 }
 
 // ---------------------------------------------------------------- the desktop band
