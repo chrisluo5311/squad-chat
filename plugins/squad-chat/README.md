@@ -63,9 +63,9 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` / `docker` | Open the pane on a built-in room |
+| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` | Open the pane on a built-in room |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
-| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `docker`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks, Lo-fi and Docker are off until you add them. |
+| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `ping`, `lofi`, `docker`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks, Ping, Lo-fi and Docker are off until you add them. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | The Focus room's Pomodoro timer, with a chime when focus or a break ends |
 | `/habit add <name> [x<times>]` / `done` / `undo` / `remove` / `rename <old> -> <new>` | The Habits room's goals, each checked off once a day (or a number of times) with its streak |
 | `/tool <name> [input]` | One of the Toolbox room's tools: `/tool uuid 5`, `/tool hash hello`, `/tool time 1739000000` |
