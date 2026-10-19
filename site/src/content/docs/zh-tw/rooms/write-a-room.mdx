@@ -114,7 +114,7 @@ import BandGallery from "../../../../components/BandGallery.astro";
 | 元件 | 欄位 |
 | --- | --- |
 | `list` | `items`（指向清單的路徑）、`title`，以及可選的 `mark`（標題前的短欄位，例如 Lo-fi 的 ♫）、`tag`、`preview`、`copy`（⧉）、`share`（⇪）、`act`（每列一個按鈕：`label`、`action`、`field`）、`max`、`empty` |
-| `table` | `items`、`columns`（每欄一個 `field`，以及可選的 `label`、`width`、`grow`、`right`、`color` 或 `colorFrom`，或用 `beats` 把像 `"uusx"` 的欄位畫成心跳條，最新的在右邊）、`drop`（每列一個 ✕，將該列從清單設定中移除：`setting`、`field`）、`pick`（按下的列會依 `field` 存進字串 `setting`，並顯示在路徑 `as`，例如 Weather 的城市選 `wx.first`。加上 `toggle` 時不會變暗，再按一次已選的列會把設定恢復預設，例如 Ping 的詳情收起）、`max`、`empty` |
+| `table` | `items`、`columns`（每欄一個 `field`，以及可選的 `label`、`width`、`grow`、`right`、`color` 或 `colorFrom`，或用 `beats` 把像 `"uusx"` 的欄位畫成心跳條，最新的在右邊）、`drop`（每列一個 ✕，將該列從清單設定中移除：`setting`、`field`）、`pick`（按下的列會依 `field` 存進字串 `setting`，並顯示在路徑 `as`，例如 Weather 的城市選 `wx.first`。加上 `toggle` 時不會變暗，再按一次已選的列會把設定恢復預設，例如 Ping 的詳情收起）、`max`、`empty`。在終端機中，含 `beats` 或 `pick` 的表格會依窗格寬度調整：心跳條先變短再隱藏，接著隱藏最右邊的欄位，讓 `grow` 欄和 ✕ 一定顯示，過長的名稱以 … 結尾 |
 | `tiles` | `tiles`：最多 6 格，每格一個 `value` 和 `sub` 範本 |
 | `meter` | `label`、`value`（指向百分比的路徑）、`right`、`color` |
 | `text` | `text`，一個範本。所有空位都是空的那一行會被省略。 |
