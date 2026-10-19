@@ -861,11 +861,18 @@ function inlineView(els, props, handlers) {
     if (share) parts.push(share);
   } else if (state.auth === "signed_in" && room) {
     const names = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).map((u) => u.name);
-    parts.push(Box({ key: "header", flexDirection: "row", justifyContent: "space-between", children: [
-      Box({ key: "left", flexDirection: "row", gap: 1, flexShrink: 1, children: [
-        Text({ key: "room", bold: true, color: theme.accent, children: `${glyph.brand} #${room.slug}` }),
+    // Where the pane draws pictures (VS Code) the room is picked from a menu
+    // of the rooms joined, each with its unread count. The terminal has /room.
+    const { Select } = els;
+    const pick = els.Svg && Select && state.rooms.length > 1;
+    parts.push(Box({ key: "header", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", justifyContent: "space-between", children: [
+      Box({ key: "left", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", columnGap: 1, flexShrink: 1, minWidth: 0, children: [
+        pick
+          ? Text({ key: "brand", bold: true, color: theme.accent, children: glyph.brand })
+          : Text({ key: "room", bold: true, color: theme.accent, children: `${glyph.brand} #${room.slug}` }),
+        pick ? Select({ key: "room-pick", value: room.id, options: state.rooms.map((r) => ({ value: r.id, label: `#${r.slug}${r.unread ? ` · ${r.unread} new` : ""}` })), onSelect: (id) => handlers.onSelectRoom(id) }) : null,
         Text({ key: "online", color: names.length ? theme.online : theme.muted, wrap: "truncate-end", children: names.length ? `${glyph.on} ${names.join(", ")}` : "just you" }),
-      ] }),
+      ].filter(Boolean) }),
       Text({ key: "conn", color: conn.color, children: conn.text }),
     ] }));
     const list = roomMessages().slice(-5);
@@ -876,7 +883,7 @@ function inlineView(els, props, handlers) {
     for (const m of list) {
       const name = m.user_id === prevUser ? "" : displayName(m).slice(0, nameWidth);
       prevUser = m.user_id;
-      parts.push(Box({ key: `m${m.id}`, flexDirection: "row", gap: 1, children: [
+      parts.push(Box({ key: `m${m.id}`, flexDirection: "row", flexWrap: "nowrap", columnGap: 1, children: [
         Box({ key: "n", width: nameWidth, flexShrink: 0, children: [
           Text({ key: "t", bold: true, color: m.mine ? theme.you : nameColor(m.user_id), children: name }),
         ] }),

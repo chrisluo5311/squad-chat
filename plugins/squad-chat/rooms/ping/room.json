@@ -93,15 +93,14 @@
       }
     ],
     "inline": [
-      { "type": "table", "items": "ping.inline",
+      { "type": "table", "items": "ping.targets", "max": 3, "more": "{ping.inlineMore}",
         "columns": [
           { "field": "dot", "width": 2, "colorFrom": "tone" },
           { "field": "name", "grow": true },
           { "field": "word", "width": 12, "right": true, "colorFrom": "tone" },
-          { "field": "beats", "width": 16, "beats": true }
+          { "field": "beats", "width": 16, "beats": true, "under": true }
         ],
-        "empty": "Nothing watched yet: /set targets example.com" },
-      { "type": "text", "text": "{ping.inlineMore}" }
+        "empty": "Nothing watched yet: /set targets example.com" }
     ],
     "band": "{ping.band}",
     "pills": [

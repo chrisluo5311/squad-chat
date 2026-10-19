@@ -361,6 +361,29 @@ test('a "new" line marks where you had read up to, under a date label', SLOW, as
   await desk.unmount()
 })
 
+// VS Code's inline pane: the chat room picked from a menu of the rooms
+// joined, each with what's new. One room alone keeps its plain name.
+test('VS Code inline: the chat room is picked from a menu', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  expect(await ui.find({ type: 'Select', key: 'room-pick' })).toBeUndefined()
+  await ui.unmount()
+  const SIDE = { id: 'r-side', slug: 'side', last_read_id: 0, unread: 2 }
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, SIDE] })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'room-pick' }) as any
+  expect(menu?.props.value).toBe(LOBBY.id)
+  expect(menu?.props.options.map((o: any) => o.label)).toEqual(['#lobby', '#side · 2 new'])
+  await ui.select({ key: 'room-pick', value: 'r-side' })
+  await settle()
+  expect(bridge.calls.some((c: any) => c.path === '/room/select' && c.body.room === 'r-side')).toBe(true)
+  await ui.unmount()
+})
+
 test('room tabs switch rooms when pressed', SLOW, async ($, on) => {
   const bridge = fakeBridge(on)
   await bridge.start($)
@@ -2197,6 +2220,35 @@ test('Lo-fi room on the desktop: cover, time or LIVE, volume beside the buttons,
   await desk.unmount()
 })
 
+// VS Code's inline pane: the playlist as a menu, the one playing shown,
+// and a pick played. Nothing playing: a first "pick" entry.
+test('Lo-fi room in VS Code: a station or track picked from a menu in the inline pane', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(LOFI_ROOM))
+  room.layout.inline[1] = { ...room.layout.inline[1], split: 3, level: 'p.now.volume' }
+  room.layout.inline.splice(1, 0, { type: 'select', items: 'p.entries', title: 'name', lit: 'on', act: { label: '♫', action: 'play', field: 'id' }, empty: 'Pick a station or track' })
+  const bridge = fakeBridge(on, { store: { view: 'lofi' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [room], invalid: [] })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms +lofi' })
+  await $.command.run({ command: 'chat', args: 'lofi' })
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER({ playing: true }), at: Date.now() })
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'sel-in-1' }) as any
+  expect(menu?.props.value).toBe('s2')
+  expect(menu?.props.options.map((o: any) => o.label)).toEqual(['Lofi Girl', 'Groove Salad'])
+  expect(await ui.find({ type: 'Text', text: '60%' })).toBeDefined()             // the volume, between − and +
+  await ui.select({ key: 'sel-in-1', value: 's1' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'play', args: { id: 's1' } } })
+  await ui.unmount()
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER({ playing: false, entries: PLAYER().entries.map((e: any) => ({ ...e, on: '' })) }), at: Date.now() })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  expect((await ui.find({ type: 'Select', key: 'sel-in-1' }) as any)?.props.options[0]).toEqual({ value: '', label: 'Pick a station or track' })
+  await ui.unmount()
+})
+
 // A URL or a path typed in the room's box is added, no /lofi add needed.
 // "/Users/…" is a path, "/help" still a command, "p" still a key.
 test('Lo-fi room: what\'s typed in the box is added as a track', SLOW, async ($, on) => {
@@ -2923,6 +2975,63 @@ test('Toolbox room: a tool from the menu, run on what is typed, each result copi
   await term.unmount()
 })
 
+// Built-in rooms cut their inline lists too: Toolbox's five UUIDs show
+// three, then "+ 2 more", a button in VS Code and words in the terminal.
+test('Toolbox in VS Code: + more opens the inline results, and less shuts them', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'toolbox', sysRooms: ['toolbox'] } })
+  await bridge.start($)
+  await settle()
+  const ids = async (ui: any) => (await ui.findAll({ type: 'Text', text: /^[0-9a-f]{8}-[0-9a-f]{4}-4/ })).length
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  await ui.press({ key: 'tool-again' })
+  expect(await ids(ui)).toBe(3)
+  expect((await ui.find({ key: 'more-tool-more' }) as any)?.props.label).toBe('+ 2 more')
+  await ui.press({ key: 'more-tool-more' })
+  expect(await ids(ui)).toBe(5)
+  expect((await ui.find({ key: 'more-tool-more' }) as any)?.props.label).toBe('▴ less')
+  await ui.press({ key: 'more-tool-more' })
+  expect(await ids(ui)).toBe(3)
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  expect(await ui.find({ type: 'Text', text: '+ 2 more' })).toBeDefined()
+  await ui.unmount()
+})
+
+// VS Code's inline pane: Clawd's mood picked from a menu beside it.
+test('Pet room: VS Code picks the mood from a menu in the inline pane', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'pet', sysRooms: ['pet'] } })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'pet-mode' }) as any
+  expect(menu?.props.value).toBe('auto')
+  expect(menu?.props.options[0].label).toBe('Auto')
+  expect(await ui.find({ type: 'Text', text: 'follows along' })).toBeDefined()
+  await ui.select({ key: 'pet-mode', value: 'cheer' })
+  expect((await ui.find({ type: 'Select', key: 'pet-mode' }) as any)?.props.value).toBe('cheer')
+  expect(await ui.find({ type: 'Text', text: 'kept on' })).toBeDefined()
+  await ui.unmount()
+})
+
+// VS Code's inline pane: the tool picked from a menu, and a button that
+// makes a batch or pastes, so only the tool's own text is typed.
+test('Toolbox room: VS Code picks the tool from a menu in the inline pane', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'toolbox', sysRooms: ['toolbox'] } })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'tool-pick' }) as any
+  expect(menu?.props.value).toBe('uuid')
+  expect(menu?.props.options.map((o: any) => o.label)).toContain('Hash')
+  await ui.press({ key: 'tool-again' })
+  expect((await ui.findAll({ type: 'Text', text: /^[0-9a-f]{8}-[0-9a-f]{4}-4/ })).length).toBe(3)
+  await ui.select({ key: 'tool-pick', value: 'hash' })
+  expect((await ui.find({ type: 'Select', key: 'tool-pick' }) as any)?.props.value).toBe('hash')
+  expect(await ui.find({ type: 'Button', key: 'tool-paste' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Type or paste text to hash.' })).toBeDefined()
+  await ui.unmount()
+})
+
 test('Toolbox bands: the tools, then the last result, kept clear of ‹ › and Open', SLOW, async ($, on) => {
   recordUi(on)
   on('ui.copy', () => ({ value: { isCopied: true } }))
@@ -3255,6 +3364,32 @@ const pingLoaded = (open = 'none') => [
   { type: 'fnsettings', id: 'ping', values: { targets: ['db.internal:5432', '1.1.1.1'], slow_ms: 500, alert_after: 3, alerts: true, share_names: true, open } },
   { type: 'fnroom', id: 'ping', provider: 'ping', data: PING, at: Date.now() },
 ]
+
+// VS Code's pane can't scroll, so "+ 3 more" under an inline list is a
+// button that opens it all, and "▴ less" shuts it. The terminal keeps the words.
+test('Ping room in VS Code: + more opens the whole inline list, and less shuts it', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(PING_ROOM))
+  room.layout.inline = [{ type: 'table', items: 'ping.targets', max: 1, more: '{ping.uptime24} up over 24 h', columns: room.layout.inline[0].columns }]
+  const bridge = fakeBridge(on, { store: { view: 'ping', sysRooms: ['ping'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { ...pingLoaded()[0], rooms: [SNIPPET_ROOM, room] }, ...pingLoaded().slice(1))
+  await settle()
+  const names = async (ui: any) => (await ui.findAll({ type: 'Text', text: /^(db\.internal:5432|1\.1\.1\.1)$/ })).length
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  expect(await names(ui)).toBe(1)
+  expect((await ui.find({ key: 'more-in-0' }) as any)?.props.label).toBe('+ 1 more')
+  expect(await ui.find({ type: 'Text', text: '96.5% up over 24 h' })).toBeDefined()
+  await ui.press({ key: 'more-in-0' })
+  expect(await names(ui)).toBe(2)
+  expect((await ui.find({ key: 'more-in-0' }) as any)?.props.label).toBe('▴ less')
+  await ui.press({ key: 'more-in-0' })
+  expect(await names(ui)).toBe(1)
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  expect(await ui.find({ key: 'more-in-0' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '+ 1 more · 96.5% up over 24 h' })).toBeDefined()
+  await ui.unmount()
+})
 
 test('Ping room: a heartbeat per server, pressed open for its details and pressed again to close', SLOW, async ($, on) => {
   recordUi(on)

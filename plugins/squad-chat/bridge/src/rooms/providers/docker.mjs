@@ -213,7 +213,7 @@ export default {
     const found = await findDocker(ctx);
     if (!found?.version) {
       const down = found ? "Docker isn't running. Start Docker Desktop, OrbStack or colima." : "No docker command found. Install Docker Desktop or OrbStack.";
-      return { down, on, section, engine: found ? "not running" : "not installed", containers: [], images: [], volumes: [], networks: [], detail: null, band: down, share: `Docker · ${down}` };
+      return { down, on, section, engine: found ? "not running" : "not installed", containers: [], images: [], volumes: [], networks: [], detail: null, inline: [], inlineMeta: "", band: down, share: `Docker · ${down}` };
     }
     const { docker } = found;
     const [ver, platform] = found.version.split("|");
@@ -254,21 +254,39 @@ export default {
     const bad = [...containers.filter((c) => c.tone === "red"), ...containers.filter((c) => c.tone === "amber")];
     const dangling = images.filter((i) => i.dangling).length;
     const imageBytes = images.reduce((n, i) => n + i.bytes, 0);
+    // The inline pane: the section shown, its rows in one shape (a dot, a
+    // name, a word at the right). The pane shows the first two, "+ 7 more"
+    // after them, then the section's counts.
+    const rowsOf = {
+      containers: () => containers.map((c) => ({ id: c.name, dot: c.dot, name: c.name, info: c.status, tone: c.tone })),
+      images: () => images.map((i) => ({ id: i.id, dot: "◇", name: i.name, info: i.size, tone: i.useTone })),
+      volumes: () => volumes.map((v) => ({ id: v.name, dot: "▤", name: v.name, info: v.use, tone: v.useTone })),
+      networks: () => networks.map((n) => ({ id: n.name, dot: "⌗", name: n.name, info: n.usersText, tone: n.users ? "leaf" : null })),
+    };
+    const inline = rowsOf[section]();
+    const meta = {
+      containers: [`${up} running`, containers.length - up ? `${containers.length - up} stopped` : null].filter(Boolean).join(" · "),
+      images: [plural(images.length, "image"), humanSize(imageBytes), dangling ? `${dangling} dangling` : null].filter(Boolean).join(" · "),
+      volumes: [plural(volumes.length, "volume"), unused.size ? `${unused.size} unused` : null].filter(Boolean).join(" · "),
+      networks: plural(networks.length, "network"),
+    };
     return {
       down: "",
       on,
       section,
       engine,
       containers,
-      containersMeta: [`${up} running`, containers.length - up ? `${containers.length - up} stopped` : null].filter(Boolean).join(" · "),
+      containersMeta: meta.containers,
       picked,
       detail,
       images,
-      imagesMeta: [plural(images.length, "image"), humanSize(imageBytes), dangling ? `${dangling} dangling` : null].filter(Boolean).join(" · "),
+      imagesMeta: meta.images,
       volumes,
-      volumesMeta: [plural(volumes.length, "volume"), unused.size ? `${unused.size} unused` : null].filter(Boolean).join(" · "),
+      volumesMeta: meta.volumes,
       networks,
-      networksMeta: plural(networks.length, "network"),
+      networksMeta: meta.networks,
+      inline,
+      inlineMeta: meta[section],
       counts: `${containers.length} containers · ${images.length} images · ${volumes.length} volumes · ${networks.length} networks`,
       band: [`${up}/${containers.length} up`, ...bad.slice(0, 2).map((c) => `${c.name} ${c.status}`)].join(" · "),
       upText: `${up}/${containers.length}`,

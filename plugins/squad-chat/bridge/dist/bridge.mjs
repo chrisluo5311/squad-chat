@@ -22845,9 +22845,10 @@ var HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 var INTERVAL = /^\d+(ms|s|m|h)$/;
 var ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 var WIDGETS = {
-  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text", code: "bool", lit: "field", score: "field", group: "field", open: "field", remove: "act", pause: "text" },
+  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text", code: "bool", lit: "field", score: "field", group: "field", open: "field", remove: "act", pause: "text", more: "text" },
   buttons: { buttons: "buttons!", split: "int", level: "path" },
-  table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text" },
+  // `more`: words after the "+ 3 more" line, or on one of their own.
+  table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text", more: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" },
@@ -22863,6 +22864,9 @@ var WIDGETS = {
   strip: { items: "path!", title: "field!", icon: "field", value: "field", sub: "field", note: "field", lit: "field", empty: "text" },
   // Sunrise to sunset as an arc, the sun at `value` (0-100) through the day.
   sun: { rise: "text!", set: "text!", value: "path", sub: "text", note: "text" },
+  // A menu of the items (a playlist), the `lit` one shown, and the one
+  // picked handed to `act`'s action. The terminal draws nothing for it.
+  select: { items: "path!", title: "field!", lit: "field", act: "act!", empty: "text" },
   media: { title: "text!", sub: "text", progress: "path", elapsed: "text", total: "text", live: "path", playing: "path", empty: "text" }
 };
 var DRAWS = ["area", "bars", "orbit", "drop", "battery", "thermometer", "equalizer", "progress", "weather", "icon", "dot"];
@@ -23001,6 +23005,7 @@ function checkWidget(body, where, errors, uses) {
         if (c.color != null && !COLORS.includes(c.color)) errors.push(`${where}.columns[${i}].color: one of ${COLORS.join(", ")}`);
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
         if (c.beats != null && typeof c.beats !== "boolean") errors.push(`${where}.columns[${i}].beats: true or false`);
+        if (c.under != null && typeof c.under !== "boolean") errors.push(`${where}.columns[${i}].under: true or false`);
       });
     }
     if (k === "act") {
@@ -24925,7 +24930,7 @@ var docker_default = {
     const found = await findDocker(ctx);
     if (!found?.version) {
       const down = found ? "Docker isn't running. Start Docker Desktop, OrbStack or colima." : "No docker command found. Install Docker Desktop or OrbStack.";
-      return { down, on, section, engine: found ? "not running" : "not installed", containers: [], images: [], volumes: [], networks: [], detail: null, band: down, share: `Docker \xB7 ${down}` };
+      return { down, on, section, engine: found ? "not running" : "not installed", containers: [], images: [], volumes: [], networks: [], detail: null, inline: [], inlineMeta: "", band: down, share: `Docker \xB7 ${down}` };
     }
     const { docker } = found;
     const [ver, platform] = found.version.split("|");
@@ -24960,21 +24965,36 @@ var docker_default = {
     const bad = [...containers.filter((c) => c.tone === "red"), ...containers.filter((c) => c.tone === "amber")];
     const dangling = images.filter((i) => i.dangling).length;
     const imageBytes = images.reduce((n, i) => n + i.bytes, 0);
+    const rowsOf = {
+      containers: () => containers.map((c) => ({ id: c.name, dot: c.dot, name: c.name, info: c.status, tone: c.tone })),
+      images: () => images.map((i) => ({ id: i.id, dot: "\u25C7", name: i.name, info: i.size, tone: i.useTone })),
+      volumes: () => volumes.map((v) => ({ id: v.name, dot: "\u25A4", name: v.name, info: v.use, tone: v.useTone })),
+      networks: () => networks.map((n) => ({ id: n.name, dot: "\u2317", name: n.name, info: n.usersText, tone: n.users ? "leaf" : null }))
+    };
+    const inline = rowsOf[section]();
+    const meta = {
+      containers: [`${up} running`, containers.length - up ? `${containers.length - up} stopped` : null].filter(Boolean).join(" \xB7 "),
+      images: [plural(images.length, "image"), humanSize(imageBytes), dangling ? `${dangling} dangling` : null].filter(Boolean).join(" \xB7 "),
+      volumes: [plural(volumes.length, "volume"), unused.size ? `${unused.size} unused` : null].filter(Boolean).join(" \xB7 "),
+      networks: plural(networks.length, "network")
+    };
     return {
       down: "",
       on,
       section,
       engine,
       containers,
-      containersMeta: [`${up} running`, containers.length - up ? `${containers.length - up} stopped` : null].filter(Boolean).join(" \xB7 "),
+      containersMeta: meta.containers,
       picked,
       detail,
       images,
-      imagesMeta: [plural(images.length, "image"), humanSize(imageBytes), dangling ? `${dangling} dangling` : null].filter(Boolean).join(" \xB7 "),
+      imagesMeta: meta.images,
       volumes,
-      volumesMeta: [plural(volumes.length, "volume"), unused.size ? `${unused.size} unused` : null].filter(Boolean).join(" \xB7 "),
+      volumesMeta: meta.volumes,
       networks,
-      networksMeta: plural(networks.length, "network"),
+      networksMeta: meta.networks,
+      inline,
+      inlineMeta: meta[section],
       counts: `${containers.length} containers \xB7 ${images.length} images \xB7 ${volumes.length} volumes \xB7 ${networks.length} networks`,
       band: [`${up}/${containers.length} up`, ...bad.slice(0, 2).map((c) => `${c.name} ${c.status}`)].join(" \xB7 "),
       upText: `${up}/${containers.length}`,
@@ -25377,8 +25397,8 @@ function pingView(h, targets, { now, slowMs, shareNames = true, alerts = true, o
     checked: lastCheck ? `checked ${clockOf(lastCheck)}` : "",
     meta: targets.length ? `${rows.length} server${rows.length === 1 ? "" : "s"} \xB7 slow at ${slowMs} ms` : "none yet",
     bad,
-    inline: rows.slice(0, 3),
-    inlineMore: others > 0 ? `+ ${others} more \xB7 ${fmtPct(ok, n)} up over 24 h` : "",
+    inlineMore: others > 0 ? `${fmtPct(ok, n)} up over 24 h` : "",
+    // after the inline list's "+ 3 more"
     incidents,
     hasIncidents: incidents.length > 0,
     band,

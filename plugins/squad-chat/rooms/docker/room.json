@@ -239,6 +239,62 @@
         }
       }
     ],
+    "inline": [
+      {
+        "type": "text",
+        "text": "{d.down}",
+        "color": "amber"
+      },
+      {
+        "type": "buttons",
+        "buttons": [
+          {
+            "label": "Containers",
+            "action": "containers",
+            "lit": "d.on.containers"
+          },
+          {
+            "label": "Images",
+            "action": "images",
+            "lit": "d.on.images"
+          },
+          {
+            "label": "Volumes",
+            "action": "volumes",
+            "lit": "d.on.volumes"
+          },
+          {
+            "label": "Networks",
+            "action": "networks",
+            "lit": "d.on.networks"
+          }
+        ]
+      },
+      {
+        "type": "table",
+        "items": "d.inline",
+        "max": 2,
+        "more": "{d.inlineMeta}",
+        "columns": [
+          {
+            "field": "dot",
+            "width": 1,
+            "colorFrom": "tone"
+          },
+          {
+            "field": "name",
+            "grow": true
+          },
+          {
+            "field": "info",
+            "width": 13,
+            "right": true,
+            "colorFrom": "tone"
+          }
+        ],
+        "empty": "Nothing here."
+      }
+    ],
     "pills": [
       {
         "draw": {

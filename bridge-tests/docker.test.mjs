@@ -158,6 +158,18 @@ describe("docker room", () => {
     assert.equal(d.imagesMeta, "4 images · 3.2 GB · 1 dangling");
   });
 
+  it("gives the inline pane the section shown, in one shape, and its counts", async () => {
+    const { ctx } = fake();
+    let d = await docker.fetch({}, ctx);
+    assert.deepEqual(d.inline.slice(0, 2).map((r) => [r.name, r.info, r.tone]), [["web-app", "unhealthy", "amber"], ["supabase_db", d.containers[1].status, "leaf"]]);
+    assert.equal(d.inline.length, 4);
+    assert.equal(d.inlineMeta, "3 running · 1 stopped");
+    await docker.actions.volumes({}, {}, ctx);
+    d = await docker.fetch({}, ctx);
+    assert.deepEqual(d.inline.map((r) => [r.name, r.info]), [["supabase_db_data", "in use"], ["leftover", "unused"]]);
+    assert.equal(d.inlineMeta, "2 volumes · 1 unused");
+  });
+
   it("keeps an image tagged in two repositories as two rows", async () => {
     const twice = [IMAGES, JSON.stringify({ Containers: "0", CreatedSince: "3 weeks ago", ID: "55dd66ee77ff", Repository: "registry.local/redis", Size: "117MB", Tag: "latest" })].join("\n");
     const { ctx } = fake({ images: twice });

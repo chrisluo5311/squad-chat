@@ -63,6 +63,7 @@ export const state = {
   collapsed: new Set(),   // sessions whose agent trees are folded in the Agents room
   addingRoom: false,      // the desktop header's "+" is open: the rooms without a tab
   join: null,             // the desktop header's "＋ join": { step: "name" | "pass", name, error }
+  moreOpen: new Set(),    // VS Code's lists opened past their rows ("room:widget"), for this session
   dockScroll: { view: null, offset: 0, max: 0 },
   chatScroll: { room: null, back: 0 },   // the chat scrolled up: `back` of the newest messages hidden below   // the docked room's cards, scrolled past `offset` rows
   ended: false,

@@ -21,9 +21,10 @@ const ACTION = /^[a-z][a-z0-9_]{0,19}$/;
 // list setting), "pick" (a row pressed is kept in a string setting, and
 // shown at the path `as` in place of what the provider put there).
 const WIDGETS = {
-  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text", code: "bool", lit: "field", score: "field", group: "field", open: "field", remove: "act", pause: "text" },
+  list: { items: "path!", title: "field!", mark: "field", tag: "field", preview: "field", copy: "field", share: "field", act: "act", max: "int", empty: "text", code: "bool", lit: "field", score: "field", group: "field", open: "field", remove: "act", pause: "text", more: "text" },
   buttons: { buttons: "buttons!", split: "int", level: "path" },
-  table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text" },
+  // `more`: words after the "+ 3 more" line, or on one of their own.
+  table: { items: "path!", columns: "columns!", drop: "drop", pick: "pick", max: "int", empty: "text", more: "text" },
   tiles: { tiles: "tiles!" },
   meter: { label: "text!", value: "path!", right: "text", color: "color" },
   text: { text: "text!", color: "color" },
@@ -39,6 +40,9 @@ const WIDGETS = {
   strip: { items: "path!", title: "field!", icon: "field", value: "field", sub: "field", note: "field", lit: "field", empty: "text" },
   // Sunrise to sunset as an arc, the sun at `value` (0-100) through the day.
   sun: { rise: "text!", set: "text!", value: "path", sub: "text", note: "text" },
+  // A menu of the items (a playlist), the `lit` one shown, and the one
+  // picked handed to `act`'s action. The terminal draws nothing for it.
+  select: { items: "path!", title: "field!", lit: "field", act: "act!", empty: "text" },
   media: { title: "text!", sub: "text", progress: "path", elapsed: "text", total: "text", live: "path", playing: "path", empty: "text" },
 };
 
@@ -187,6 +191,8 @@ function checkWidget(body, where, errors, uses) {
         if (c.colorFrom != null && !(typeof c.colorFrom === "string" && PATH.test(c.colorFrom))) errors.push(`${where}.columns[${i}].colorFrom: not a path`);
         // "beats": the field holds a heartbeat ("uusx…", newest last), drawn as marks.
         if (c.beats != null && typeof c.beats !== "boolean") errors.push(`${where}.columns[${i}].beats: true or false`);
+        // "under": where the pane draws pictures, the column goes on a line of its own under its row.
+        if (c.under != null && typeof c.under !== "boolean") errors.push(`${where}.columns[${i}].under: true or false`);
       });
     }
     if (k === "act") {

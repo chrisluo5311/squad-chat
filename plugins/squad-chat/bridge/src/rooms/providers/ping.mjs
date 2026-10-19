@@ -436,8 +436,7 @@ export function pingView(h, targets, { now, slowMs, shareNames = true, alerts = 
     checked: lastCheck ? `checked ${clockOf(lastCheck)}` : "",
     meta: targets.length ? `${rows.length} server${rows.length === 1 ? "" : "s"} · slow at ${slowMs} ms` : "none yet",
     bad,
-    inline: rows.slice(0, 3),
-    inlineMore: others > 0 ? `+ ${others} more · ${fmtPct(ok, n)} up over 24 h` : "",
+    inlineMore: others > 0 ? `${fmtPct(ok, n)} up over 24 h` : "",   // after the inline list's "+ 3 more"
     incidents,
     hasIncidents: incidents.length > 0,
     band,

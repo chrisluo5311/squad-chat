@@ -9,7 +9,7 @@
 
 import { state } from "./state.mjs";
 import { theme } from "./theme.mjs";
-import { line, card, stackCards, clip, age } from "./widgets.mjs";
+import { line, card, stackCards, clip, age, cells, inlineCut } from "./widgets.mjs";
 import { findSecret } from "./share.mjs";
 import { value, sub, msg } from "./bands.mjs";
 
@@ -74,15 +74,22 @@ function clipMeta(item, now) {
   return [age(item.at, now), lines > 1 ? `${lines} lines` : `${item.text.length} chars`, item.cut ? "cut" : null].filter(Boolean).join(" · ");
 }
 
-function itemRow(els, item, w, handlers, now) {
+// An item: its first line over how old and long it is, its ⧉ ✕ at the
+// right. `one` puts it all on one line, as the inline pane does. The row
+// never wraps: VS Code wrapped a long one's buttons under it.
+function itemRow(els, item, w, handlers, now, { one = false } = {}) {
   const { Box, Text, Button } = els;
   const meta = clipMeta(item, now);
-  return Box({ key: item.id, flexDirection: "row", alignItems: "center", columnGap: 1, children: [
-    Box({ key: "text", flexDirection: "column", flexGrow: 1, flexShrink: 1, minWidth: 0, children: [
-      Text({ key: "t", wrap: "truncate-end", color: item.secret ? theme.amber : undefined, italic: !!item.secret, children: clipPreview(item, Math.max(10, w - 8)) }),
+  const text = Text({ key: "t", wrap: "truncate-end", color: item.secret ? theme.amber : undefined, italic: !!item.secret, children: clipPreview(item, els.Svg ? 200 : Math.max(10, w - 8 - (one ? cells(meta) + 1 : 0))) });   // VS Code: the row cuts it
+  return Box({ key: item.id, flexDirection: "row", flexWrap: "nowrap", alignItems: "center", columnGap: 1, children: [
+    Box({ key: "text", flexDirection: one ? "row" : "column", flexWrap: "nowrap", columnGap: 1, flexGrow: 1, flexShrink: 1, minWidth: 0, children: one ? [
+      Box({ key: "tb", flexGrow: 1, flexShrink: 1, minWidth: 0, children: [text] }),
+      Box({ key: "mb", flexShrink: 0, children: [Text({ key: "m", color: theme.muted, children: meta })] }),
+    ] : [
+      text,
       Text({ key: "m", color: theme.muted, wrap: "truncate-end", children: meta }),
     ] }),
-    Box({ key: "acts", flexDirection: "row", flexShrink: 0, columnGap: 1, children: [
+    Box({ key: "acts", flexDirection: "row", flexWrap: "nowrap", flexShrink: 0, columnGap: 1, children: [
       Button({ key: `copy-${item.id}`, plain: true, label: "⧉", onPress: (press) => handlers.onClipCopy?.(item.id, press?.surface) }),
       Button({ key: `drop-${item.id}`, plain: true, dimColor: true, label: "✕", onPress: () => handlers.onClipRemove?.(item.id) }),
     ] }),
@@ -116,7 +123,8 @@ export function clipboardInline(els, w, handlers, now) {
     { text: `  ${c.items.length} item${c.items.length === 1 ? "" : "s"}`, color: theme.muted, grow: true },
   ]);
   if (c.error) return [head, els.Text({ key: "err", color: theme.warn, wrap: "wrap", children: c.error })];
-  return [head, ...c.items.slice(0, 3).map((item) => itemRow(els, item, w, handlers, now))];
+  const { shown, node } = inlineCut(els, "clip-more", c.items, 3, { open: state.moreOpen.has("clipboard:in"), onToggle: () => handlers.onToggleMore?.("clipboard:in") });
+  return [head, ...shown.map((item) => itemRow(els, item, w, handlers, now, { one: true })), node].filter(Boolean);
 }
 
 export function clipboardBandPieces() {

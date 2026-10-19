@@ -68,7 +68,8 @@
     ],
     "inline": [
       { "type": "text", "text": "{p.band}" },
-      { "type": "buttons", "buttons": [
+      { "type": "select", "items": "p.entries", "title": "name", "lit": "on", "act": { "label": "♫", "action": "play", "field": "id" }, "empty": "Pick a station or track" },
+      { "type": "buttons", "split": 3, "level": "p.now.volume", "buttons": [
         { "label": "⏮", "action": "prev" },
         { "label": "▶", "alt": "⏸", "altWhen": "p.playing", "action": "pause" },
         { "label": "⏭", "action": "next" },

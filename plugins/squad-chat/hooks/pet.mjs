@@ -287,9 +287,31 @@ export function petDock(els, w, capacity, handlers, now) {
   return stackCards(els, [cornerCard(els, now), logCard(els, w, now, 4), moodCard(els, handlers)], capacity, handlers.scroll);
 }
 
+// The inline pane. Where it draws pictures (VS Code) Clawd sits at the left
+// and beside it its mood is picked from a menu (Auto, or one kept on), over
+// the last thing it noticed. The terminal keeps its sticker, and its box.
 export function petInline(els, w, handlers, now) {
   const mood = petMood(now);
-  const { Box, Text } = els;
+  const { Box, Text, Select } = els;
+  const p = state.pet;
+  if (els.Svg && Select) {
+    const last = p.log[0];
+    return [Box({ key: "pet-row", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", columnGap: 2, children: [
+      els.Svg({ key: "pet", source: clawdSvg(mood, 72), alt: `Clawd: ${MOOD_LABEL[mood]}`, width: 72, height: 72 }),
+      Box({ key: "side", flexDirection: "column", flexGrow: 1, flexShrink: 1, minWidth: 0, children: [
+        Box({ key: "head", flexDirection: "row", flexWrap: "nowrap", columnGap: 1, children: [
+          Text({ key: "n", bold: true, color: PET_META.color, children: `${PET_META.icon} Clawd` }),
+          Text({ key: "m", children: MOOD_LABEL[mood] }),
+          Text({ key: "lv", color: theme.muted, children: `Lv ${level(p)}` }),
+        ] }),
+        Box({ key: "mood", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", columnGap: 1, children: [
+          Select({ key: "pet-mode", label: "Mood", value: p.mode, options: [{ value: "auto", label: "Auto" }, ...MOODS.map((m) => ({ value: m, label: MOOD_LABEL[m] }))], onSelect: (m) => handlers.onPetMode?.(m) }),
+          Text({ key: "how", color: theme.muted, wrap: "truncate-end", children: p.mode === "auto" ? "follows along" : "kept on" }),
+        ] }),
+        last ? Text({ key: "last", color: theme.muted, wrap: "truncate-end", children: `${when(last.at, now)}  ${last.icon} ${last.text}` }) : null,
+      ].filter(Boolean) }),
+    ] })];
+  }
   return [
     Box({ key: "head", flexDirection: "row", columnGap: 1, children: [
       Text({ key: "n", bold: true, color: PET_META.color, children: `${PET_META.icon} Clawd` }),

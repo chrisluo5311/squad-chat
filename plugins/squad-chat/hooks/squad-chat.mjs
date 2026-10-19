@@ -1222,6 +1222,7 @@ export function register(on, options) {
       onClipRemove: (id) => { removeClip(state.clipboard, id); $.ui.invalidate("ui.render"); },
       onClipClear: () => clearClips($),
       onPetMode: (mode) => setPetMode($, mode),
+      onToggleMore: (id) => { if (!state.moreOpen.delete(id)) state.moreOpen.add(id); $.ui.invalidate("ui.render"); },
       onPetWalk: (walk) => { state.pet.walk = walk; savePet($); $.ui.invalidate("ui.render"); },
     });
   });

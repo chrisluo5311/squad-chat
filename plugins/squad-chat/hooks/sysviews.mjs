@@ -10,7 +10,7 @@ import { theme, level, nameColor } from "./theme.mjs";
 import {
   cells, clip, fit, fmtTokens, fmtUsd, fmtDur, fmtSpan, relTime, age, resetLabel,
   bar, barNode, stretchBar, sparkline, meter, tiles, line, col, stackCards, card, CARD_GAP, LABEL_W,
-  bigNumber, lineChart, xml,
+  bigNumber, lineChart, xml, inlineCut,
 } from "./widgets.mjs";
 import {
   totalTokens, cacheRatio, burnRate, limitWindows, spendSeries, toolRows, agentTree, agentCounts, isEnded, topTool,
@@ -1153,6 +1153,8 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
   if (!SYS[view]) return fnInline(els, view, w, handlers);
   if (OWN[view]) return OWN[view].inline(els, w, handlers, now);
   const meta = SYS[view];
+  // "+ 2 more" under a cut list, a button in VS Code that opens it all.
+  const cutOf = (items, max, key) => inlineCut(els, `${key}-more`, items, max, { open: state.moreOpen.has(`${view}:${key}`), onToggle: () => handlers.onToggleMore?.(`${view}:${key}`) });
   const head = (text, right) => line(els, "head", [
     { text: `${meta.icon} ${meta.label}`, bold: true, color: meta.color },
     { text: text ? `  ${text}` : "", color: theme.muted, grow: true },
@@ -1164,7 +1166,9 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
     if (!u.measured) return [...parts, muted(els, "wait", "Waiting for the first reply from Claude…")];
     const c = u.context ?? {};
     parts.push(meter(els, { key: "ctx", label: "Context", pct: c.percent, width: w, right: c.tokens != null ? `${fmtTokens(c.tokens)}/${fmtTokens(c.window)}` : c.window ? `${fmtTokens(c.window)} window` : "" }));
-    for (const l of limitWindows(u).slice(0, 2)) parts.push(limitMeter(els, l, w));
+    const limits = cutOf(limitWindows(u), 2, "limits");
+    for (const l of limits.shown) parts.push(limitMeter(els, l, w));
+    if (limits.node) parts.push(limits.node);
     const cache = cacheRatio(u);
     const running = agentCounts(u).running;
     parts.push(line(els, "spend", [
@@ -1193,15 +1197,18 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
       const c = g.pr.checks;
       parts.push(line(els, "pr", [{ text: `#${g.pr.number} `, color: theme.git, bold: true }, { text: g.pr.title, grow: true }, { text: ` ✓${c.pass} ●${c.pending} ✗${c.fail}`, color: c.fail ? theme.error : c.pending ? theme.amber : theme.online }]));
     }
-    for (const p of g.prs.filter((p) => p.number !== g.pr?.number).slice(0, 3)) {
+    const prs = cutOf(g.prs.filter((p) => p.number !== g.pr?.number), 3, "prs");
+    for (const p of prs.shown) {
       const pill = prPill(p, g);
       parts.push(line(els, `pr-${p.number}`, [{ text: `#${p.number}`, width: 6, color: theme.muted }, { text: p.title, grow: true }, { text: ` ${pill.text}`, color: pill.color }]));
     }
+    if (prs.node) parts.push(prs.node);
     return parts;
   }
   const list = allSessions();
   const parts = [head(`${list.length} session${list.length === 1 ? "" : "s"}`)];
-  for (const s of list.slice(0, 4)) {
+  const sessions = cutOf(list, 4, "sessions");
+  for (const s of sessions.shown) {
     const live = (s.agents ?? []).filter((a) => !isEnded(a.status)).length;
     parts.push(line(els, `s-${s.id}`, [
       { text: `${sessionBusy(s) ? "●" : "○"} `, color: sessionBusy(s) ? nameColor(s.id) : theme.muted },
@@ -1210,6 +1217,7 @@ export function sysInline(els, view, width, handlers, now = Date.now()) {
       live ? { text: ` ⟡${live}`, color: theme.agents } : null,
     ]));
   }
+  if (sessions.node) parts.push(sessions.node);
   return parts;
 }
 
