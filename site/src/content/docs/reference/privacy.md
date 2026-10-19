@@ -56,6 +56,12 @@ Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, re
 
 Monitor never touches the network. It reads this computer through a fixed set of commands in squad-chat's own code (on a Mac `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg` and, if you installed it, `macmon`, on Linux files in `/proc` and `/sys` and `nvidia-smi`), with no shell and no sudo. A room's manifest cannot name a command. The numbers stay in the bridge's memory, the last two minutes at most, and are drawn, never sent anywhere or shown to Claude.
 
+## What Ping and Docker run
+
+Ping is off until you add it, and starts with no servers. It checks only the ones you type into it: a host gets 3 packets from `ping` (the host passed as one argument, with no shell and no sudo), `host:port` a TCP connection, and an `http(s)://` URL one `GET`. That happens every 30 seconds while the room is shown and every minute otherwise, and nothing is sent beyond the check. Up to 90 days of results stay in `~/.config/squad-chat/room-data/ping/history.json`, readable only by you. The Share card names your servers unless you turn that off with `/chat set ping share_names off`.
+
+Docker is off until you add it, and never touches the network. It runs the `docker` CLI on this computer (`ps`, `images`, `volume ls`, `network ls`, `stats` and `logs`) every 5 seconds while the room is shown. It only reads, so it cannot start, stop or remove anything. A container's log lines are drawn in the pane and nowhere else. The Share card holds how many containers are up and the names of the ones needing a look.
+
 ## What Weather, Tech News, Stocks and Lo-fi reach
 
 These four rooms are off until you enable them, and each one states which hosts it contacts when you do. They request only the data they display, with no account, key or cookie, and send nothing about you or your session:
@@ -71,7 +77,7 @@ The bridge holds each room to its own sites, so a room cannot reach any other ho
 
 Lo-fi's streams do not go through the bridge's fetch, since mpv fetches them directly. Its stations are still held to the room's hosts, both when a room is checked and again before one plays, so a store room cannot use the player to reach a host it does not name. Items you add with `/lofi add` play from their original location. Files and folders you add stay where they are, and the list of them is kept in `room-data/lofi/list.json`. mpv runs only after you press play, and stops when the session ends.
 
-Only `/chat-share usage|git|agents|focus|habits|snippet|monitor|weather|news|stock|lofi`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` or `/tool` is hidden from Claude. The Toolbox room keeps nothing: what you run its tools on, and what they give back, stay in the session's memory, and it has no Share.
+Only `/chat-share usage|git|agents|focus|habits|snippet|monitor|weather|news|stock|ping|lofi|docker`, or the **⇪** on a snippet or a story, sends any of it to a chat room, after you look at the preview. Like a slash command's message, what you type after `/snippet` or `/tool` is hidden from Claude. The Toolbox room keeps nothing: what you run its tools on, and what they give back, stay in the session's memory, and it has no Share.
 
 ## The room store
 

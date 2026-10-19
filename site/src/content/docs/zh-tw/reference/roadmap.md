@@ -23,6 +23,8 @@ description: 已完成和接下來要做的事。
 - [x] Monitor 房間
 - [x] Stocks 房間
 - [x] Lo-fi 房間
+- [x] Ping 房間
+- [x] Docker 房間
 - [x] 房間商店：在 Claude Code 裡瀏覽、安裝、更新和移除任何人寫的房間
 - [x] 通用 JSON provider，讓商店房間可以讀取 manifest 列出的任何 API
 - [x] 任何房間都能在 manifest 裡宣告的警示

@@ -145,7 +145,7 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 
 ## ⌁ Ping
 
-伺服器和裝置有沒有回應、回應多快。在房間的輸入框輸入一個目標：主機（`example.com`、`192.168.1.10`）用 ping，`host:port` 測試 TCP 連線，`http(s)://` 網址送一次 `GET`，從 DNS 計時到第一個位元組。每一列以心跳條顯示最近的檢查（綠色正常、黃色慢、紅色失敗），以及 24 小時的在線率。按一下某一列可查看它最近一小時的回應時間、時間花在哪裡和最近幾次檢查，再按一次即可收起。連續 3 次檢查失敗才算 down，down 和恢復時各通知一次。**⇪ Share** 會把最近 90 天以卡片分享出去，`/chat set ping share_names off` 可隱藏卡片上的名稱。`/chat set ping slow_ms 300` 設定多慢算慢。檢查結果和歷史紀錄都只留在這台電腦。
+伺服器和裝置有沒有回應、回應多快。在房間的輸入框輸入一個目標：主機（`example.com`、`192.168.1.10`）用 ping，`host:port` 測試 TCP 連線，`http(s)://` 網址送一次 `GET`，從 DNS 計時到第一個位元組。每一列以心跳條顯示最近的檢查（綠色正常、黃色慢、紅色失敗），以及 24 小時的在線率。按一下某一列可查看它最近一小時的回應時間、時間花在哪裡和最近幾次檢查，再按一次即可收起。連續 3 次檢查失敗才算 down，down 和恢復時各通知一次。**INCIDENTS** 列出所有仍然 down 的伺服器，接著是最近已結束的中斷。**⇪ Share** 會把最近 90 天以卡片分享出去，`/chat set ping share_names off` 可隱藏卡片上的名稱。`/chat set ping slow_ms 300` 設定多慢算慢。檢查結果和歷史紀錄都只留在這台電腦。
 
 ## ♫ Lo-fi
 
@@ -155,7 +155,7 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 
 ## ◰ Docker
 
-透過 `docker` CLI 顯示這台電腦的 Docker：containers、images、volumes 和 networks，一次顯示一類。按 `1` 到 `4` 或上方的按鈕切換。點選 container 的名稱，清單下方會顯示它的 CPU、記憶體和最後五行 log。需要注意的 container（unhealthy 或 restarting）排在最前面，在您選擇其他 container 之前會一直顯示。此房間只讀取資料，支援 Docker Desktop、OrbStack 和 colima。
+透過 `docker` CLI 顯示這台電腦的 Docker：containers、images、volumes 和 networks，一次顯示一類。按 `1` 到 `4` 或上方的按鈕切換。點選 container 的名稱，清單下方會顯示它的 CPU、記憶體和最後五行 log。需要注意的 container（unhealthy 或 restarting）排在最前面，在您選擇其他 container 之前會一直顯示。提示列上方的橫條會列出需要注意的 container，異常結束（exit code 不為 0）的排在最前面，並以紅色顯示。此房間只讀取資料，支援 Docker Desktop、OrbStack 和 colima。
 
 ## 更多房間、分享、隱藏
 

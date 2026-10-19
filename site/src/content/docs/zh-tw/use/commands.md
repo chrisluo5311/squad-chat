@@ -34,7 +34,7 @@ description: squad-chat 的所有 slash 指令、功能說明與範例。
 | `/chat-share [#room]` | 分享選取的文字，若未選取則分享 Claude 回覆中的最後一個程式碼區塊，送至目前的房間或指定的房間。系統會先顯示預覽，再以 `/chat-share send` 送出（或以 `/chat-share cancel` 取消）。 |
 | `/chat-share diff [path] [#room]` | 分享尚未 commit 的變更（`git diff HEAD`），可指定全部或單一檔案 |
 | `/chat-share to #room` | 將預覽中的內容改送至另一個房間。`/chat-share send #room` 可同時指定房間並送出。 |
-| `/chat-share usage` / `git` / `agents` / `focus` / `habits` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` `[#room]` | 將內建房間的快照分享至目前的房間或指定的房間 |
+| `/chat-share usage` / `git` / `agents` / `focus` / `habits` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` `[#room]` | 將內建房間的快照分享至目前的房間或指定的房間 |
 
 ### Snippets
 
@@ -58,9 +58,9 @@ description: squad-chat 的所有 slash 指令、功能說明與範例。
 | --- | --- |
 | `/chat notify on` / `off` | 有人提及 `@yourname` 時發出通知（預設關閉） |
 | `/chat dnd on` / `off` / `auto` | 勿擾模式：不發出通知，橫條與狀態列保持靜音，其他成員會看到您處於忙碌狀態。`auto` 會在 Claude 處理超過 30 秒的工作時自動開啟，結束後彙整錯過的訊息。 |
-| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | 開啟窗格並切換至指定的[內建房間](/squad-chat/zh-tw/use/built-in-rooms/)。`/chat chat` 返回聊天。 |
+| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` | 開啟窗格並切換至指定的[內建房間](/squad-chat/zh-tw/use/built-in-rooms/)。`/chat chat` 返回聊天。 |
 | `/chat band [room]` | 在不開啟窗格的情況下，於提示列上方的橫條顯示另一個房間。橫條上的 **‹** 和 **›** 功能相同，每次切換一個房間。 |
-| `/chat rooms <list>` | 設定要顯示分頁的內建房間：`usage`、`git`、`agents`、`focus`、`habits`、`toolbox`、`clipboard`、`pet`、`snippet`、`monitor`、`weather`、`news`、`stock`、`lofi` 可任意組合，或使用 `all`、`none`。`+name` 和 `-name` 用於加入或移除單一房間。 |
+| `/chat rooms <list>` | 設定要顯示分頁的內建房間：`usage`、`git`、`agents`、`focus`、`habits`、`toolbox`、`clipboard`、`pet`、`snippet`、`monitor`、`weather`、`news`、`stock`、`ping`、`lofi`、`docker` 可任意組合，或使用 `all`、`none`。`+name` 和 `-name` 用於加入或移除單一房間。 |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | 從提示列操控 Focus 房間的計時器。單獨輸入 `/focus` 會開啟房間。 |
 | `/habit add <name> [x<times>]` / `done <name>` / `undo <name>` / `remove <name>` / `rename <old> -> <new>` | 從提示列設定 Habits 房間的目標並標記完成。單獨輸入 `/habit` 會開啟房間。 |
 | `/tool <name> [input]` | 執行 [Toolbox](/squad-chat/zh-tw/use/built-in-rooms/#-toolbox) 房間的工具並顯示結果，例如 `/tool uuid 5`、`/tool hash hello` 或 `/tool time 1739000000`。單獨輸入 `/tool` 會開啟房間。 |
@@ -79,6 +79,9 @@ description: squad-chat 的所有 slash 指令、功能說明與範例。
 | `/chat set stock watchlist TAIEX, 2330, AAPL` / `+2454` / `-NVDA` | 自選股清單，最多 12 檔。台股代號、`TAIEX`，或任何 Yahoo 代號，例如 `7203.T` |
 | `/chat set stock colors red-up` / `green-up` | 所有市場套用相同的漲跌顏色，而非依各市場的慣例 |
 | `/chat set stock move 3` | 個股單日漲跌達 3% 時發出通知（`0` 為關閉，預設為 5） |
+| `/chat set ping slow_ms 300` | 伺服器回應超過幾毫秒算慢（預設為 500） |
+| `/chat set ping alert_after 5` / `alerts off` | 連續失敗幾次算斷線（預設為 3），或關閉通知 |
+| `/chat set ping share_names off` | Share 卡片不顯示伺服器名稱 |
 | `/chat set monitor cpu_temp 90` / `memory 90` / `alerts off` | Monitor 的門檻值，或關閉通知 |
 
 ## 在窗格中
