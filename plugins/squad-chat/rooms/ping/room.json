@@ -38,7 +38,6 @@
           "columns": [
             { "field": "dot", "width": 2, "colorFrom": "tone" },
             { "field": "name", "grow": true },
-            { "field": "kind", "width": 5 },
             { "field": "msText", "width": 7, "right": true, "colorFrom": "tone" },
             { "field": "beats", "width": 20, "beats": true },
             { "field": "up24", "width": 6, "right": true, "colorFrom": "upTone" }

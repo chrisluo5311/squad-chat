@@ -543,8 +543,34 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     const nameCells = els.Svg && growCol >= 0 && b.columns.some((c) => c.beats)
       ? Math.max(...items.slice(0, n).map((it) => cells(show(lookup(it, b.columns[growCol].field))))) + (b.pick?.toggle ? 2 : 0)
       : 0;
+    // In the terminal the columns are counted out to fit `w`, so the name
+    // and the ✕ always show: a heartbeat gives way to the name, and goes
+    // when fewer than 3 marks would fit, then the columns at the right go
+    // until the name has 6 cells, and a name too long ends in "…".
+    const beatCol = b.type === "table" ? b.columns.findIndex((c) => c.beats) : -1;
+    const hidden = new Set();
+    let nameW = null;
+    let beatsW = 0;
+    if (!els.Svg && growCol >= 0 && (beatCol >= 0 || b.pick)) {
+      // The cells left for the name (and the heartbeat) once the rest are in.
+      const spare = () => {
+        const on = b.columns.filter((c, i) => !hidden.has(i)).length;
+        const rest = b.columns.reduce((s, c, i) => s + (hidden.has(i) || i === growCol || i === beatCol ? 0 : c.width ?? 12), 0);
+        return w - rest - (dropSt ? 2 : 0) - (on - 1 + (dropSt ? 1 : 0));   // a ✕ button takes 2 cells
+      };
+      if (beatCol >= 0) {
+        const longest = Math.max(...items.slice(0, n).map((it) => cells(show(lookup(it, b.columns[growCol].field))))) + (b.pick?.toggle ? 2 : 0);
+        // The whole name first, unless that leaves fewer than 8 marks: then
+        // the name is cut, down to 12 cells.
+        beatsW = Math.min(b.columns[beatCol].width ?? 20, Math.max(spare() - longest, Math.min(8, spare() - 12)));
+        if (beatsW < 3) { beatsW = 0; hidden.add(beatCol); }
+      }
+      for (let i = b.columns.length - 1; i > 0 && spare() - beatsW < 6; i--) if (i !== growCol) hidden.add(i);
+      nameW = Math.max(1, spare() - beatsW);
+    }
+    const shown = (c, i) => !hidden.has(i);
     if (header) {
-      nodes.push(line(els, `${key}-head`, [...b.columns.map((c, i) => (grows(c, i)
+      nodes.push(line(els, `${key}-head`, [...b.columns.map((c, i) => (!shown(c, i) ? null : grows(c, i)
         ? { text: c.label ?? "", color: theme.muted, grow: true, right: c.right }
         : { text: c.label ?? "", width: c.width ?? 12, right: c.right, color: theme.muted })), dropSt ? { text: "", width: 1 } : null], { gap: 1 }));
     }
@@ -562,12 +588,16 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
         const pickOn = b.pick ? lookup(item, b.pick.field) : null;
         const isPicked = String(pickOn) === String(picked);
         const pickBtn = (text) => Button({ key: `pick-${k}`, plain: true, label: b.pick.toggle && isPicked ? `▾ ${text}` : text, dimColor: !b.pick.toggle && !isPicked, onPress: () => handlers.onSetSetting?.(room, b.pick.setting, b.pick.toggle && isPicked ? "default" : String(pickOn)) });
-        nodes.push(line(els, k, [...b.columns.map((c, j) => (c.beats
-          ? { node: beatsNode(els, `beats-${j}`, String(lookup(item, c.field) ?? ""), c.width ?? 20), ...(els.Svg ? { basis: c.width ?? 20, shrink: 8, fill: true } : {}) }
+        // The name cut to its column, leaving room for the ▾ of the one picked.
+        const name = (c) => (nameW == null ? show(lookup(item, c.field)) : clip(show(lookup(item, c.field)), nameW - (b.pick?.toggle && isPicked ? 2 : 0)));
+        nodes.push(line(els, k, [...b.columns.map((c, j) => (!shown(c, j) ? null : c.beats
+          ? { node: beatsNode(els, `beats-${j}`, String(lookup(item, c.field) ?? ""), els.Svg ? c.width ?? 20 : beatsW), ...(els.Svg ? { basis: c.width ?? 20, shrink: 8, fill: true } : {}) }
           : grows(c, j) && nameCells
           ? { text: show(lookup(item, c.field)), basis: nameCells, color: tint(c), node: pickOn != null ? pickBtn(show(lookup(item, c.field))) : undefined }
           : grows(c, j)
-          ? { text: show(lookup(item, c.field)), grow: true, right: c.right, color: tint(c), node: pickOn != null ? pickBtn(show(lookup(item, c.field))) : undefined }
+          ? { text: name(c), grow: true, right: c.right, color: tint(c), node: pickOn == null ? undefined
+            : nameW == null ? pickBtn(name(c))
+            : Box({ key: `name-${k}`, height: 1, overflow: "hidden", children: [pickBtn(name(c))] }) }
           : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) })),
         dropOn != null
           ? { node: Button({ key: `drop-${k}`, plain: true, label: "✕", onPress: () => handlers.onSetSetting?.(room, b.drop.setting, `-${dropOn}`) }) }
@@ -700,7 +730,7 @@ export function fnDock(els, id, w, capacity, handlers) {
     const badge = c.badge && !(stale && i === 0) ? fill(c.badge, data) : "";
     const metaText = stale && i === 0 ? "stale" : c.meta ? fill(c.meta, data) : undefined;
     const metaNode = badge ? els.Box({ key: "meta", flexDirection: "row", flexShrink: 1, minWidth: 0, children: [
-      els.Text({ key: "b", bold: true, color: color(c.badgeTone ? lookup(data, c.badgeTone) : null, theme.muted), children: badge }),
+      els.Text({ key: "b", bold: true, color: color(c.badgeTone ? lookup(data, c.badgeTone) : null, theme.muted), wrap: "truncate-end", children: badge }),
       metaText ? els.Text({ key: "m", color: theme.muted, wrap: "truncate-start", children: ` · ${metaText}` }) : null,
     ].filter(Boolean) }) : undefined;
     cards.push({
