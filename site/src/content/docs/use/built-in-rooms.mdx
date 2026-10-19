@@ -145,6 +145,8 @@ A watchlist of Taiwan and US stocks, each with today's line. Set it with `/chat 
 
 ## ⌁ Ping
 
+<figure class="shot pane"><img src="/squad-chat/media/rooms/ping.png" alt="The Ping room: five servers, each with its last check, heartbeat and 24-hour uptime, and the one that is down under INCIDENTS." /></figure>
+
 Whether your servers and devices answer, and how fast. Type one into the room's box: a host (`example.com`, `192.168.1.10`) is pinged, `host:port` gets a TCP connection, and an `http(s)://` URL gets one `GET`, timed from DNS to the first byte. Each row shows the last checks as a heartbeat (green up, amber slow, red failed) and the uptime over 24 hours. Press a row to see its last hour, where its time goes and its last checks, and press it again to close it. A server is down after 3 failed checks in a row, and you get a notification then and when it's back. **INCIDENTS** lists every server that is still down, then the latest outages that ended. **⇪ Share** posts the last 90 days as a card, and `/chat set ping share_names off` hides the names in it. `/chat set ping slow_ms 300` sets when a server counts as slow. The checks and their history stay on this computer.
 
 ## ♫ Lo-fi
@@ -154,6 +156,8 @@ Whether your servers and devices answer, and how fast. Type one into the room's 
 Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`). Paste a link or a folder into the box to add your own. `p` plays or pauses, and `n` skips. Nothing plays until you press play.
 
 ## ◰ Docker
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/docker.png" alt="The Docker room: the unhealthy container shop-api with its CPU, memory, port and last log lines, above the list of containers." /></figure>
 
 This computer's Docker, through the `docker` CLI: containers, images, volumes and networks, one section at a time. `1` to `4` switch between them, as do the buttons at the top. Press a container's name to see its CPU, memory and last five log lines below the list. The one needing a look (unhealthy or restarting) comes first and is shown until you pick another. The band above the prompt names what needs a look, a crashed container (exited with an error) first and in red. It only reads, and works with Docker Desktop, OrbStack and colima.
 
