@@ -24823,7 +24823,7 @@ function humanSize(n) {
   }
   return `${i === 0 ? Math.round(n) : n.toFixed(n >= 100 ? 0 : 1)} ${units[i]}`;
 }
-var label = (labels, key) => new RegExp(`(?:^|,)${key.replace(/\./g, "\\.")}=([^,]*)`).exec(String(labels ?? ""))?.[1] ?? "";
+var label = (labels, key) => String(labels ?? "").split(",").find((p) => p.startsWith(`${key}=`))?.slice(key.length + 1) ?? "";
 var percent = (text) => {
   const n = Number.parseFloat(String(text ?? ""));
   return Number.isFinite(n) ? Math.round(n) : null;

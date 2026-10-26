@@ -82,7 +82,7 @@ export function humanSize(n) {
   return `${i === 0 ? Math.round(n) : n.toFixed(n >= 100 ? 0 : 1)} ${units[i]}`;
 }
 
-const label = (labels, key) => new RegExp(`(?:^|,)${key.replace(/\./g, "\\.")}=([^,]*)`).exec(String(labels ?? ""))?.[1] ?? "";
+const label = (labels, key) => String(labels ?? "").split(",").find((p) => p.startsWith(`${key}=`))?.slice(key.length + 1) ?? "";
 const percent = (text) => { const n = Number.parseFloat(String(text ?? "")); return Number.isFinite(n) ? Math.round(n) : null; };
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
