@@ -38,6 +38,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+          # Astro asks for a newer 22.x than the runner's cached one
+          check-latest: true
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
