@@ -24,7 +24,9 @@ jobs:
         with:
           node-version: 22
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@2.1.292
+        run: |
+          npm ci --prefix .github/ci-tools
+          echo "$GITHUB_WORKSPACE/.github/ci-tools/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Validate the plugin
         run: claude plugin validate ./plugins/squad-chat
       - name: Room store rooms check out, and the index is up to date

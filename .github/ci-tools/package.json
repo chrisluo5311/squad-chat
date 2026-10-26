@@ -1,0 +1,8 @@
+{
+  "name": "squad-chat-ci-tools",
+  "private": true,
+  "description": "Claude Code for CI, installed with npm ci so the lockfile pins it by hash",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.292"
+  }
+}
