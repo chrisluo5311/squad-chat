@@ -845,7 +845,7 @@ var require_FunctionsClient = __commonJS({
             const hasContentTypeHeader = !!headers && Object.keys(headers).some((key) => key.toLowerCase() === "content-type");
             if (functionArgs && !hasContentTypeHeader) {
               if (typeof Blob !== "undefined" && functionArgs instanceof Blob || functionArgs instanceof ArrayBuffer) {
-                _headers["Content-Type"] = "application/octet-stream";
+                _headers["Content-Type"] = functionArgs.type || "application/octet-stream";
                 body = functionArgs;
               } else if (typeof functionArgs === "string") {
                 _headers["Content-Type"] = "text/plain";
@@ -1075,7 +1075,7 @@ var require_version = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.version = void 0;
-    exports.version = "2.117.2";
+    exports.version = "2.118.0";
   }
 });
 
@@ -5316,7 +5316,7 @@ var require_version2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.version = void 0;
-    exports.version = "2.117.2";
+    exports.version = "2.118.0";
   }
 });
 
@@ -14061,7 +14061,8 @@ async function fetchWithRetry(fetchImpl, url, request, retryEnabled) {
         signal: request.signal
       });
     } catch (fetchError) {
-      if ((fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) === "AbortError" || (fetchError === null || fetchError === void 0 ? void 0 : fetchError.code) === "ABORT_ERR") throw fetchError;
+      var _request$signal;
+      if ((fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) === "AbortError" || (fetchError === null || fetchError === void 0 ? void 0 : fetchError.code) === "ABORT_ERR" || (fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) === "TimeoutError" && ((_request$signal = request.signal) === null || _request$signal === void 0 ? void 0 : _request$signal.aborted)) throw fetchError;
       if (!RETRYABLE_METHODS.includes(request.method)) throw fetchError;
       if (retryEnabled && attemptCount < DEFAULT_MAX_RETRIES) {
         const delay = getRetryDelay(attemptCount);
@@ -18771,19 +18772,12 @@ var StorageFileApi = class extends BaseApiClient {
       const options = _objectSpread22(_objectSpread22({}, DEFAULT_FILE_OPTIONS), fileOptions);
       let headers = _objectSpread22(_objectSpread22({}, _this.headers), method === "POST" && { "x-upsert": String(options.upsert) });
       const metadata = options.metadata;
-      if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
-        body = new FormData();
-        body.append("cacheControl", options.cacheControl);
-        if (metadata) body.append("metadata", _this.encodeMetadata(metadata));
-        body.append("", fileBody);
-      } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
-        body = fileBody;
-        if (!body.has("cacheControl")) body.append("cacheControl", options.cacheControl);
-        if (metadata && !body.has("metadata")) body.append("metadata", _this.encodeMetadata(metadata));
-      } else {
+      if (typeof Blob !== "undefined" && fileBody instanceof Blob || typeof FormData !== "undefined" && fileBody instanceof FormData) body = _this.prepareUploadFormData(fileBody, options);
+      else {
         body = fileBody;
         headers["cache-control"] = `max-age=${options.cacheControl}`;
         headers["content-type"] = options.contentType;
+        if (options.contentEncoding) headers["content-encoding"] = options.contentEncoding;
         if (metadata) headers["x-metadata"] = _this.toBase64(_this.encodeMetadata(metadata));
         if ((typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function") && !options.duplex) options.duplex = "half";
       }
@@ -18805,7 +18799,7 @@ var StorageFileApi = class extends BaseApiClient {
   * @subcategory File Buckets
   * @param path The file path, including the file name. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
   * @param fileBody The body of the file to be stored in the bucket.
-  * @param fileOptions Optional file upload options including cacheControl, contentType, upsert, and metadata.
+  * @param fileOptions Optional file upload options including cacheControl, contentType, contentEncoding, upsert, and metadata.
   * @returns Promise with response containing file path, id, and fullPath or error
   *
   * @example Upload file
@@ -18876,7 +18870,7 @@ var StorageFileApi = class extends BaseApiClient {
   * @param path The file path, including the file name. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
   * @param token The token generated from `createSignedUploadUrl`
   * @param fileBody The body of the file to be stored in the bucket.
-  * @param fileOptions HTTP headers (cacheControl, contentType, etc.).
+  * @param fileOptions HTTP headers (cacheControl, contentType, contentEncoding, etc.).
   * **Note:** The `upsert` option has no effect here. To enable upsert behavior,
   * pass `{ upsert: true }` when calling `createSignedUploadUrl()` instead.
   * @returns Promise with response containing file path and fullPath or error
@@ -18917,19 +18911,12 @@ var StorageFileApi = class extends BaseApiClient {
       const options = _objectSpread22(_objectSpread22({}, DEFAULT_FILE_OPTIONS), fileOptions);
       let headers = _objectSpread22(_objectSpread22({}, _this3.headers), { "x-upsert": String(options.upsert) });
       const metadata = options.metadata;
-      if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
-        body = new FormData();
-        body.append("cacheControl", options.cacheControl);
-        if (metadata) body.append("metadata", _this3.encodeMetadata(metadata));
-        body.append("", fileBody);
-      } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
-        body = fileBody;
-        if (!body.has("cacheControl")) body.append("cacheControl", options.cacheControl);
-        if (metadata && !body.has("metadata")) body.append("metadata", _this3.encodeMetadata(metadata));
-      } else {
+      if (typeof Blob !== "undefined" && fileBody instanceof Blob || typeof FormData !== "undefined" && fileBody instanceof FormData) body = _this3.prepareUploadFormData(fileBody, options);
+      else {
         body = fileBody;
         headers["cache-control"] = `max-age=${options.cacheControl}`;
         headers["content-type"] = options.contentType;
+        if (options.contentEncoding) headers["content-encoding"] = options.contentEncoding;
         if (metadata) headers["x-metadata"] = _this3.toBase64(_this3.encodeMetadata(metadata));
         if ((typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function") && !options.duplex) options.duplex = "half";
       }
@@ -19001,7 +18988,7 @@ var StorageFileApi = class extends BaseApiClient {
   * @subcategory File Buckets
   * @param path The relative file path. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to update.
   * @param fileBody The body of the file to be stored in the bucket.
-  * @param fileOptions Optional file upload options including cacheControl, contentType, and metadata.
+  * @param fileOptions Optional file upload options including cacheControl, contentType, contentEncoding, and metadata.
   * **Note:** The `upsert` option has no effect here. `update()` always replaces the
   * file at the given path, so the `x-upsert` header is not sent. To control upsert
   * behavior, use `upload()` instead.
@@ -19106,8 +19093,10 @@ var StorageFileApi = class extends BaseApiClient {
   * @subcategory File Buckets
   * @param fromPath The original file path, including the current file name. For example `folder/image.png`.
   * @param toPath The new file path, including the new file name. For example `folder/image-copy.png`.
-  * @param options The destination options.
+  * @param options The destination and metadata options.
   * @param options.sourceVersionId The version id of the source object to copy.
+  * @param options.copyMetadata Whether to copy the source metadata. Defaults to true. Set to false to apply metadata overrides; custom user metadata is not copied when false.
+  * @param options.metadata File metadata overrides, applied only when copyMetadata is false. Unspecified fields retain their source values.
   * @returns Promise with response containing copied file path or error
   *
   * @example Copy file
@@ -19128,6 +19117,18 @@ var StorageFileApi = class extends BaseApiClient {
   * }
   * ```
   *
+  * @example Copy file with content encoding
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('documents')
+  *   .copy('source.txt.gz', 'copy.txt.gz', {
+  *     copyMetadata: false,
+  *     metadata: { contentEncoding: 'gzip' },
+  *   })
+  * ```
+  * The source must already contain gzip-encoded bytes. Copying changes metadata only.
+  *
   * @remarks
   * - RLS policy permissions required:
   *   - `buckets` table permissions: none
@@ -19137,12 +19138,15 @@ var StorageFileApi = class extends BaseApiClient {
   async copy(fromPath, toPath, options) {
     var _this7 = this;
     return _this7.handleOperation(async () => {
+      const copyOptions = options;
       return { path: (await post(_this7.fetch, `${_this7.url}/object/copy`, {
         bucketId: _this7.bucketId,
         sourceKey: fromPath,
         destinationKey: toPath,
         destinationBucket: options === null || options === void 0 ? void 0 : options.destinationBucket,
-        sourceVersionId: options === null || options === void 0 ? void 0 : options.sourceVersionId
+        sourceVersionId: options === null || options === void 0 ? void 0 : options.sourceVersionId,
+        copyMetadata: typeof (copyOptions === null || copyOptions === void 0 ? void 0 : copyOptions.copyMetadata) === "boolean" ? copyOptions.copyMetadata : void 0,
+        metadata: (copyOptions === null || copyOptions === void 0 ? void 0 : copyOptions.copyMetadata) === false ? copyOptions.metadata : void 0
       }, { headers: _this7.headers })).Key };
     });
   }
@@ -19758,6 +19762,20 @@ var StorageFileApi = class extends BaseApiClient {
       return await post(_this15.fetch, `${_this15.url}/object/list-v2/${_this15.bucketId}`, body, { headers: _this15.headers }, parameters);
     });
   }
+  prepareUploadFormData(fileBody, options) {
+    const body = new FormData();
+    const files = [];
+    if (fileBody instanceof FormData) fileBody.forEach((value, name) => {
+      if (typeof value === "string") body.append(name, value);
+      else files.push([name, value]);
+    });
+    else files.push(["", fileBody]);
+    if (!body.has("cacheControl")) body.append("cacheControl", options.cacheControl);
+    if (options.metadata && !body.has("metadata")) body.append("metadata", this.encodeMetadata(options.metadata));
+    if (options.contentEncoding && !body.has("contentEncoding")) body.append("contentEncoding", options.contentEncoding);
+    for (const [name, file] of files) body.append(name, file);
+    return body;
+  }
   encodeMetadata(metadata) {
     return JSON.stringify(metadata);
   }
@@ -19781,7 +19799,7 @@ var StorageFileApi = class extends BaseApiClient {
     return query;
   }
 };
-var version = "2.117.2";
+var version = "2.118.0";
 var DEFAULT_HEADERS = { "X-Client-Info": `storage-js/${version}` };
 var StorageBucketApi = class extends BaseApiClient {
   constructor(url, headers = {}, fetch$1, opts) {
@@ -21342,7 +21360,7 @@ var StorageClient = class extends StorageBucketApi {
 var import_auth_js = __toESM(require_main3(), 1);
 __reExport(dist_exports, __toESM(require_main2(), 1));
 __reExport(dist_exports, __toESM(require_main3(), 1));
-var version2 = "2.117.2";
+var version2 = "2.118.0";
 var JS_ENV = "";
 var JS_RUNTIME_VERSION;
 if (typeof Deno !== "undefined") {
