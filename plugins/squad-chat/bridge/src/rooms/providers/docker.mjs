@@ -156,6 +156,15 @@ function shareText(engine, rows) {
   return [`Docker · ${engine}`, `${up} of ${rows.length} containers up`, ...bad.slice(0, 5).map((c) => `${c.dot} ${c.name} ${c.status}`)].join("\n");
 }
 
+// stdout and stderr come back apart, so the lines go back in order by the
+// time docker puts first. Its fraction drops trailing zeros: padded, the
+// times sort as text.
+const timeKey = (line) => {
+  const m = /^([\d-]+T[\d:]+)(?:\.(\d+))?Z/.exec(line);
+  return m ? `${m[1]}.${(m[2] ?? "").padEnd(9, "0")}` : "";
+};
+export const byTime = (a, b) => { const x = timeKey(a), y = timeKey(b); return x < y ? -1 : x > y ? 1 : 0; };
+
 // A log line as one row: its time (from --timestamps, in local time), and
 // its words with no colors, no time of its own and no run of spaces, cut
 // short. Errors are red and warnings amber.
@@ -184,8 +193,8 @@ async function detailOf(ctx, docker, c) {
   if (!c) return null;
   const [statsOut, logsOut] = await Promise.all([
     c.running ? ctx.run([docker, "stats", "--no-stream", "--format", "json", c.id], { timeoutMs: 6_000 }) : null,
-    // docker logs writes the container's stderr to its own: 2>&1 keeps both.
-    ctx.run(["/bin/sh", "-c", `"$0" logs --tail ${LOG_LINES} --timestamps "$1" 2>&1`, docker, c.id], { timeoutMs: 4_000 }),
+    // docker logs writes the container's stderr to its own, so both are read.
+    ctx.run([docker, "logs", "--tail", String(LOG_LINES), "--timestamps", c.id], { timeoutMs: 4_000, stderr: true }),
   ]);
   const s = jsonLines(statsOut)[0];
   const cpu = s ? percent(s.CPUPerc) : null;
@@ -200,7 +209,7 @@ async function detailOf(ctx, docker, c) {
     mem: s ? percent(s.MemPerc) : null,
     memText: s ? memUse(s.MemUsage) : "–",
     ports: c.ports || "–",
-    logs: String(logsOut ?? "").split("\n").filter((l) => l.trim()).slice(-LOG_LINES).map(logRow).filter((r) => r.text),
+    logs: String(logsOut ?? "").split("\n").filter((l) => l.trim()).sort(byTime).slice(-LOG_LINES).map(logRow).filter((r) => r.text),
   };
 }
 

@@ -43,10 +43,12 @@ export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysi
 
 // What a provider runs on this computer: a command its own code names (a
 // manifest can't name one), with no shell, a time limit and an output limit.
-// Resolves its stdout, or null when it's missing, fails or overruns.
-function runCommand(argv, { timeoutMs = 3_000, maxBytes = 4 * 1024 * 1024 } = {}) {
+// Resolves its stdout (with its stderr after it when asked for), or null
+// when it's missing, fails or overruns.
+function runCommand(argv, { timeoutMs = 3_000, maxBytes = 4 * 1024 * 1024, stderr = false } = {}) {
   return new Promise((resolve) => {
-    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" }, windowsHide: true }, (err, stdout) => resolve(err ? null : String(stdout)));
+    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" }, windowsHide: true }, (err, out, errOut) =>
+      resolve(err ? null : stderr ? `${out}\n${errOut}` : String(out)));
   });
 }
 

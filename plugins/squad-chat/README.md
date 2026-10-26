@@ -120,7 +120,7 @@ Every program is named in the code, with fixed arguments, and none comes from a 
 | `git`, `gh` | Git room, `/chat-share diff` | Reads this folder's branch, diff, pull requests and checks |
 | `pbpaste`, `wl-paste` or `xclip`; on Windows, `powershell` | Clipboard room, only once you add it; on Windows also the Toolbox's paste, once each time you press it | Reads the clipboard every 2 seconds (on Windows, one PowerShell that stays up looks once a second) |
 | `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg`, `macmon` (Mac), `nvidia-smi` (Linux, Windows), `netstat -e` and `powershell` (Windows) | Monitor room | Reads CPU, memory, disk, network, battery and GPU figures. On Windows, PowerShell reads the battery and page file every 30 seconds. No shell, no sudo |
-| `docker` (`ps`, `images`, `volume ls`, `network ls`, `stats`, `logs`) | Docker room, only once you add it | Reads what Docker has, every 5 seconds while the room is on show. Read only. `logs` goes through `/bin/sh` only to keep the container's stderr |
+| `docker` (`ps`, `images`, `volume ls`, `network ls`, `stats`, `logs`) | Docker room, only once you add it | Reads what Docker has, every 5 seconds while the room is on show. Read only. No shell |
 | `ping` (`/sbin/ping` on a Mac) | Ping room, only for the hosts you add | Sends 3 packets to each, the host passed as one argument after `--` (Windows' ping takes no `--`; a host never starts with `-`). No shell, no sudo |
 | `mpv`, and `yt-dlp` for YouTube | Lo-fi room, only when you press play | Plays the stream. A short `/bin/sh` loop around `mpv` (on Windows, a `node -e` watchdog) stops it when the bridge exits, and downloads nothing to run. On Windows, stopping runs `taskkill` on that watchdog and its `mpv` |
 

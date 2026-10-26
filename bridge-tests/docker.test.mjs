@@ -3,7 +3,7 @@
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import docker, { jsonLines, shortImage, publishedPorts, shortStatus, stateOf, sizeOf, humanSize, logRow, memUse, resetSections } from "../plugins/squad-chat/bridge/src/rooms/providers/docker.mjs";
+import docker, { jsonLines, shortImage, publishedPorts, shortStatus, stateOf, sizeOf, humanSize, logRow, byTime, memUse, resetSections } from "../plugins/squad-chat/bridge/src/rooms/providers/docker.mjs";
 
 const PS = [
   { ID: "73f0f8d25f17", Image: "public.ecr.aws/supabase/postgrest:v14.18", Labels: "com.docker.compose.project=squad-chat,com.supabase.cli.project=squad-chat", Names: "supabase_rest", Networks: "supabase_net", Ports: "3000/tcp", State: "running", Status: "Up 5 days", HealthStatus: "none" },
@@ -37,8 +37,8 @@ function fake({ daemon = true, installed = true, ps = PS, images = IMAGES } = {}
       run: async (argv) => {
         runs.push(argv.join(" "));
         if (!installed) return null;
-        if (argv[0] === "/bin/sh") return "GET /health 200\nError: connect ECONNREFUSED :5432\n";
         const [, cmd] = argv;
+        if (cmd === "logs") return "GET /health 200\nError: connect ECONNREFUSED :5432\n";
         if (cmd === "--version") return "Docker version 29.8.2\n";
         if (!daemon) return null;
         if (cmd === "version") return "29.8.2|Docker Desktop 4.94.0 (241994)\n";
@@ -94,6 +94,13 @@ describe("docker: reading what the CLI prints", () => {
     assert.equal(logRow("GET / 200", 2).time, "");
   });
 
+  it("puts stdout and stderr lines back in order by their time", () => {
+    const out = "2026-10-17T02:16:01.5Z GET / 200\n2026-10-17T02:16:03Z GET /health 200";
+    const err = "2026-10-17T02:16:01.25Z Error: slow\n2026-10-17T02:16:02.000000001Z warn: retry";
+    assert.deepEqual([...out.split("\n"), ...err.split("\n")].sort(byTime).map((l) => l.split(" ").slice(1).join(" ")),
+      ["Error: slow", "GET / 200", "warn: retry", "GET /health 200"]);
+  });
+
   it("shortens memory use", () => {
     assert.equal(memUse("672.4MiB / 7.65GiB"), "672 MiB of 7.7 GiB");
     assert.equal(memUse("9.5MiB / 2GiB"), "9.5 MiB of 2 GiB");
@@ -143,8 +150,9 @@ describe("docker room", () => {
     assert.equal(d.picked.name, "old-redis");
     assert.equal(d.detail.cpu, null);
     assert.ok(!runs.some((r) => r.includes(" stats ")));
-    // The name goes to docker as one argument, never through the shell's words.
-    assert.ok(runs.some((r) => r.startsWith('/bin/sh -c "$0" logs --tail 5 --timestamps "$1" 2>&1 docker dd44ee55ff66')));
+    // The id goes to docker as one argument, with no shell.
+    assert.ok(runs.includes("docker logs --tail 5 --timestamps dd44ee55ff66"));
+    assert.ok(!runs.some((r) => r.startsWith("/bin/sh")));
   });
 
   it("switches section on an action, and leaves out the container card", async () => {

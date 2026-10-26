@@ -24972,6 +24972,14 @@ function shareText(engine, rows) {
   const bad = rows.filter((c) => c.tone === "amber" || c.tone === "red");
   return [`Docker \xB7 ${engine}`, `${up} of ${rows.length} containers up`, ...bad.slice(0, 5).map((c) => `${c.dot} ${c.name} ${c.status}`)].join("\n");
 }
+var timeKey = (line) => {
+  const m = /^([\d-]+T[\d:]+)(?:\.(\d+))?Z/.exec(line);
+  return m ? `${m[1]}.${(m[2] ?? "").padEnd(9, "0")}` : "";
+};
+var byTime = (a, b) => {
+  const x = timeKey(a), y = timeKey(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+};
 function logRow(line, i) {
   const m = /^(\d{4}-\d\d-\d\dT[\d:.]+Z)\s?(.*)$/.exec(line);
   const at = m ? new Date(m[1]) : null;
@@ -24989,8 +24997,8 @@ async function detailOf(ctx, docker, c) {
   if (!c) return null;
   const [statsOut, logsOut] = await Promise.all([
     c.running ? ctx.run([docker, "stats", "--no-stream", "--format", "json", c.id], { timeoutMs: 6e3 }) : null,
-    // docker logs writes the container's stderr to its own: 2>&1 keeps both.
-    ctx.run(["/bin/sh", "-c", `"$0" logs --tail ${LOG_LINES} --timestamps "$1" 2>&1`, docker, c.id], { timeoutMs: 4e3 })
+    // docker logs writes the container's stderr to its own, so both are read.
+    ctx.run([docker, "logs", "--tail", String(LOG_LINES), "--timestamps", c.id], { timeoutMs: 4e3, stderr: true })
   ]);
   const s = jsonLines(statsOut)[0];
   const cpu = s ? percent(s.CPUPerc) : null;
@@ -25005,7 +25013,7 @@ async function detailOf(ctx, docker, c) {
     mem: s ? percent(s.MemPerc) : null,
     memText: s ? memUse(s.MemUsage) : "\u2013",
     ports: c.ports || "\u2013",
-    logs: String(logsOut ?? "").split("\n").filter((l) => l.trim()).slice(-LOG_LINES).map(logRow).filter((r) => r.text)
+    logs: String(logsOut ?? "").split("\n").filter((l) => l.trim()).sort(byTime).slice(-LOG_LINES).map(logRow).filter((r) => r.text)
   };
 }
 var docker_default = {
@@ -25580,9 +25588,10 @@ var ping_default = {
 
 // src/rooms/registry.mjs
 var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default, http_json_default, docker_default, ping_default].map((p) => [p.type, p]));
-function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
+function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024, stderr = false } = {}) {
   return new Promise((resolve2) => {
-    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" }, windowsHide: true }, (err, stdout) => resolve2(err ? null : String(stdout)));
+    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" }, windowsHide: true }, (err, out, errOut) => resolve2(err ? null : stderr ? `${out}
+${errOut}` : String(out)));
   });
 }
 function parseSetting(st, raw, current) {
