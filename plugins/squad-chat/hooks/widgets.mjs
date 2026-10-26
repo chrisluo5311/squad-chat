@@ -313,14 +313,41 @@ export function pill(els, key, text, color, extra = {}) {
 // the others keep their size, so a status at the end of a row always shows
 // (`right` sets its text against the right edge).
 // One with `width` is a column of that many cells (`right` to right-align).
+// One with `basis` starts that many cells wide and gives way when the row
+// is short (`shrink`, how much faster than the others), and with `fill`
+// takes the space left too. Rows with the same pieces line up.
 // `gap` puts that many cells between the pieces, as a table's columns need.
+// VS Code wraps a row that doesn't fit unless told not to: a long volume's
+// name pushed its "in use" to a line of its own, and Ping's heartbeat went
+// under its server. So the row never wraps, the growing piece is cut
+// instead, and the gap is a column gap.
 export function line(els, key, pieces, { gap = 0 } = {}) {
   const { Box, Text } = els;
-  return Box({ key, flexDirection: "row", gap, children: pieces.filter(Boolean).map((p, i) => (p.width != null
+  return Box({ key, flexDirection: "row", flexWrap: "nowrap", columnGap: gap, children: pieces.filter(Boolean).map((p, i) => (p.width != null
     ? col(els, `p${i}`, p.text, p.width, { right: p.right, color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic })
+    : p.basis != null
+    ? Box({ key: `p${i}`, flexDirection: "column", width: p.basis, flexGrow: p.fill ? 1 : 0, flexShrink: p.shrink ?? 1, minWidth: 0, overflow: "hidden", children: [p.node ?? Text({ key: "t", wrap: "truncate-end", color: p.color, children: p.text })] })
     : p.grow
     ? Box({ key: `p${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: "hidden", justifyContent: p.right ? "flex-end" : "flex-start", children: [p.node ?? Text({ key: "t", wrap: "truncate-end", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, children: p.text })] })
     : Box({ key: `p${i}`, flexShrink: 0, children: [p.node ?? Text({ key: "t", color: p.color, bold: p.bold, dimColor: p.dim, italic: p.italic, backgroundColor: p.bg, children: p.text })] }))) });
+}
+
+// An inline list cut to `max` rows: the rows to draw, and the line after
+// them. Where the pane draws pictures (VS Code) "+ 2 more" is a button that
+// opens the whole list (`open`), and "▴ less" shuts it; the terminal says
+// "+ 2 more" in words. `text` follows it on the line, or stands alone.
+export function inlineCut(els, key, items, max, { open = false, onToggle, text = "" } = {}) {
+  const cut = items.length > max;
+  const shown = cut && !(els.Svg && open) ? items.slice(0, max) : items;
+  const label = !cut ? "" : shown.length < items.length ? `+ ${items.length - shown.length} more` : "▴ less";
+  if (els.Svg && cut) {
+    return { shown, node: line(els, key, [
+      { node: els.Button({ key: `more-${key}`, plain: true, label, onPress: () => onToggle?.() }) },
+      text ? { text, color: theme.muted, grow: true } : null,
+    ], { gap: 1 }) };
+  }
+  const words = [label, text].filter(Boolean).join(" · ");
+  return { shown, node: words ? els.Text({ key, color: theme.muted, wrap: "truncate-end", children: words }) : null };
 }
 
 // A rounded card like the chat's: a bold title, right-aligned meta (text or

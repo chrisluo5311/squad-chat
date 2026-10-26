@@ -56,6 +56,12 @@ Focus 保留您設定的時間長度與完成番茄鐘的日期，Habits 保留�
 
 Monitor 不會進行任何網路連線。它透過 squad-chat 程式碼中一組固定的指令讀取本機狀態（Mac 上為 `vm_stat`、`sysctl`、`netstat`、`df`、`pmset`、`ioreg`，以及已安裝時的 `macmon`，Linux 上為 `/proc` 與 `/sys` 中的檔案以及 `nvidia-smi`），不經過 shell，也不需要 sudo。房間的 manifest 無法指定指令。這些數據僅保存在 bridge 的記憶體中，最多保留最近兩分鐘，僅用於繪製圖表，不會傳送至任何地方，也不會提供給 Claude。
 
+## Ping 和 Docker 執行的內容
+
+Ping 預設為關閉，加入後也不含任何伺服器，只檢查您自己輸入的目標：主機以 `ping` 送出 3 個封包（主機名稱作為單一參數傳入，不經過 shell，也不需要 sudo），`host:port` 測試 TCP 連線，`http(s)://` 網址送出一次 `GET`。房間顯示時每 30 秒檢查一次，其他時候每分鐘一次，除了檢查本身之外不會送出任何內容。最多 90 天的結果存放於 `~/.config/squad-chat/room-data/ping/history.json`，僅限您本人讀取。Share 卡片會顯示伺服器名稱，可用 `/chat set ping share_names off` 隱藏。
+
+Docker 預設為關閉，且不會進行任何網路連線。房間顯示時，它每 5 秒透過本機的 `docker` CLI 讀取一次狀態（`ps`、`images`、`volume ls`、`network ls`、`stats` 和 `logs`）。它只會讀取，無法啟動、停止或刪除任何東西。container 的 log 只顯示在窗格中。Share 卡片僅包含執行中的 container 數量，以及需要注意的 container 名稱。
+
 ## Weather、Tech News、Stocks 和 Lo-fi 的連線對象
 
 這四個房間預設為關閉，開啟時會說明各自的連線對象。它們僅請求顯示所需的內容，不需要帳號、key 或 cookie，也不會傳送任何與您或工作階段相關的資訊：
@@ -71,7 +77,7 @@ bridge 將每個房間限制於其指定的網站，因此房間無法連線至�
 
 Lo-fi 的串流由 mpv 自行取得，不經過 bridge 的 fetch。其電台仍受限於房間的 host，並在檢查房間時與每次播放前各驗證一次，因此商店房間無法藉由播放器連線至未列出的 host。您以 `/lofi add` 自行加入的內容，則會從原始位置播放。加入的檔案與資料夾維持在原處，清單存放於 `room-data/lofi/list.json`。mpv 僅在按下播放後執行，並於工作階段結束時停止。
 
-只有 `/chat-share usage|git|agents|focus|habits|snippet|monitor|weather|news|stock|lofi`，或 snippet 與文章上的 **⇪**，會在您確認預覽後將內容送至聊天室。與 slash 指令的訊息相同，`/snippet` 或 `/tool` 之後輸入的內容不會提供給 Claude。Toolbox 房間不保留任何資料：工具處理的內容與產生的結果僅存在於工作階段的記憶體中，且此房間不提供 Share。
+只有 `/chat-share usage|git|agents|focus|habits|snippet|monitor|weather|news|stock|ping|lofi|docker`，或 snippet 與文章上的 **⇪**，會在您確認預覽後將內容送至聊天室。與 slash 指令的訊息相同，`/snippet` 或 `/tool` 之後輸入的內容不會提供給 Claude。Toolbox 房間不保留任何資料：工具處理的內容與產生的結果僅存在於工作階段的記憶體中，且此房間不提供 Share。
 
 ## 房間商店
 

@@ -69,7 +69,7 @@ export function lineCount(body) {
 // The built-in rooms whose snapshot is a card: a code snippet tagged with the
 // room's name, its first line the card's title. The other rooms share a line
 // of plain chat.
-export const SNAPSHOT_ICONS = { usage: "◔", git: "⎇", agents: "⟡", monitor: "▦" };
+export const SNAPSHOT_ICONS = { usage: "◔", git: "⎇", agents: "⟡", monitor: "▦", ping: "⌁" };
 
 // A card snapshot's title and the lines under it, or null for any other snippet.
 export function snapshotCard({ kind, lang, body }) {

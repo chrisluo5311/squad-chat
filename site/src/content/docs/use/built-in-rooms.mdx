@@ -1,6 +1,6 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks and Lo-fi tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks, Ping, Lo-fi and Docker tabs that sit before your chat rooms.
 ---
 
 These tabs appear before your chat rooms. They require no server and no sign-in, and nothing in them reaches a chat room unless you share it.
@@ -20,9 +20,11 @@ These tabs appear before your chat rooms. They require no server and no sign-in,
 | [☀ Weather](#-weather) | Now, 24 hours and the week | `/chat rooms +weather` |
 | [✦ Tech News](#-tech-news) | Hacker News and tech feeds | `/chat rooms +news` |
 | [$ Stocks](#-stocks) | Taiwan and US quotes | `/chat rooms +stock` |
+| [⌁ Ping](#-ping) | Whether your servers answer, and how fast | `/chat rooms +ping` |
 | [♫ Lo-fi](#-lo-fi) | Music while you work | `/chat rooms +lofi` |
+| [◰ Docker](#-docker) | Containers, images, volumes, networks, and a container's logs | `/chat rooms +docker` |
 
-Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last five access the network or your clipboard, so they must be added manually. In the desktop app, **+** in the header also adds one.
+Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last seven access the network, your clipboard or Docker, so they must be added manually. In the desktop app, **+** in the header also adds one.
 
 ## ◔ Usage
 
@@ -141,11 +143,23 @@ Your cities from [Open-Meteo](https://open-meteo.com), no key: now, the next 24 
 
 A watchlist of Taiwan and US stocks, each with today's line. Set it with `/chat set stock watchlist TAIEX, 2330, AAPL` (up to 12). Prices may be delayed, and none of it is investment advice.
 
+## ⌁ Ping
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/ping.png" alt="The Ping room: five servers, each with its last check, heartbeat and 24-hour uptime, and the one that is down under INCIDENTS." /></figure>
+
+Whether your servers and devices answer, and how fast. Type one into the room's box: a host (`example.com`, `192.168.1.10`) is pinged, `host:port` gets a TCP connection, and an `http(s)://` URL gets one `GET`, timed from DNS to the first byte. Each row shows the last checks as a heartbeat (green up, amber slow, red failed) and the uptime over 24 hours. In a narrow pane the heartbeat and then the uptime make way, so the names and their ✕ always show. Press a row to see its last hour, where its time goes and its last checks, and press it again to close it. A server is down after 3 failed checks in a row, and you get a notification then and when it's back. **INCIDENTS** lists every server that is still down, then the latest outages that ended. **⇪ Share** posts the last 90 days as a card, and `/chat set ping share_names off` hides the names in it. `/chat set ping slow_ms 300` sets when a server counts as slow. The checks and their history stay on this computer.
+
 ## ♫ Lo-fi
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="The Lo-fi room: the player and its volume, and the stations." /></figure>
 
 Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`). Paste a link or a folder into the box to add your own. `p` plays or pauses, and `n` skips. Nothing plays until you press play.
+
+## ◰ Docker
+
+<figure class="shot pane"><img src="/squad-chat/media/rooms/docker.png" alt="The Docker room: the unhealthy container shop-api with its CPU, memory, port and last log lines, above the list of containers." /></figure>
+
+This computer's Docker, through the `docker` CLI: containers, images, volumes and networks, one section at a time. `1` to `4` switch between them, as do the buttons at the top. Press a container's name to see its CPU, memory and last five log lines below the list. The one needing a look (unhealthy or restarting) comes first and is shown until you pick another. The band above the prompt names what needs a look, a crashed container (exited with an error) first and in red. It only reads, and works with Docker Desktop, OrbStack and colima.
 
 ## More rooms, sharing, hiding
 

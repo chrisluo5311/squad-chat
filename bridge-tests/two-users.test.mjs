@@ -7,7 +7,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { Bridge, CuttableProxy, localStackUp, runId, sleep } from "./helpers.mjs";
+import { Bridge, CuttableProxy, localStackUp, runId, sleep, warmRealtime } from "./helpers.mjs";
 
 const up = await localStackUp();
 
@@ -18,6 +18,7 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
   let alice, bob, room;
 
   before(async () => {
+    await warmRealtime();
     await proxy.listen();
     alice = new Bridge("alice", { url: proxy.url });
     bob = new Bridge("bob");
@@ -85,6 +86,7 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
   });
 
   it("delivers messages both ways", async () => {
+    await Promise.all([alice.subscribed(room.id), bob.subscribed(room.id)]);
     const sent = await alice.ok("POST", "/send", { text: "hi bob" });
     const got = await bob.waitFor((e) => e.type === "message" && e.message.id === sent.id, 10_000, "alice's message");
     assert.equal(got.backfill, false);
@@ -157,6 +159,8 @@ describe("two users, two bridges", { skip: !up && "local Supabase is not running
   it("shows who's typing, until they send or go quiet", async () => {
     const typing = (e, name) => e.type === "typing" && e.room === room.id && e.users.some((u) => u.name === name);
     const quiet = (e) => e.type === "typing" && e.room === room.id && e.users.length === 0;
+    // bob just restarted, and a broadcast sent before his channel is back is lost
+    await bob.waitFor((e) => e.type === "status" && e.room === room.id && e.status === "SUBSCRIBED", 15_000, "bob's channel");
 
     let after = since(bob);
     await alice.ok("POST", "/typing", { room: room.id });

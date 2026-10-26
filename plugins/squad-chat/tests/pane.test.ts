@@ -229,6 +229,32 @@ test('band: shows the room above the prompt while the pane is not up, and opens 
   await ui.unmount()
 })
 
+test('band: follows the room with the newest message, and Open goes there', SLOW, async ($, on) => {
+  const seen = recordUi(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  const SIDE = { id: 'r-side', slug: 'side', last_read_id: 0, unread: 0 }
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, SIDE] })
+  bridge.emit(news(1, msg(1, 'bob', 'in the lobby')))
+  await settle()
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◆ #lobby' })).toBeDefined()
+  await ui.unmount()
+
+  // A newer message in #side, while #lobby stays the current room.
+  bridge.emit({ ...msg(2, 'bob', 'over here'), message: { ...msg(2, 'bob', 'over here').message, room: SIDE.id, slug: 'side' }, counted: true, unread: 1 })
+  await settle()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: '◆ #side' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'over here' })).toBeDefined()
+  await ui.press({ key: 'open' })
+  await settle()
+  expect(bridge.calls.some((c: any) => c.path === '/room/select' && c.body.room === SIDE.id)).toBe(true)
+  expect(seen.opened).toEqual(['squad-chat'])
+  await ui.unmount()
+})
+
 test('band: stays out of the way while the pane is shown', SLOW, async ($, on) => {
   recordUi(on, { panes: [{ id: 'squad-chat', title: 'Squad Chat', isShown: true, isFocused: false, isPlaced: true }] })
   const bridge = fakeBridge(on)
@@ -333,6 +359,29 @@ test('a "new" line marks where you had read up to, under a date label', SLOW, as
   expect(await desk.find({ type: 'Svg', alt: 'new messages' })).toBeDefined()
   expect(await desk.find({ type: 'Text', text: /─{4}/ })).toBeUndefined()
   await desk.unmount()
+})
+
+// VS Code's inline pane: the chat room picked from a menu of the rooms
+// joined, each with what's new. One room alone keeps its plain name.
+test('VS Code inline: the chat room is picked from a menu', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  expect(await ui.find({ type: 'Select', key: 'room-pick' })).toBeUndefined()
+  await ui.unmount()
+  const SIDE = { id: 'r-side', slug: 'side', last_read_id: 0, unread: 2 }
+  bridge.emit({ type: 'rooms', current: LOBBY.id, rooms: [LOBBY, SIDE] })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'room-pick' }) as any
+  expect(menu?.props.value).toBe(LOBBY.id)
+  expect(menu?.props.options.map((o: any) => o.label)).toEqual(['#lobby', '#side · 2 new'])
+  await ui.select({ key: 'room-pick', value: 'r-side' })
+  await settle()
+  expect(bridge.calls.some((c: any) => c.path === '/room/select' && c.body.room === 'r-side')).toBe(true)
+  await ui.unmount()
 })
 
 test('room tabs switch rooms when pressed', SLOW, async ($, on) => {
@@ -979,9 +1028,9 @@ test('Usage room: the Requests card draws the context as strata, with plain-word
   expect(await ui.find({ type: 'Text', text: 'REQUESTS' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '2 requests' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /█/ })).toBeDefined()                   // the strata, in block cells
-  expect(await ui.find({ type: 'Text', text: /^ 2(\.\d)?k Read README\.md$/ })).toBeDefined()   // the file's layer, its size first, then what it read
-  expect(await ui.find({ type: 'Text', text: ' 54k fixed + 4.4k new = 59k' })).toBeDefined()   // the context as a sum: bedrock, then what came after
-  expect(await ui.find({ type: 'Text', text: 'next' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^■ Read README\.md 2(\.\d)?k$/ })).toBeDefined()   // the key under the strata, each layer with what it holds
+  expect(await ui.find({ type: 'Text', text: '54k fixed + 4.4k new = 59k' })).toBeDefined()   // the context as a sum: bedrock, then what came after
+  expect(await ui.find({ type: 'Text', text: '  next' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: ' (54k): sent with every request, 96% of the last request. Biggest: MCP tools (31k).' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: "Claude's reply" })).toBeDefined()         // 2.3k, more than the file's 2.1k
   expect(await ui.find({ type: 'Text', text: /#\d/ })).toBeUndefined()                // no request numbers to decode
@@ -1313,6 +1362,16 @@ test('band: a built-in room shows its one-line summary above the prompt', SLOW, 
   const narrow = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('')
   expect(narrow).toContain('☇ Storm 75% · 5-hour 40% · spent $2.00')
   await ui.unmount()
+
+  // VS Code's columns run short of the room the text has: it gets all of it,
+  // and its row ends it with "…" where the band runs out.
+  ui = await $.ui.mount({ ...BAND, surface: 'vscode', props: { ...bandProps, bodyColumns: 40 } })
+  const vsc = await ui.findAll({ type: 'Text' })
+  const all = vsc.map((x: any) => x.text).join('')
+  expect(all).toContain('☇ Storm 75% 150k/200k')          // what 40 columns would have cut
+  expect(all).toContain('· 5-hour 40% · spent $2.00')
+  expect(vsc.find((x: any) => x.text.includes('spent'))?.props?.wrap).toBe('truncate-end')
+  await ui.unmount()
 })
 
 // ---------------------------------------------------------------- function rooms
@@ -1327,6 +1386,26 @@ const snippetsLoaded = (items = SNIPS) => [
   { type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] },
   { type: 'fnroom', id: 'snippet', provider: 'list', data: { items, count: items.length }, at: Date.now() },
 ]
+
+test('Snippet room: a numbered snippet\'s first line leaves room for its tag', SLOW, async ($, on) => {
+  const body = `const answer = await fetch(url).then((r) => r.json()).catch(() => null) // ${'and a long tail '.repeat(20)}`
+  const bridge = fakeBridge(on, { store: { view: 'snippet' } })
+  await bridge.start($)
+  signedIn(bridge)
+  bridge.emit(...snippetsLoaded([
+    { id: 'n1', name: '1', lang: null, body, at: '2026-10-09T01:00:00Z' },
+    { id: 'n2', name: '2', lang: 'typescript', body, at: '2026-10-09T02:00:00Z' },
+  ]))
+  await settle()
+  // The inline pane's list has no preview row, so the first line follows the number.
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  const peeks = (await ui.findAll({ type: 'Text', text: /^ {2}const answer/ })).map((x: any) => x.text)
+  expect(peeks).toHaveLength(2)
+  expect(peeks.every((t: string) => t.endsWith('…'))).toBe(true)
+  // ' typescript' takes 11 cells, so its row's first line is 11 shorter.
+  expect(Math.abs(peeks[0].length - peeks[1].length)).toBe(11)
+  await ui.unmount()
+})
 
 test('Snippet room: a tab, the list with copy and share, and the bridge told what is on show', SLOW, async ($, on) => {
   const copied: string[] = []
@@ -2057,6 +2136,22 @@ test('Stock room: stays off until asked for; then a watchlist colored by each ro
   expect(await band.find({ type: 'Text', text: Q.band })).toBeDefined()
   await band.unmount()
 
+  // Too wide for the band, it ends on a whole item, and a band of one
+  // sentence is cut short too, both with "…".
+  const narrow = { ...bandProps, bodyColumns: 40 }
+  let cut = await $.ui.mount({ ...BAND, surface: 'terminal', props: narrow })
+  expect(await cut.find({ type: 'Text', text: /^2330 2,550 ▼1\.35% ·.*…$/ })).toBeDefined()
+  await cut.unmount()
+  bridge.emit({ type: 'fnroom', id: 'stock', provider: 'q', data: { ...Q, band: 'Quotes are late today because the exchange feed is down' }, at: Date.now() })
+  await settle()
+  cut = await $.ui.mount({ ...BAND, surface: 'terminal', props: narrow })
+  const one = await cut.find({ type: 'Text', text: /^Quotes are late/ })
+  expect(one?.text.endsWith('…')).toBe(true)
+  expect(one?.text.length).toBeLessThan(40)
+  await cut.unmount()
+  bridge.emit({ type: 'fnroom', id: 'stock', provider: 'q', data: Q, at: Date.now() })
+  await settle()
+
   await $.command.run({ command: 'chat-share', args: 'stock' })
   await $.command.run({ command: 'chat', args: 'set stock' })
   expect(logs.slice(-5)).toEqual(['Stocks settings:', '  watchlist: TAIEX, 2330, 0050, ^GSPC, AAPL, NVDA', '  colors: market', '  move: 5', 'Change one with /chat set stock <setting> <value>.'])
@@ -2123,6 +2218,35 @@ test('Lo-fi room on the desktop: cover, time or LIVE, volume beside the buttons,
   await settle()
   expect((await desk.find({ key: 'act-c0-1-1' }) as any)?.props.label).toBe('▶')   // paused: it shows play
   await desk.unmount()
+})
+
+// VS Code's inline pane: the playlist as a menu, the one playing shown,
+// and a pick played. Nothing playing: a first "pick" entry.
+test('Lo-fi room in VS Code: a station or track picked from a menu in the inline pane', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(LOFI_ROOM))
+  room.layout.inline[1] = { ...room.layout.inline[1], split: 3, level: 'p.now.volume' }
+  room.layout.inline.splice(1, 0, { type: 'select', items: 'p.entries', title: 'name', lit: 'on', act: { label: '♫', action: 'play', field: 'id' }, empty: 'Pick a station or track' })
+  const bridge = fakeBridge(on, { store: { view: 'lofi' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [room], invalid: [] })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'rooms +lofi' })
+  await $.command.run({ command: 'chat', args: 'lofi' })
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER({ playing: true }), at: Date.now() })
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'sel-in-1' }) as any
+  expect(menu?.props.value).toBe('s2')
+  expect(menu?.props.options.map((o: any) => o.label)).toEqual(['Lofi Girl', 'Groove Salad'])
+  expect(await ui.find({ type: 'Text', text: '60%' })).toBeDefined()             // the volume, between − and +
+  await ui.select({ key: 'sel-in-1', value: 's1' })
+  expect(bridge.calls.at(-1)).toEqual({ path: '/fnroom/action', body: { room: 'lofi', action: 'play', args: { id: 's1' } } })
+  await ui.unmount()
+  bridge.emit({ type: 'fnroom', id: 'lofi', provider: 'p', data: PLAYER({ playing: false, entries: PLAYER().entries.map((e: any) => ({ ...e, on: '' })) }), at: Date.now() })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  expect((await ui.find({ type: 'Select', key: 'sel-in-1' }) as any)?.props.options[0]).toEqual({ value: '', label: 'Pick a station or track' })
+  await ui.unmount()
 })
 
 // A URL or a path typed in the room's box is added, no /lofi add needed.
@@ -2676,6 +2800,8 @@ test('Habits room: goals added by typing, checked off, counted, renamed and remo
   expect((store.habits as any).goals[0].name).toBe('Read 20 min')
   await ui.input({ key: 'compose', text: 'add water' })
   expect(await ui.find({ type: 'Text', text: "There's already a habit called Water." })).toBeDefined()
+  await bridge.clock.advance(5_000)                                         // a notice goes after 5 seconds
+  expect(await ui.find({ type: 'Text', text: "There's already a habit called Water." })).toBeUndefined()
   await ui.input({ key: 'compose', text: 'Ｒｅａｄ ２０ ｍｉｎ。' })              // full-width, as an IME types it, and a stop
   expect(await ui.find({ type: 'Text', text: "There's already a habit called Read 20 min." })).toBeDefined()
   expect((store.habits as any).goals).toHaveLength(2)
@@ -2694,7 +2820,9 @@ test('Habits room: goals added by typing, checked off, counted, renamed and remo
   expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
   await ui.press({ key: 'habit-h3-delete' })
   expect(await ui.find({ type: 'Button', key: 'notice-undo', label: 'Cancel' })).toBeDefined()
-  await bridge.clock.advance(10_000)                                        // left alone, it goes after 10 seconds
+  await bridge.clock.advance(5_000)                                         // with Cancel beside it, it stays past 5
+  expect(await ui.find({ type: 'Button', key: 'notice-undo', label: 'Cancel' })).toBeDefined()
+  await bridge.clock.advance(5_000)                                         // left alone, it goes after 10 seconds
   expect(await ui.find({ type: 'Button', key: 'notice-undo' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'Removed Check email and its streak.' })).toBeUndefined()
   expect((store.habits as any).goals.map((g: any) => g.name)).toEqual(['Water'])
@@ -2845,6 +2973,63 @@ test('Toolbox room: a tool from the menu, run on what is typed, each result copi
   expect(await term.find({ type: 'Text', text: 'CASE' })).toBeDefined()
   expect(await term.find({ type: 'Text', text: 'user_id' })).toBeDefined()
   await term.unmount()
+})
+
+// Built-in rooms cut their inline lists too: Toolbox's five UUIDs show
+// three, then "+ 2 more", a button in VS Code and words in the terminal.
+test('Toolbox in VS Code: + more opens the inline results, and less shuts them', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'toolbox', sysRooms: ['toolbox'] } })
+  await bridge.start($)
+  await settle()
+  const ids = async (ui: any) => (await ui.findAll({ type: 'Text', text: /^[0-9a-f]{8}-[0-9a-f]{4}-4/ })).length
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  await ui.press({ key: 'tool-again' })
+  expect(await ids(ui)).toBe(3)
+  expect((await ui.find({ key: 'more-tool-more' }) as any)?.props.label).toBe('+ 2 more')
+  await ui.press({ key: 'more-tool-more' })
+  expect(await ids(ui)).toBe(5)
+  expect((await ui.find({ key: 'more-tool-more' }) as any)?.props.label).toBe('▴ less')
+  await ui.press({ key: 'more-tool-more' })
+  expect(await ids(ui)).toBe(3)
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  expect(await ui.find({ type: 'Text', text: '+ 2 more' })).toBeDefined()
+  await ui.unmount()
+})
+
+// VS Code's inline pane: Clawd's mood picked from a menu beside it.
+test('Pet room: VS Code picks the mood from a menu in the inline pane', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'pet', sysRooms: ['pet'] } })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'pet-mode' }) as any
+  expect(menu?.props.value).toBe('auto')
+  expect(menu?.props.options[0].label).toBe('Auto')
+  expect(await ui.find({ type: 'Text', text: 'follows along' })).toBeDefined()
+  await ui.select({ key: 'pet-mode', value: 'cheer' })
+  expect((await ui.find({ type: 'Select', key: 'pet-mode' }) as any)?.props.value).toBe('cheer')
+  expect(await ui.find({ type: 'Text', text: 'kept on' })).toBeDefined()
+  await ui.unmount()
+})
+
+// VS Code's inline pane: the tool picked from a menu, and a button that
+// makes a batch or pastes, so only the tool's own text is typed.
+test('Toolbox room: VS Code picks the tool from a menu in the inline pane', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'toolbox', sysRooms: ['toolbox'] } })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  const menu = await ui.find({ type: 'Select', key: 'tool-pick' }) as any
+  expect(menu?.props.value).toBe('uuid')
+  expect(menu?.props.options.map((o: any) => o.label)).toContain('Hash')
+  await ui.press({ key: 'tool-again' })
+  expect((await ui.findAll({ type: 'Text', text: /^[0-9a-f]{8}-[0-9a-f]{4}-4/ })).length).toBe(3)
+  await ui.select({ key: 'tool-pick', value: 'hash' })
+  expect((await ui.find({ type: 'Select', key: 'tool-pick' }) as any)?.props.value).toBe('hash')
+  expect(await ui.find({ type: 'Button', key: 'tool-paste' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Type or paste text to hash.' })).toBeDefined()
+  await ui.unmount()
 })
 
 test('Toolbox bands: the tools, then the last result, kept clear of ‹ › and Open', SLOW, async ($, on) => {
@@ -3132,4 +3317,134 @@ test('the chat scrolls on its own: ▲ shows older messages, a new one leaves th
   await bridge.clock.advance(200)
   expect(await ui.find({ type: 'Button', key: 'chat-newest' })).toBeUndefined()
   await ui.unmount()
+})
+
+// Buttons as tabs (the Docker room's sections): the one whose `lit` path
+// holds is filled, the others plain, whatever was pressed before.
+test('Docker room: the section shown is the filled tab, the others plain', SLOW, async ($, on) => {
+  const room = {
+    schema: 1, id: 'docker', version: '1.0.0', name: 'Docker', icon: '◰', color: 'sky', description: 'Docker.', author: 'squad-chat', permissions: { hosts: [] },
+    providers: [{ id: 'd', type: 'docker', params: {}, interval: { visible: '5s', background: '1m' } }],
+    layout: { cards: [{ title: 'DOCKER', body: { type: 'buttons', buttons: ['containers', 'images'].map((s) => ({ label: s[0].toUpperCase() + s.slice(1), lit: `d.on.${s}`, action: s })) } }] },
+  }
+  const bridge = fakeBridge(on, { store: { view: 'docker', sysRooms: ['docker'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { type: 'fnrooms', rooms: [room], invalid: [] })
+  const look = async (shown: string) => {
+    bridge.emit({ type: 'fnroom', id: 'docker', provider: 'd', data: { on: { containers: shown === 'containers' || null, images: shown === 'images' || null } }, at: Date.now() })
+    await settle()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+    await settle()
+    const buttons = (await ui.findAll({ type: 'Button' })) as any[]
+    const props_ = (label: string) => buttons.find((x) => x.props.label === label)?.props
+    const out = { containers: props_('Containers'), images: props_('Images') }
+    await ui.unmount()
+    return out
+  }
+  let b = await look('containers')
+  expect(b.containers?.variant).toBe('primary')
+  expect(b.images?.plain).toBe(true)
+  b = await look('images')
+  expect(b.images?.variant).toBe('primary')
+  expect(b.containers?.plain).toBe(true)
+})
+
+// rooms/ping/room.json, as the bridge reports it.
+const PING_ROOM = {"schema": 1, "id": "ping", "version": "1.0.0", "name": "Ping", "icon": "⌁", "color": "sand", "description": "Whether your servers and devices answer and how fast: ping, a TCP port or an HTTP(S) URL, with a heartbeat, 24-hour uptime and 90 days of history.", "author": "squad-chat", "permissions": {"hosts": []}, "settings": {"targets": {"type": "list", "label": "Servers", "default": [], "max": 20, "add": true}, "slow_ms": {"type": "int", "label": "Slow at ms", "default": 500, "min": 1, "max": 60000}, "alert_after": {"type": "int", "label": "Down after this many failed checks", "default": 3, "min": 1, "max": 20}, "alerts": {"type": "bool", "label": "Alerts", "default": true}, "share_names": {"type": "bool", "label": "Share server names", "default": true}, "open": {"type": "string", "label": "Server open", "default": "none"}}, "providers": [{"id": "ping", "type": "ping", "params": {"targets": "$settings.targets", "slow_ms": "$settings.slow_ms", "alert_after": "$settings.alert_after", "alerts": "$settings.alerts", "share_names": "$settings.share_names"}, "interval": {"visible": "30s", "background": "1m"}}], "layout": {"cards": [{"title": "STATUS", "meta": "{ping.meta}", "body": {"type": "tiles", "tiles": [{"value": "● {ping.up}", "sub": "up", "color": "leaf"}, {"value": "◐ {ping.slow}", "sub": "slow", "tone": "ping.slowTone"}, {"value": "○ {ping.down}", "sub": "down", "tone": "ping.downTone"}, {"value": "{ping.uptime24}", "sub": "uptime 24h", "tone": "ping.uptimeTone"}]}}, {"title": "SERVERS", "meta": "{ping.checked}", "body": {"type": "table", "items": "ping.targets", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "name", "grow": true}, {"field": "msText", "width": 7, "right": true, "colorFrom": "tone"}, {"field": "beats", "width": 20, "beats": true}, {"field": "up24", "width": 6, "right": true, "colorFrom": "upTone"}], "pick": {"setting": "open", "field": "id", "as": "ping.open", "toggle": true}, "drop": {"setting": "targets", "field": "target"}, "empty": "Nothing watched yet. Type a host, host:port or an http(s):// URL below."}, "desktop": {"type": "table", "items": "ping.targets", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "name", "grow": true}, {"field": "kind", "width": 7}, {"field": "msText", "width": 7, "right": true, "colorFrom": "tone"}, {"field": "beats", "width": 30, "beats": true}, {"field": "up24", "width": 6, "right": true, "colorFrom": "upTone"}], "pick": {"setting": "open", "field": "id", "as": "ping.open", "toggle": true}, "drop": {"setting": "targets", "field": "target"}, "empty": "Nothing watched yet. Type a host, host:port or an http(s):// URL below."}}, {"title": "DETAILS", "when": "ping.open", "badge": "{ping.open.name}", "badgeTone": "ping.open.tone", "meta": "{ping.open.kind} · {ping.open.checked}", "body": [{"type": "tiles", "tiles": [{"value": "{ping.open.nowText}", "sub": "now", "tone": "ping.open.tone"}, {"value": "{ping.open.avgText}", "sub": "avg 1h"}, {"value": "{ping.open.jitterText}", "sub": "jitter"}, {"value": "{ping.open.lossText}", "sub": "loss", "tone": "ping.open.lossTone"}]}, {"type": "chart", "values": "ping.open.hist", "color": "sand", "caption": "the last hour, ms"}, {"type": "text", "text": "{ping.open.why}", "color": "red"}, {"type": "text", "text": "{ping.open.split}\n{ping.open.cert}"}, {"type": "text", "text": "{ping.open.recent}"}, {"type": "buttons", "buttons": [{"label": "Check", "action": "check"}, {"label": "Pause", "alt": "Resume", "altWhen": "ping.open.paused", "action": "pause"}]}]}, {"title": "INCIDENTS", "when": "ping.hasIncidents", "body": {"type": "table", "items": "ping.incidents", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "text", "grow": true}, {"field": "when", "width": 14, "right": true}]}}], "inline": [{"type": "table", "items": "ping.inline", "columns": [{"field": "dot", "width": 2, "colorFrom": "tone"}, {"field": "name", "grow": true}, {"field": "word", "width": 12, "right": true, "colorFrom": "tone"}, {"field": "beats", "width": 16, "beats": true}], "empty": "Nothing watched yet: /set targets example.com"}, {"type": "text", "text": "{ping.inlineMore}"}], "band": "{ping.band}", "pills": [{"each": "ping.bad", "max": 3, "draw": {"type": "dot"}, "colorFrom": "it.tone", "label": "{it.name}", "sub": "{it.word}"}, {"when": "ping.up", "draw": {"type": "dot"}, "color": "leaf", "value": "{ping.up}", "sub": "up"}, {"when": "ping.count", "value": "{ping.uptime24}", "sub": "24h", "tip": ["Uptime over the last 24 hours", "{ping.meta}"]}], "snapshot": "{ping.share}", "add": "targets", "keys": {"c": "check"}, "hint": "press a server for details · c checks now · /set slow_ms 300", "placeholder": "example.com · nas.local:5000 · https://site/health"}}
+const BEATS = 'u'.repeat(37) + 'xxx'
+const PING_ROW = (over: Record<string, unknown> = {}) => ({ id: 'db.internal:5432', name: 'db.internal:5432', target: 'db.internal:5432', kind: 'TCP', state: 'down', dot: '○', tone: 'red', msText: 'down', beats: BEATS, up24: '93.1%', upTone: 'red', paused: false, word: 'down 18m', nowText: 'down', avgText: '3.1 ms', jitterText: '0.4 ms', lossText: '20%', lossTone: 'red', hist: [3, 3.2, 2.9], recent: '14:20:31  lost · refused', split: '', cert: '', why: 'Down since 14:02 (18m): refused', checked: 'checked 14:20:31', ...over })
+const PING = {
+  targets: [PING_ROW(), PING_ROW({ id: '1.1.1.1', name: '1.1.1.1', target: '1.1.1.1', kind: 'ICMP', state: 'up', dot: '●', tone: 'leaf', msText: '10 ms', beats: 'n'.repeat(30) + 'u'.repeat(10), up24: '100%', upTone: null, word: '10 ms', why: '' })],
+  count: 2, up: 1, slow: 0, down: 1, uptime24: '96.5%', uptimeTone: 'red', downTone: 'red', slowTone: null, meta: '2 servers · slow at 500 ms', checked: 'checked 14:20:31',
+  bad: [], inline: [], inlineMore: '', incidents: [{ id: 'i1', dot: '○', tone: 'red', text: 'db.internal:5432 down · refused', when: '14:02 · 18m' }], hasIncidents: true,
+  band: 'db.internal:5432 down 18m · 1 up · 1.1.1.1 10 ms', share: 'Ping · last 90 days · 2 servers', open: null, alerts: [],
+}
+const pingLoaded = (open = 'none') => [
+  { type: 'fnrooms', rooms: [SNIPPET_ROOM, PING_ROOM], invalid: [] },
+  { type: 'fnsettings', id: 'ping', values: { targets: ['db.internal:5432', '1.1.1.1'], slow_ms: 500, alert_after: 3, alerts: true, share_names: true, open } },
+  { type: 'fnroom', id: 'ping', provider: 'ping', data: PING, at: Date.now() },
+]
+
+// VS Code's pane can't scroll, so "+ 3 more" under an inline list is a
+// button that opens it all, and "▴ less" shuts it. The terminal keeps the words.
+test('Ping room in VS Code: + more opens the whole inline list, and less shuts it', SLOW, async ($, on) => {
+  const room = JSON.parse(JSON.stringify(PING_ROOM))
+  room.layout.inline = [{ type: 'table', items: 'ping.targets', max: 1, more: '{ping.uptime24} up over 24 h', columns: room.layout.inline[0].columns }]
+  const bridge = fakeBridge(on, { store: { view: 'ping', sysRooms: ['ping'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, { ...pingLoaded()[0], rooms: [SNIPPET_ROOM, room] }, ...pingLoaded().slice(1))
+  await settle()
+  const names = async (ui: any) => (await ui.findAll({ type: 'Text', text: /^(db\.internal:5432|1\.1\.1\.1)$/ })).length
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('inline') })
+  expect(await names(ui)).toBe(1)
+  expect((await ui.find({ key: 'more-in-0' }) as any)?.props.label).toBe('+ 1 more')
+  expect(await ui.find({ type: 'Text', text: '96.5% up over 24 h' })).toBeDefined()
+  await ui.press({ key: 'more-in-0' })
+  expect(await names(ui)).toBe(2)
+  expect((await ui.find({ key: 'more-in-0' }) as any)?.props.label).toBe('▴ less')
+  await ui.press({ key: 'more-in-0' })
+  expect(await names(ui)).toBe(1)
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('inline') })
+  expect(await ui.find({ key: 'more-in-0' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '+ 1 more · 96.5% up over 24 h' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Ping room: a heartbeat per server, pressed open for its details and pressed again to close', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'ping', sysRooms: ['usage', 'ping'], roomsOffered: ['usage', 'git', 'agents', 'snippet'] } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...pingLoaded())
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } } })
+  await settle()
+  // The last checks that fit beside the whole names, a mark a cell: 13 up, then 3 failed.
+  expect(await ui.find({ type: 'Text', text: '▮'.repeat(13) })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '▮▮▮' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '······' })).toBeDefined()             // not checked yet, faint
+  expect((await ui.find({ key: 'pick-c1-db.internal:5432' }) as any)?.props?.label).toBe('db.internal:5432')
+  expect(await ui.find({ type: 'Text', text: 'INCIDENTS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'DETAILS' })).toBeUndefined()           // nothing open
+  // A narrow pane: the heartbeat and the uptime give way, a name is cut with
+  // "…" rather than wrapped, and the ✕ stays.
+  await ui.unmount()
+  const narrow = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), bodyColumns: 30, scroll: { offset: 0, bodyRows: 60 } } })
+  await settle()
+  expect(await narrow.find({ type: 'Text', text: '▮▮▮' })).toBeUndefined()
+  expect(await narrow.find({ type: 'Text', text: '93.1%' })).toBeUndefined()
+  expect((await narrow.find({ key: 'pick-c1-db.internal:5432' }) as any)?.props?.label).toBe('db.internal…')
+  expect(await narrow.find({ key: 'drop-c1-db.internal:5432' })).toBeDefined()
+  await narrow.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } } })
+  await settle()
+  // Nothing is dimmed while no row is picked.
+  expect((await ui.find({ key: 'pick-c1-1.1.1.1' }) as any)?.props?.dimColor).toBe(false)
+  bridge.replies['/fnroom/settings'] = (b) => [200, { values: { [b.key]: b.value } }]
+  await ui.press({ key: 'pick-c1-db.internal:5432' })
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/settings').at(-1)?.body).toEqual({ room: 'ping', key: 'open', value: 'db.internal:5432' })
+  await ui.unmount()
+  bridge.emit({ type: 'fnsettings', id: 'ping', values: { targets: ['db.internal:5432', '1.1.1.1'], slow_ms: 500, alert_after: 3, alerts: true, share_names: true, open: 'db.internal:5432' } })
+  await settle()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 80 } } })
+  await settle()
+  expect(await ui.find({ type: 'Text', text: 'DETAILS' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Down since 14:02 (18m): refused' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '14:20:31  lost · refused' })).toBeDefined()
+  expect((await ui.find({ key: 'pick-c1-db.internal:5432' }) as any)?.props?.label).toBe('▾ db.internal:5432')
+  // Pressed again, the setting goes back to its default and the details close.
+  await ui.press({ key: 'pick-c1-db.internal:5432' })
+  expect(bridge.calls.filter((c) => c.path === '/fnroom/settings').at(-1)?.body).toEqual({ room: 'ping', key: 'open', value: 'default' })
+  await ui.unmount()
+
+  // The desktop draws each check as a bar of its own.
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Svg', alt: '3 failed of the last 30 checks' })).toBeDefined()
+  await desk.unmount()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: '⌁ Ping' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: 'db.internal:5432 down 18m · 1 up · 1.1.1.1 10 ms' })).toBeDefined()
+  await band.unmount()
 })

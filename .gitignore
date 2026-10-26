@@ -7,5 +7,12 @@ plugins/squad-chat/tsconfig.json
 supabase/.temp/
 .env*
 
+# Claude Code: only the shared settings, hooks and skills are tracked
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/hooks/local/
+!.claude/skills/
+
 # Local planning notes, not part of the project
 docs/PLAN.md

@@ -34,7 +34,7 @@ description: Every squad-chat slash command, with a description and examples.
 | `/chat-share [#room]` | Share the text you selected, or else the last code block in Claude's reply, to the current room or the one you name. You see it first, then `/chat-share send` posts it (or `/chat-share cancel`). |
 | `/chat-share diff [path] [#room]` | Share your uncommitted changes (`git diff HEAD`), all of them or one file's |
 | `/chat-share to #room` | Send what is waiting in the preview to another of your rooms instead. `/chat-share send #room` picks the room and posts in one go. |
-| `/chat-share usage` / `git` / `agents` / `focus` / `habits` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
+| `/chat-share usage` / `git` / `agents` / `focus` / `habits` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` `[#room]` | Share a snapshot of a built-in room to the current room or the one you name |
 
 ### Snippets
 
@@ -58,9 +58,9 @@ description: Every squad-chat slash command, with a description and examples.
 | --- | --- |
 | `/chat notify on` / `off` | Show a notification when someone mentions `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and other members see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then summarizes what you missed. |
-| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
+| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. The **‹** and **›** buttons on the band do the same, one room at a time. |
-| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, or `all`, or `none`. `+name` and `-name` add or drop one. |
+| `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `ping`, `lofi`, `docker`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | Drive the Focus room's timer from the prompt. `/focus` alone opens the room. |
 | `/habit add <name> [x<times>]` / `done <name>` / `undo <name>` / `remove <name>` / `rename <old> -> <new>` | Set up and check off the Habits room's goals from the prompt. `/habit` alone opens the room. |
 | `/tool <name> [input]` | Run one of the [Toolbox](/squad-chat/use/built-in-rooms/#-toolbox) room's tools, such as `/tool uuid 5`, `/tool hash hello` or `/tool time 1739000000`, and show it. `/tool` alone opens the room. |
@@ -79,6 +79,9 @@ description: Every squad-chat slash command, with a description and examples.
 | `/chat set stock watchlist TAIEX, 2330, AAPL` / `+2454` / `-NVDA` | The watchlist, up to 12. A Taiwan code, `TAIEX`, or any Yahoo symbol such as `7203.T` |
 | `/chat set stock colors red-up` / `green-up` | One color rule for every market, instead of each market's own |
 | `/chat set stock move 3` | Notify when a stock moves 3% in a day (`0` disables this, 5 by default) |
+| `/chat set ping slow_ms 300` | When a server counts as slow, in ms (500 by default) |
+| `/chat set ping alert_after 5` / `alerts off` | How many failed checks in a row make a server down (3 by default), or disable its notifications |
+| `/chat set ping share_names off` | Leave the servers' names out of the Share card |
 | `/chat set monitor cpu_temp 90` / `memory 90` / `alerts off` | Monitor's thresholds, or disable its notifications |
 
 ## In the pane

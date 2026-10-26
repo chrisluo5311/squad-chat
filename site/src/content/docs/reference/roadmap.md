@@ -23,6 +23,8 @@ description: What is done and what is next.
 - [x] The Monitor room
 - [x] The Stocks room
 - [x] The Lo-fi room
+- [x] The Ping room
+- [x] The Docker room
 - [x] The room store: browse, install, update and remove rooms, written by anyone, from Claude Code
 - [x] A generic JSON provider, so store rooms can read any API their manifest names
 - [x] Alerts any room can declare in its manifest

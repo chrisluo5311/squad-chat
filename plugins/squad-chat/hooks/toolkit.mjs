@@ -374,7 +374,7 @@ export const TOOLS = {
     const st = jwtState(payload, now);
     return { rows, status: { text: `${st.text} · signature not checked`, tone: st.tone }, band: { meta: String(header.alg ?? "?"), text: st.text } };
   } },
-  uuid: { label: "UUID", group: GROUP_GENERATE, generates: true, hint: "5 · v7 · upper · nodash", run(input) {
+  uuid: { label: "UUID", group: GROUP_GENERATE, generates: true, hint: "Options to type: a count, v7, upper, nodash (e.g. 3 v7)", run(input) {
     const o = options(input);
     const n = clampN(o.n, 1, 20, 5);
     const v7 = o.has("v7");
@@ -386,7 +386,7 @@ export const TOOLS = {
     const meta = `${v7 ? "v7" : "v4"} ×${n}`;
     return { rows: ids.map((id) => row("", id)), mode: meta, copyAll: ids.join("\n"), band: { meta, text: ids[0] } };
   } },
-  ulid: { label: "ULID", group: GROUP_GENERATE, generates: true, hint: "5 · or paste a ULID to read its time", run(input, now) {
+  ulid: { label: "ULID", group: GROUP_GENERATE, generates: true, hint: "Type a count, or paste a ULID to read its time", run(input, now) {
     const t = String(input ?? "").trim();
     if (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(t)) {
       const ms = ulidTime(t);
@@ -404,7 +404,7 @@ export const TOOLS = {
     const s256 = rows[2].text;
     return { rows, note: `of ${bytes.length} byte${bytes.length === 1 ? "" : "s"}`, band: { meta: "sha256", text: `${s256.slice(0, 12)}…${s256.slice(-8)}` } };
   } },
-  password: { label: "Password", group: GROUP_GENERATE, generates: true, hint: "20 · nosym · digits", run(input) {
+  password: { label: "Password", group: GROUP_GENERATE, generates: true, hint: "Options to type: a length, nosym, digits (e.g. 32 nosym)", run(input) {
     const o = options(input);
     const len = clampN(o.n, 4, 128, 20);
     const sets = o.has("digits") ? ["0123456789"]
@@ -419,7 +419,7 @@ export const TOOLS = {
     const strength = bits < 50 ? { text: "weak", tone: "bad" } : bits < 80 ? { text: "fair", tone: "warn" } : { text: "strong", tone: "ok" };
     return { rows: [row("", pw, { secret: true })], status: { text: `${strength.text} · ${bits} bits`, tone: strength.tone }, strength: strength.text, mode: `${len} chars`, band: { meta: `${len} chars`, text: pw, secret: true } };
   } },
-  lorem: { label: "Lorem", group: GROUP_GENERATE, generates: true, hint: "3 sentences · or another number", run(input) {
+  lorem: { label: "Lorem", group: GROUP_GENERATE, generates: true, hint: "Type how many sentences (3 if none)", run(input) {
     const n = clampN(options(input).n, 1, 20, 3);
     const text = ["Lorem ipsum dolor sit amet, consectetur adipiscing elit.", ...Array.from({ length: n - 1 }, sentence)].join(" ");
     const words = text.split(/\s+/).length;

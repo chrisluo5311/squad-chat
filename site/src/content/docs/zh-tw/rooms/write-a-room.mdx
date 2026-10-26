@@ -68,7 +68,9 @@ import BandGallery from "../../../../components/BandGallery.astro";
 | `quotes` | `watchlist`、`colors`（`market`、`red-up`、`green-up`）、`move` | `quotes[]`（`symbol`、`name`、`priceText`、`pctText`、`arrow`、`color`、`spark`、`line`（當日價格）、`volText`、`when`）、`markets`、`statusText`、`statusTone`、`band`、`note`、`updated` |
 | `local-list` | `max` | `items[]`（`id`、`name`、`lang`、`body`）、`count`、`latest`（`name`、`lang`） |
 | `sysinfo` | `alerts`、`cpu_temp`、`memory` | `cpu`（含 `hist`、`tone`、`temp`）、`mem`（含 `tone`）、`gpu`、`net`、`disk`、`battery`（含 `charging`、`tone`）、`band`…（請參閱 Monitor 房間的 manifest） |
+| `ping` | `targets`（必須是一個預設為空的清單設定：Ping 只檢查使用者自己輸入的目標）、`slow_ms`、`alert_after`、`alerts`、`share_names`、`open` | `targets[]`（`id`、`name`、`kind`、`state`、`dot`、`tone`、`msText`、`beats`、`up24`，詳情用的 `avgText`、`jitterText`、`lossText`、`hist`、`split`、`cert`、`recent`、`why`）、`up`、`slow`、`down`、`uptime24`、`incidents[]`、`band`、`share`（請參閱 Ping 房間的 manifest） |
 | `player` | `stations`（https，在房間的 host 上）、`volume` | `now`、`playing`、`entries[]`、`band`、`share`（請參閱 Lo-fi 房間的 manifest） |
+| `docker` | `container`（在 `detail` 顯示的名稱） | `containers[]`、`images[]`、`volumes[]`、`networks[]`、`on`（顯示中的分區）、`detail`、`down`、`band`、`share`，以及 action `containers`、`images`、`volumes`、`networks`（請參閱 Docker 房間的 manifest） |
 
 每個 provider 只能連線至其支援的 host，且 manifest 必須同時列出這些 host。`rss` 和 `http-json` 會讀取任何指定的網址，因此僅由 manifest 的清單決定其可連線範圍。squad-chat 內建的房間放在 [`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms)，提供每種 provider 的完整範例。
 
@@ -111,12 +113,12 @@ import BandGallery from "../../../../components/BandGallery.astro";
 
 | 元件 | 欄位 |
 | --- | --- |
-| `list` | `items`（指向清單的路徑）、`title`，以及可選的 `mark`（標題前的短欄位，例如 Lo-fi 的 ♫）、`tag`、`preview`、`copy`（⧉）、`share`（⇪）、`act`（每列一個按鈕：`label`、`action`、`field`）、`max`、`empty` |
-| `table` | `items`、`columns`（每欄一個 `field`，以及可選的 `label`、`width`、`grow`、`right`、`color` 或 `colorFrom`）、`drop`（每列一個 ✕，將該列從清單設定中移除：`setting`、`field`）、`pick`（按下的列會依 `field` 存進字串 `setting`，並顯示在路徑 `as`，例如 Weather 的城市選 `wx.first`）、`max`、`empty` |
+| `list` | `items`（指向清單的路徑）、`title`，以及可選的 `mark`（標題前的短欄位，例如 Lo-fi 的 ♫）、`tag`、`preview`、`copy`（⧉）、`share`（⇪）、`act`（每列一個按鈕：`label`、`action`、`field`）、`max`、`more`、`empty` |
+| `table` | `items`、`columns`（每欄一個 `field`，以及可選的 `label`、`width`、`grow`、`right`、`color` 或 `colorFrom`，或用 `beats` 把像 `"uusx"` 的欄位畫成心跳條，最新的在右邊）、`drop`（每列一個 ✕，將該列從清單設定中移除：`setting`、`field`）、`pick`（按下的列會依 `field` 存進字串 `setting`，並顯示在路徑 `as`，例如 Weather 的城市選 `wx.first`。加上 `toggle` 時不會變暗，再按一次已選的列會把設定恢復預設，例如 Ping 的詳情收起）、欄位的 `under`（在能畫圖的面板，例如 VS Code，這欄會移到該列下方自成一行）、`max`、`more`、`empty`。在終端機中，含 `beats` 或 `pick` 的表格會依窗格寬度調整：心跳條先變短再隱藏，接著隱藏最右邊的欄位，讓 `grow` 欄和 ✕ 一定顯示，過長的名稱以 … 結尾。清單或表格被截短時，結尾是「+ 3 more」再接 `more` 的文字。在 VS Code 中「+ 3 more」是按鈕，按下展開整個清單，「▴ less」收回 |
 | `tiles` | `tiles`：最多 6 格，每格一個 `value` 和 `sub` 範本 |
 | `meter` | `label`、`value`（指向百分比的路徑）、`right`、`color` |
 | `text` | `text`，一個範本。所有空位都是空的那一行會被省略。 |
-| `buttons` | `buttons`：最多 8 個，每個都有 `label` 和它的 provider 的一個 `action` |
+| `buttons` | `buttons`：最多 8 個，每個都有 `label` 和它的 provider 的一個 `action`，也可加上 `lit`（一個路徑：路徑有值時該按鈕填滿顯示，其他按鈕改為一般樣式，像分頁一樣） |
 
 表格欄位寬 `width` 格（未設定時是 12）。標記 `grow` 的欄位會佔用剩下的空間，沒有的話就是最後一個沒有 `width` 的欄位。
 
@@ -136,6 +138,7 @@ import BandGallery from "../../../../components/BandGallery.astro";
 | `strip` | `items`、`title`，以及可選的 `icon`、`value`、`sub`、`note`、`lit`：將項目以直欄呈現，`lit` 那一欄加上外框 |
 | `sun` | `rise`、`set`、`value`（一天中的 0 到 100）、`sub`、`note`：一道有太陽在上面的弧線 |
 | `media` | `title`、`sub`、`progress`、`elapsed`、`total`、`live`、`playing`、`empty`：正在播放的內容 |
+| `select` | `items`、`title`、`act`，以及可選的 `lit`、`empty`：項目的下拉選單，顯示 `lit` 那一項，選到的交給 `act` 的 action。只在能畫圖的面板出現，例如 VS Code |
 
 在桌面版上，`list` 還接受更多欄位：`code`（將 preview 顯示為程式碼區塊）、`score`（以 Hacker News 的樣式顯示文章）、`group`（依每個值分組並加上小標籤）、`open`（可開啟的連結）、搭配 `pause` 的 `lit`（正在播放的那一列），以及 `remove`（執行某個動作的 ✕）。`buttons` 接受 `split` 和 `level`，在按鈕之間顯示數值（"− 60% +"）。[`plugins/squad-chat/rooms/`](https://github.com/chrisluo5311/squad-chat/tree/main/plugins/squad-chat/rooms) 中的 Weather、Lo-fi、Tech News、Stocks、Monitor 和 Snippets 房間皆有 `desktop` body 可供參考。
 

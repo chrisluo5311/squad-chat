@@ -8,7 +8,7 @@
 
 import { state } from "./state.mjs";
 import { theme } from "./theme.mjs";
-import { line, card, stackCards, cells, clip } from "./widgets.mjs";
+import { line, card, stackCards, cells, clip, inlineCut } from "./widgets.mjs";
 import * as K from "./bandkit.mjs";
 import { draw, label, value, sub, msg, chip } from "./bands.mjs";
 import { TOOLS, GROUPS, TOOL_IDS, findTool, runTool, detectClip } from "./toolkit.mjs";
@@ -205,18 +205,33 @@ export function toolboxDock(els, w, capacity, handlers) {
   return stackCards(els, [menuCard(els, tb, w, handlers), toolCard(els, tb, w, handlers)], capacity, handlers.scroll);
 }
 
-// The inline pane: the tool on show and its first results.
+// The inline pane: the tool on show and its first results. Where the pane
+// draws pictures (VS Code) the tool is picked from a menu in the head, and
+// a button beside it makes another batch or pastes what's copied, so
+// nothing has to be typed but the tool's own text.
 export function toolboxInline(els, w, handlers) {
+  const { Select, Button } = els;
   const tb = state.toolbox;
   const tool = TOOLS[tb.tool];
   const out = tb.out;
+  const pick = els.Svg && Select;
   const head = line(els, "head", [
     { text: `${TOOLBOX_META.icon} ${TOOLBOX_META.label}`, bold: true, color: SAND },
-    { text: `  ${tool.label}${out?.mode ? ` ${out.mode}` : ""}`, color: theme.muted, grow: true },
+    pick ? { text: " " } : null,
+    pick ? { node: Select({ key: "tool-pick", value: tb.tool, options: TOOL_IDS.map((id) => ({ value: id, label: TOOLS[id].label })), onSelect: (id) => handlers.onToolPick?.(id) }) } : null,
+    { text: pick ? (out?.mode ? `  ${out.mode}` : "") : `  ${tool.label}${out?.mode ? ` ${out.mode}` : ""}`, color: theme.muted, grow: true },
+    pick ? { node: tool.generates
+      ? Button({ key: "tool-again", plain: true, label: out ? "↻ again" : "↻ make", onPress: () => handlers.onToolAgain?.() })
+      : Button({ key: "tool-paste", plain: true, label: "⧉ paste", onPress: () => handlers.onToolPaste?.() }) } : null,
   ]);
-  if (!out) return [head, els.Text({ key: "hint", color: theme.muted, wrap: "wrap", children: tool.hint })];
+  // Nothing run yet, or a tool waiting for text: what to type.
+  if (!out || !out.rows.length) {
+    const why = out?.error ? { text: out.error, color: theme.warn } : { text: out?.note ?? tool.hint, color: theme.muted };
+    return [head, els.Text({ key: "hint", color: why.color, wrap: "wrap", children: why.text })];
+  }
   const labelW = Math.min(10, Math.max(0, ...out.rows.map((r) => cells(r.label))));
-  return [head, ...out.rows.slice(0, 3).map((r, i) => resultRow(els, tb, { ...r, block: false, text: r.text.split("\n")[0] }, i, w, handlers, labelW).node)];
+  const { shown, node } = inlineCut(els, "tool-more", out.rows, 3, { open: state.moreOpen.has("toolbox:in"), onToggle: () => handlers.onToggleMore?.("toolbox:in") });
+  return [head, ...shown.map((r, i) => resultRow(els, tb, { ...r, block: false, text: r.text.split("\n")[0] }, i, w, handlers, labelW).node), node].filter(Boolean);
 }
 
 // ---------------------------------------------------------------- the band

@@ -63,6 +63,7 @@ export const state = {
   collapsed: new Set(),   // sessions whose agent trees are folded in the Agents room
   addingRoom: false,      // the desktop header's "+" is open: the rooms without a tab
   join: null,             // the desktop header's "＋ join": { step: "name" | "pass", name, error }
+  moreOpen: new Set(),    // VS Code's lists opened past their rows ("room:widget"), for this session
   dockScroll: { view: null, offset: 0, max: 0 },
   chatScroll: { room: null, back: 0 },   // the chat scrolled up: `back` of the newest messages hidden below   // the docked room's cards, scrolled past `offset` rows
   ended: false,
@@ -154,9 +155,21 @@ export function typingText(roomId = state.current) {
   return "several people are typing…";
 }
 
-// The latest message in the current room, for the band.
-export function lastMessage() {
-  return roomMessages().at(-1) ?? null;
+// The latest message in a room (the current one unless said), for the band.
+export function lastMessage(roomId = state.current) {
+  return roomMessages(roomId).at(-1) ?? null;
+}
+
+// The room the band shows: the one with the newest message, whichever room
+// that is. Message ids grow across all rooms. With no messages anywhere, the
+// current room.
+export function bandRoom() {
+  let best = null;
+  for (const r of state.rooms) {
+    const id = lastMessage(r.id)?.id ?? -Infinity;
+    if (id > (best?.id ?? -Infinity)) best = { room: r, id };
+  }
+  return best?.room ?? currentRoom();
 }
 
 function addMessage(m) {

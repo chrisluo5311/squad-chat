@@ -5,7 +5,7 @@
 
 import { state } from "./state.mjs";
 import { theme, palette, level, nameColor } from "./theme.mjs";
-import { rowsFor, meter, tiles, line, card, stackCards, stretchBar, barNode, bigNumber, lineChart, sparkline } from "./widgets.mjs";
+import { rowsFor, cells, clip, meter, tiles, line, card, stackCards, stretchBar, barNode, bigNumber, lineChart, sparkline } from "./widgets.mjs";
 import * as K from "./bandkit.mjs";
 import { capsule, draw, label as pLabel, value as pValue, sub as pSub, msg as pMsg, tag as pTag } from "./bands.mjs";
 
@@ -34,6 +34,10 @@ export function fill(template, data) {
 // A text widget's text: a line whose holes came out empty takes no room.
 const fillText = (template, data) => fill(template, data).split("\n").filter((l) => l.trim()).join("\n");
 
+// About the cells the ⧉ and ⇪ buttons take after a list row's text, and
+// the most of a snippet's first line VS Code is handed (its row cuts it).
+const PEEK_BUTTONS = 12;
+const PEEK_MAX = 200;
 const firstLine = (s) => String(s ?? "").split("\n").find((l) => l.trim()) ?? "";
 const color = (name, fallback) => palette[name] ?? fallback;
 const muted = (els, key, text) => els.Text({ key, color: theme.muted, wrap: "truncate-end", children: text });
@@ -462,7 +466,34 @@ function sunWidget(els, b, data, w, key) {
   ], height: 7 };
 }
 
+// A heartbeat ("uusx…", newest last) in `width` cells, the newest at the
+// right: up green, slow amber, down red, not yet checked faint. The terminal
+// draws a mark a cell; the desktop a rounded bar each, as Uptime Kuma does,
+// stretched across its column, which narrows before the name does in a
+// small pane.
+const BEAT_COLORS = { u: theme.online, s: theme.amber, x: theme.error };
+export function beatsNode(els, key, beats, width) {
+  const { Box, Text, Svg } = els;
+  const shown = beats.slice(-width).padStart(width, "n");
+  if (Svg) {
+    const W = width * 10, H = 14, step = W / width;
+    const rects = [...shown].map((b, i) => `<rect x="${(i * step + 1.5).toFixed(1)}" y="0" width="${(step - 3).toFixed(1)}" height="${H}" rx="1.5" fill="${BEAT_COLORS[b] ?? "#3D3D42"}"/>`).join("");
+    const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${rects}</svg>`;
+    return Svg({ key, source, alt: `${[...shown].filter((b) => b === "x").length} failed of the last ${width} checks`, height: H });
+  }
+  // Runs of one color, each a Text: a mark a cell.
+  const runs = [];
+  for (const b of shown) {
+    if (runs.length && runs.at(-1).b === b) runs.at(-1).n++;
+    else runs.push({ b, n: 1 });
+  }
+  return Box({ key, flexDirection: "row", flexShrink: 0, width, children: runs.map((r, i) => Text({ key: `r${i}`, color: BEAT_COLORS[r.b] ?? theme.muted, dimColor: !BEAT_COLORS[r.b], children: (BEAT_COLORS[r.b] ? "▮" : "·").repeat(r.n) })) });
+}
+
 const btnLabel = (x, data) => (x.alt && x.altWhen && lookup(data, x.altWhen) ? x.alt : x.label);
+// Buttons as tabs, as Toolbox's chips: the one whose `lit` path holds is
+// filled, and once any button has a `lit` the others are drawn plain.
+const btnLook = (b, x, data) => (!b.buttons.some((y) => y.lit) ? {} : x.lit && lookup(data, x.lit) ? { variant: "primary" } : { plain: true, dimColor: false });
 
 // One widget's rows, at most `limit` of them: { nodes, height }.
 function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w", room } = {}) {
@@ -470,7 +501,7 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
   if (b.type === "buttons" && els.Svg && b.split) {
     // The desktop: the first `split` buttons at the left, the rest at the
     // right around the level they move ("− 60% +").
-    const btn = (x, i) => Button({ key: `act-${key}-${i}`, label: btnLabel(x, data), onPress: () => handlers.onAction?.(room, { provider: x.provider, action: x.action, args: x.args ?? {} }) });
+    const btn = (x, i) => Button({ key: `act-${key}-${i}`, label: btnLabel(x, data), ...btnLook(b, x, data), onPress: () => handlers.onAction?.(room, { provider: x.provider, action: x.action, args: x.args ?? {} }) });
     const level = b.level != null ? Number(lookup(data, b.level)) : NaN;
     const right = b.buttons.slice(b.split).map((x, i) => btn(x, b.split + i));
     if (Number.isFinite(level) && right.length) right.splice(Math.ceil(right.length / 2), 0, Text({ key: "level", bold: true, color: accent, children: `${Math.round(level)}%` }));
@@ -481,9 +512,25 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     ] })], height: 1 };
   }
   if (b.type === "buttons") {
-    return { nodes: [Box({ key, flexDirection: "row", gap: 1, flexWrap: "wrap", children: b.buttons.map((btn, i) => Box({ key: `b${i}`, flexShrink: 0, children: [
-      Button({ key: `act-${key}-${i}`, label: btnLabel(btn, data), onPress: () => handlers.onAction?.(room, { provider: btn.provider, action: btn.action, args: btn.args ?? {} }) }),
+    return { nodes: [Box({ key, flexDirection: "row", columnGap: 1, flexWrap: "wrap", children: b.buttons.map((btn, i) => Box({ key: `b${i}`, flexShrink: 0, children: [
+      Button({ key: `act-${key}-${i}`, label: btnLabel(btn, data), ...btnLook(b, btn, data), onPress: () => handlers.onAction?.(room, { provider: btn.provider, action: btn.action, args: btn.args ?? {} }) }),
     ] })) })], height: 1 };
+  }
+  if (b.type === "select") {
+    // Where the pane draws pictures: a menu of the items, the `lit` one
+    // picked, or a first "pick one" when none is. The terminal has its box.
+    const all = lookup(data, b.items);
+    const items = Array.isArray(all) ? all : [];
+    if (!els.Svg || !els.Select || !items.length) return { nodes: [], height: 0 };
+    const field = b.act.field;
+    const options = items.map((it) => ({ value: String(lookup(it, field)), label: show(lookup(it, b.title)) }));
+    const on = b.lit ? items.find((it) => lookup(it, b.lit)) : null;
+    const value = on ? String(lookup(on, field)) : "";
+    if (!on) options.unshift({ value: "", label: b.empty ?? "Pick one" });
+    return { nodes: [Box({ key, flexDirection: "row", flexWrap: "nowrap", children: [els.Select({
+      key: `sel-${key}`, label: b.act.label, value, options,
+      onSelect: (v) => { if (v) handlers.onAction?.(room, { provider: b.act.provider, action: b.act.action, args: { [field.split(".").at(-1)]: v } }); },
+    })] })], height: 1 };
   }
   if (b.type === "list" || b.type === "table") {
     const all = lookup(data, b.items);
@@ -497,7 +544,15 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     const per = b.type === "list" && b.preview ? 2 : 1;
     let n = Math.min(items.length, b.max ?? items.length);
     if (header + n * per > limit) n = Math.max(0, Math.floor((limit - header - 1) / per));
+    // Where the pane draws pictures (VS Code), "+ 3 more" is a button that
+    // opens the whole list, and "▴ less" shuts it: the pane grows to fit,
+    // as it can't scroll. `more` is a line of its own after it, or alone.
+    const openKey = `${room}:${key}`;
+    const cut = n < items.length;
+    const opened = cut && !!els.Svg && state.moreOpen.has(openKey);
+    if (opened) n = items.length;
     const more = items.length - n;
+    const moreText = b.more ? fill(b.more, data) : "";
     const nodes = [];
     // The column marked `grow` takes the row's spare space, or else the last
     // one when it has no width.
@@ -508,8 +563,45 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
     const dropList = dropSt ? state.fn.get(room)?.settings?.[b.drop.setting] ?? dropSt.default ?? [] : [];
     const canDrop = !!dropSt && dropList.length > (dropSt.min ?? 0);
     const picked = b.pick ? lookup(data, `${b.pick.as}.${b.pick.field}`) : null;
+    // On the desktop a heartbeat column takes the space the names leave, so
+    // the names get one width, the longest's, and every row lines up.
+    const growCol = b.type === "table" ? b.columns.findIndex((c, i) => grows(c, i)) : -1;
+    const nameCells = els.Svg && growCol >= 0 && b.columns.some((c) => c.beats && !c.under)
+      ? Math.max(...items.slice(0, n).map((it) => cells(show(lookup(it, b.columns[growCol].field))))) + (b.pick?.toggle ? 2 : 0)
+      : 0;
+    // In the terminal the columns are counted out to fit `w`, so the name
+    // and the ✕ always show: a heartbeat gives way to the name, and goes
+    // when fewer than 3 marks would fit, then the columns at the right go
+    // until the name has 6 cells, and a name too long ends in "…".
+    const beatCol = b.type === "table" ? b.columns.findIndex((c) => c.beats) : -1;
+    const hidden = new Set();
+    let nameW = null;
+    let beatsW = 0;
+    if (!els.Svg && growCol >= 0 && (beatCol >= 0 || b.pick)) {
+      // The cells left for the name (and the heartbeat) once the rest are in.
+      const spare = () => {
+        const on = b.columns.filter((c, i) => !hidden.has(i)).length;
+        const rest = b.columns.reduce((s, c, i) => s + (hidden.has(i) || i === growCol || i === beatCol ? 0 : c.width ?? 12), 0);
+        return w - rest - (dropSt ? 2 : 0) - (on - 1 + (dropSt ? 1 : 0));   // a ✕ button takes 2 cells
+      };
+      if (beatCol >= 0) {
+        const longest = Math.max(...items.slice(0, n).map((it) => cells(show(lookup(it, b.columns[growCol].field))))) + (b.pick?.toggle ? 2 : 0);
+        // The whole name first, unless that leaves fewer than 8 marks: then
+        // the name is cut, down to 12 cells.
+        beatsW = Math.min(b.columns[beatCol].width ?? 20, Math.max(spare() - longest, Math.min(8, spare() - 12)));
+        if (beatsW < 3) { beatsW = 0; hidden.add(beatCol); }
+      }
+      for (let i = b.columns.length - 1; i > 0 && spare() - beatsW < 6; i--) if (i !== growCol) hidden.add(i);
+      nameW = Math.max(1, spare() - beatsW);
+    }
+    // Where the pane draws pictures (VS Code's inline pane), a column marked
+    // `under` leaves the row for a line of its own, full width, so the row's
+    // last column sits at the right edge: Ping's ms over its heartbeat. It's
+    // still counted as one row, the terminal's, where it stays in the row.
+    const under = (c) => !!(els.Svg && c.under);
+    const shown = (c, i) => !hidden.has(i) && !under(c);
     if (header) {
-      nodes.push(line(els, `${key}-head`, [...b.columns.map((c, i) => (grows(c, i)
+      nodes.push(line(els, `${key}-head`, [...b.columns.map((c, i) => (!shown(c, i) ? null : grows(c, i)
         ? { text: c.label ?? "", color: theme.muted, grow: true, right: c.right }
         : { text: c.label ?? "", width: c.width ?? 12, right: c.right, color: theme.muted })), dropSt ? { text: "", width: 1 } : null], { gap: 1 }));
     }
@@ -522,18 +614,35 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
         const dropOn = canDrop ? lookup(item, b.drop.field) : null;
         // With `pick`, the growing column is pressed to pick its row, and
         // the rows not picked are dimmed.
+        // With `toggle`, nothing is dimmed, and the row picked is pressed
+        // again to put the setting back (Ping's details close).
         const pickOn = b.pick ? lookup(item, b.pick.field) : null;
-        const pickBtn = (text) => Button({ key: `pick-${k}`, plain: true, label: text, dimColor: String(pickOn) !== String(picked), onPress: () => handlers.onSetSetting?.(room, b.pick.setting, String(pickOn)) });
-        nodes.push(line(els, k, [...b.columns.map((c, j) => (grows(c, j)
-          ? { text: show(lookup(item, c.field)), grow: true, right: c.right, color: tint(c), node: pickOn != null ? pickBtn(show(lookup(item, c.field))) : undefined }
+        const isPicked = String(pickOn) === String(picked);
+        const pickBtn = (text) => Button({ key: `pick-${k}`, plain: true, label: b.pick.toggle && isPicked ? `▾ ${text}` : text, dimColor: !b.pick.toggle && !isPicked, onPress: () => handlers.onSetSetting?.(room, b.pick.setting, b.pick.toggle && isPicked ? "default" : String(pickOn)) });
+        // The name cut to its column, leaving room for the ▾ of the one picked.
+        const name = (c) => (nameW == null ? show(lookup(item, c.field)) : clip(show(lookup(item, c.field)), nameW - (b.pick?.toggle && isPicked ? 2 : 0)));
+        nodes.push(line(els, k, [...b.columns.map((c, j) => (!shown(c, j) ? null : c.beats
+          ? { node: beatsNode(els, `beats-${j}`, String(lookup(item, c.field) ?? ""), els.Svg ? c.width ?? 20 : beatsW), ...(els.Svg ? { basis: c.width ?? 20, shrink: 8, fill: true } : {}) }
+          : grows(c, j) && nameCells
+          ? { text: show(lookup(item, c.field)), basis: nameCells, color: tint(c), node: pickOn != null ? pickBtn(show(lookup(item, c.field))) : undefined }
+          : grows(c, j)
+          ? { text: name(c), grow: true, right: c.right, color: tint(c), node: pickOn == null ? undefined
+            : nameW == null ? pickBtn(name(c))
+            : Box({ key: `name-${k}`, height: 1, overflow: "hidden", children: [pickBtn(name(c))] }) }
           : { text: show(lookup(item, c.field)), width: c.width ?? 12, right: c.right, color: tint(c) })),
         dropOn != null
           ? { node: Button({ key: `drop-${k}`, plain: true, label: "✕", onPress: () => handlers.onSetSetting?.(room, b.drop.setting, `-${dropOn}`) }) }
           : dropSt ? { text: "", width: 1 } : null], { gap: 1 }));
+        b.columns.forEach((c, j) => {
+          if (under(c) && c.beats) nodes.push(Box({ key: `${k}-u${j}`, flexDirection: "row", children: [Box({ key: "b", flexGrow: 1, minWidth: 0, children: [beatsNode(els, `beats-${j}`, String(lookup(item, c.field) ?? ""), c.width ?? 20)] })] }));
+          else if (under(c)) nodes.push(line(els, `${k}-u${j}`, [{ text: show(lookup(item, c.field)), grow: true, color: tint(c) }]));
+        });
         return;
       }
-      // Numbered snippets read "#2".
-      const title = room === "snippet" && /^\d+$/.test(show(lookup(item, b.title))) ? `#${show(lookup(item, b.title))}` : show(lookup(item, b.title));
+      // Numbered snippets read "#2", and on one row with no preview under it
+      // their first line follows the number, as a number alone says nothing.
+      const numbered = room === "snippet" && /^\d+$/.test(show(lookup(item, b.title)));
+      const title = numbered ? `#${show(lookup(item, b.title))}` : show(lookup(item, b.title));
       if (els.Svg && b.score) return nodes.push(...scoreRow(els, k, b, item, title, handlers, accent, i));
       if (els.Svg && b.lit) return nodes.push(...litRow(els, k, b, item, title, handlers, room, accent, i));
       if (els.Svg && b.code) return nodes.push(...codeRow(els, k, b, item, title, handlers, room));
@@ -541,6 +650,11 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
       // the ♫ on the station playing.
       const mark = b.mark ? show(lookup(item, b.mark)) : null;
       const tag = b.tag ? lookup(item, b.tag) : null;
+      // The terminal cuts it to the cells left beside the number, the tag and
+      // the ⧉ ⇪ buttons. VS Code cuts it where the row ends: counted in cells
+      // it came out far short, as its letters are narrower than a cell.
+      const peekW = els.Svg ? PEEK_MAX : w - cells(title) - 2 - (tag ? cells(String(tag)) + 1 : 0) - PEEK_BUTTONS;
+      const peek = numbered && per === 1 ? clip(firstLine(lookup(item, b.preview ?? b.copy)), peekW) : "";
       const copyText = b.copy ? lookup(item, b.copy) : null;
       const shareText = b.share ? lookup(item, b.share) : null;
       const actOn = b.act ? lookup(item, b.act.field) : null;
@@ -548,7 +662,8 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
         actOn != null ? { node: Button({ key: `act-${k}`, plain: true, label: b.act.label, onPress: () => handlers.onAction?.(room, { provider: b.act.provider, action: b.act.action, args: { [b.act.field.split(".").at(-1)]: actOn } }) }) } : null,
         actOn != null ? { text: " " } : null,
         mark != null ? { text: mark, width: 2, color: accent } : null,
-        { text: title, bold: true, grow: true },
+        { text: title, bold: true, grow: !peek },
+        peek ? { text: `  ${peek}`, color: theme.muted, grow: true } : null,
         tag ? { text: ` ${tag}`, color: theme.muted } : null,
         copyText ? { text: " " } : null,
         copyText ? { node: Button({ key: `copy-${k}`, plain: true, label: "⧉", onPress: (press) => handlers.onCopy?.(String(copyText), press?.surface) }) } : null,
@@ -557,8 +672,15 @@ function widget(els, b, data, w, handlers, { limit = Infinity, accent, key = "w"
       ]));
       if (per === 2) nodes.push(line(els, `${k}-p`, [{ text: `  ${firstLine(lookup(item, b.preview))}`, color: accent ?? theme.muted, dim: true, grow: true }]));
     });
-    if (more > 0) nodes.push(muted(els, `${key}-more`, `+ ${more} more`));
-    return { nodes, height: header + n * per + (more > 0 ? 1 : 0) };
+    const label = opened ? "▴ less" : more > 0 ? `+ ${more} more` : "";
+    const after = [label, moreText].filter(Boolean).join(" · ");
+    if (els.Svg && cut) {
+      nodes.push(line(els, `${key}-more`, [
+        { node: Button({ key: `more-${key}`, plain: true, label, onPress: () => handlers.onToggleMore?.(openKey) }) },
+        moreText ? { text: moreText, color: theme.muted, grow: true } : null,
+      ], { gap: 1 }));
+    } else if (after) nodes.push(muted(els, `${key}-more`, after));
+    return { nodes, height: header + n * per + (after ? 1 : 0) };
   }
   if (b.type === "tiles") {
     const list = b.tiles.map((t) => ({ value: fill(t.value, data), sub: t.sub ? fill(t.sub, data) : "", color: color(t.tone ? lookup(data, t.tone) : t.color, color(t.color, accent)) }));
@@ -652,7 +774,7 @@ export function fnDock(els, id, w, capacity, handlers) {
     const badge = c.badge && !(stale && i === 0) ? fill(c.badge, data) : "";
     const metaText = stale && i === 0 ? "stale" : c.meta ? fill(c.meta, data) : undefined;
     const metaNode = badge ? els.Box({ key: "meta", flexDirection: "row", flexShrink: 1, minWidth: 0, children: [
-      els.Text({ key: "b", bold: true, color: color(c.badgeTone ? lookup(data, c.badgeTone) : null, theme.muted), children: badge }),
+      els.Text({ key: "b", bold: true, color: color(c.badgeTone ? lookup(data, c.badgeTone) : null, theme.muted), wrap: "truncate-end", children: badge }),
       metaText ? els.Text({ key: "m", color: theme.muted, wrap: "truncate-start", children: ` · ${metaText}` }) : null,
     ].filter(Boolean) }) : undefined;
     cards.push({
@@ -681,13 +803,26 @@ export function fnInline(els, id, w, handlers) {
 }
 
 // The band's line, as colored pieces.
-export function fnBandPieces(id) {
+export function fnBandPieces(id, width = 0) {
   const { room, data, loaded, error } = roomState(id);
   if (!room) return [];
   if (error && !loaded) return [{ text: `⚠ ${error}`, color: theme.warn }];
   if (!loaded) return [{ text: "loading…", color: theme.muted }];
   const l = room.manifest.layout;
-  return [{ text: fill(l.band ?? l.cards[0].meta ?? room.manifest.name, data), color: theme.muted }];
+  return [{ text: fitItems(fill(l.band ?? l.cards[0].meta ?? room.manifest.name, data), width), color: theme.muted }];
+}
+
+// A band's text cut at a " · " between items, never through one: the
+// Stocks band ran a quote off the end mid-number. "…" says some were left.
+function fitItems(text, width) {
+  if (!width || cells(text) <= width) return text;
+  const items = text.split(" · ");
+  let out = items[0];
+  for (const it of items.slice(1)) {
+    if (cells(`${out} · ${it} · …`) > width) break;
+    out = `${out} · ${it}`;
+  }
+  return clip(cells(out) < cells(text) ? `${out} · …` : out, width);
 }
 
 // ---------------------------------------------------------------- the desktop band
@@ -787,6 +922,22 @@ export function fnPlaceholder(id) {
 // ---------------------------------------------------------------- snapshots
 
 function widgetText(b, data) {
+  if (b.type === "select") {
+    // Where the pane draws pictures: a menu of the items, the `lit` one
+    // picked, or a first "pick one" when none is. The terminal has its box.
+    const all = lookup(data, b.items);
+    const items = Array.isArray(all) ? all : [];
+    if (!els.Svg || !els.Select || !items.length) return { nodes: [], height: 0 };
+    const field = b.act.field;
+    const options = items.map((it) => ({ value: String(lookup(it, field)), label: show(lookup(it, b.title)) }));
+    const on = b.lit ? items.find((it) => lookup(it, b.lit)) : null;
+    const value = on ? String(lookup(on, field)) : "";
+    if (!on) options.unshift({ value: "", label: b.empty ?? "Pick one" });
+    return { nodes: [Box({ key, flexDirection: "row", flexWrap: "nowrap", children: [els.Select({
+      key: `sel-${key}`, label: b.act.label, value, options,
+      onSelect: (v) => { if (v) handlers.onAction?.(room, { provider: b.act.provider, action: b.act.action, args: { [field.split(".").at(-1)]: v } }); },
+    })] })], height: 1 };
+  }
   if (b.type === "list" || b.type === "table") {
     const items = lookup(data, b.items);
     if (!Array.isArray(items) || !items.length) return [b.empty ?? "(nothing)"];

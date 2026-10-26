@@ -39,7 +39,7 @@ echo '{"supabase_url":"https://abcd1234.supabase.co","supabase_key":"sb_publisha
 3. Create a room and give the passcode to your friends: type `/room our-team some-passcode` in the pane. Friends join with the same line.
 4. Chat: type in the pane and press Enter. Esc goes back to the prompt.
 
-Before your chat rooms, built-in tabs need no server or sign-in: **Usage** (context, rate limits, cost, tool timings), **Git** (your branch, its PR and checks, through the `gh` CLI), **Agents** (every Claude Code session and its subagents), **Focus** (a Pomodoro timer), **Habits** (daily habits, each with its streak), **Toolbox** (Base64, JWT, UUID, hashes, Unix times, cron and more), **Pet** (Clawd), **Snippets** and **Monitor**. Clipboard, Weather, Tech News, Stocks and Lo-fi wait until you add them with `/chat rooms +clipboard` and the like. [The docs](https://chrisluo5311.github.io/squad-chat/use/built-in-rooms/) show each one.
+Before your chat rooms, built-in tabs need no server or sign-in: **Usage** (context, rate limits, cost, tool timings), **Git** (your branch, its PR and checks, through the `gh` CLI), **Agents** (every Claude Code session and its subagents), **Focus** (a Pomodoro timer), **Habits** (daily habits, each with its streak), **Toolbox** (Base64, JWT, UUID, hashes, Unix times, cron and more), **Pet** (Clawd), **Snippets** and **Monitor**. Clipboard, Weather, Tech News, Stocks, Ping, Lo-fi and Docker wait until you add them with `/chat rooms +clipboard` and the like. [The docs](https://chrisluo5311.github.io/squad-chat/use/built-in-rooms/) show each one.
 
 In a terminal 110 columns wide or more (fullscreen), the pane docks on the right. In a narrower one it sits above the prompt. While the pane is closed, a line above the prompt shows the room, who's online and what's unread, with an **Open** button.
 
@@ -63,9 +63,9 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat-logout` | Sign out on this computer |
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
-| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `lofi` | Open the pane on a built-in room |
+| `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` | Open the pane on a built-in room |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
-| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `lofi`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks and Lo-fi are off until you add them. |
+| `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `ping`, `lofi`, `docker`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks, Ping, Lo-fi and Docker are off until you add them. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | The Focus room's Pomodoro timer, with a chime when focus or a break ends |
 | `/habit add <name> [x<times>]` / `done` / `undo` / `remove` / `rename <old> -> <new>` | The Habits room's goals, each checked off once a day (or a number of times) with its streak |
 | `/tool <name> [input]` | One of the Toolbox room's tools: `/tool uuid 5`, `/tool hash hello`, `/tool time 1739000000` |
@@ -95,7 +95,7 @@ The pane's input box takes `/room`, `/who`, `/dnd`, `/share`, `/snippet`, `/lofi
 
 ## Network
 
-squad-chat connects only to the places below. Each room's `room.json` lists its hosts under `permissions.hosts`, and the bridge refuses any other host for that room, settings included.
+squad-chat connects only to the places below. Each room's `room.json` lists its hosts under `permissions.hosts`, and the bridge refuses any other host for that room, settings included. The Ping room is the one exception: it checks only the servers you type into it, and a room can't start with any.
 
 | What | Where it connects | What it sends |
 |---|---|---|
@@ -105,6 +105,7 @@ squad-chat connects only to the places below. Each room's `room.json` lists its 
 | Tech News (off until added) | `hacker-news.firebaseio.com` and the feeds `www.ithome.com.tw`, `www.theverge.com`, `feeds.arstechnica.com`, `techcrunch.com` | Nothing beyond the request |
 | Stocks (off until added) | `mis.twse.com.tw`, `query1.finance.yahoo.com` | The symbols on your watchlist |
 | Lo-fi (off until added) | `ice2.somafm.com` and `www.youtube.com`, played by your own `mpv` (and `yt-dlp` for YouTube), started only when you press play | Nothing beyond the stream request. Tracks you add play from wherever you point them |
+| Ping (off until added) | Only the servers you add: a ping, a TCP connection or one HTTP(S) `GET` each, every 30 seconds while the room is shown and every minute otherwise | Nothing beyond the check. The results stay in `~/.config/squad-chat/room-data/ping/` |
 | Room store | `raw.githubusercontent.com/chrisluo5311/squad-chat/main/rooms` | Nothing beyond the request. A room installs only after you see its hosts and confirm |
 
 Nothing goes to Claude, to Anthropic or to the author of squad-chat.
@@ -119,6 +120,8 @@ Every program is named in the code, with fixed arguments, and none comes from a 
 | `git`, `gh` | Git room, `/chat-share diff` | Reads this folder's branch, diff, pull requests and checks |
 | `pbpaste`, `wl-paste` or `xclip` | Clipboard room, only once you add it | Reads the clipboard every 2 seconds |
 | `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg`, `macmon` (Mac), `nvidia-smi` (Linux) | Monitor room | Reads CPU, memory, disk, network, battery and GPU figures. No shell, no sudo |
+| `docker` (`ps`, `images`, `volume ls`, `network ls`, `stats`, `logs`) | Docker room, only once you add it | Reads what Docker has, every 5 seconds while the room is on show. Read only. `logs` goes through `/bin/sh` only to keep the container's stderr |
+| `ping` (`/sbin/ping` on a Mac) | Ping room, only for the hosts you add | Sends 3 packets to each, the host passed as one argument after `--`. No shell, no sudo |
 | `mpv`, and `yt-dlp` for YouTube | Lo-fi room, only when you press play | Plays the stream. A short `/bin/sh` loop around `mpv` stops it when the bridge exits, and downloads nothing to run |
 
 ## What the mod hooks

@@ -12,7 +12,7 @@
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 //   focus.mjs, habits.mjs, toolbox.mjs, clipboard.mjs, pet.mjs   the Focus, Habits, Toolbox, Clipboard and Pet rooms
 
-import { state, applyEvent, resetBridgeState, currentRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
+import { state, applyEvent, resetBridgeState, currentRoom, bandRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
 import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, wantsOverhead, toolSummary } from "./metrics.mjs";
@@ -32,6 +32,7 @@ state.pet = createPet();
 
 const PANE_ID = "squad-chat";
 const UNDO_MS = 10_000;   // how long Cancel stays beside "Removed …"
+const NOTICE_MS = 5_000;  // how long a notice over the box stays
 
 const MIN_NODE_MAJOR = 22;
 const MAX_BACKOFF_MS = 30_000;
@@ -183,6 +184,13 @@ function redact(content) {
 }
 
 // ---------------------------------------------------------------- pane and commands
+
+// The band shows the room with the newest message: Open goes to that room.
+async function openFromBand($) {
+  const room = activeView() === "chat" && state.auth === "signed_in" ? bandRoom() : null;
+  if (room && room.id !== state.current) await callBridge($, "/room/select", { room: room.id }).catch(() => {});
+  await openPane($);
+}
 
 async function openPane($) {
   const opened = await $.ui.open({ id: PANE_ID, title: "Squad Chat", focus: true, rows: 12, columns: 52 });
@@ -860,6 +868,20 @@ async function toolAct($, fn) {
   $.ui.invalidate("ui.render");
 }
 
+// A notice over the box goes NOTICE_MS after it's first drawn, unless
+// another has taken its place. One with Cancel beside it goes with its undo.
+let noticeDrawn = "";
+function fadeNotice($) {
+  if (state.notice === noticeDrawn) return;
+  const text = noticeDrawn = state.notice;
+  if (!text) return;
+  $.clock.sleep(NOTICE_MS).then(() => {
+    if (state.notice !== text || state.undo?.text === text) return;
+    state.notice = "";
+    $.ui.invalidate("ui.render");
+  }).catch(() => {});
+}
+
 async function copyTool($, text, surface) {
   await copySnippet($, text, surface);
   if (state.notice !== "Copied.") return;
@@ -981,7 +1003,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|snippet|monitor|weather|news|stock|lofi | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|snippet|monitor|weather|news|stock|lofi|docker|ping | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -1110,6 +1132,7 @@ export function register(on, options) {
 
   on("ui.render", { component: "Pane" }, ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e);
+    fadeNotice($);
     const props = e.props ?? {};
     state.paneFocused = props.isFocused === true;
     paneSurface = e.surface;
@@ -1199,6 +1222,7 @@ export function register(on, options) {
       onClipRemove: (id) => { removeClip(state.clipboard, id); $.ui.invalidate("ui.render"); },
       onClipClear: () => clearClips($),
       onPetMode: (mode) => setPetMode($, mode),
+      onToggleMore: (id) => { if (!state.moreOpen.delete(id)) state.moreOpen.add(id); $.ui.invalidate("ui.render"); },
       onPetWalk: (walk) => { state.pet.walk = walk; savePet($); $.ui.invalidate("ui.render"); },
     });
   });
@@ -1232,7 +1256,7 @@ export function register(on, options) {
     if (e.props?.hasSurvey || (activeView() === "chat" && !chatShown)) return next(e);
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
-    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openPane($); }, onCycle: (dir) => { void cycleBand($, dir); } });
+    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openFromBand($); }, onCycle: (dir) => { void cycleBand($, dir); } });
   });
 
   // "auto" do not disturb: a turn still running after LONG_TURN_MS goes quiet

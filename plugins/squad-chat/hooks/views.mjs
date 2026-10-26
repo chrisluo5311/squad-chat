@@ -9,7 +9,7 @@
 // Inline (above the prompt): one header line, the last few messages, input.
 // Band (pane not up): one line with an Open button.
 
-import { state, currentRoom, roomMessages, lastMessage, totalUnread, typingText, isQuiet, activeView, enabledRooms, roomIds } from "./state.mjs";
+import { state, currentRoom, roomMessages, lastMessage, bandRoom, totalUnread, typingText, isQuiet, activeView, enabledRooms, roomIds } from "./state.mjs";
 import { theme, palette, nameColor, glyph } from "./theme.mjs";
 import { snippetTitle, snapshotCard, oneLine, displayLines } from "./share.mjs";
 import { cells, rowsFor } from "./widgets.mjs";
@@ -118,7 +118,7 @@ function withGroupTimes(rows) {
 }
 
 // A room's card, shared: its room's color.
-const CARD_COLORS = { usage: theme.usage, git: theme.git, agents: theme.agents, monitor: palette.teal };
+const CARD_COLORS = { usage: theme.usage, git: theme.git, agents: theme.agents, monitor: palette.teal, ping: palette.sand };
 
 // What a snippet draws: a title, and the lines under it. A room's card takes
 // its title from its first line and wears its room's color.
@@ -144,15 +144,16 @@ function diffColor(line) {
 }
 
 // A card's line: its label dimmed, a bar's fill in the room's color and its
-// track dimmed.
+// track dimmed, and Ping's days as its list draws them (▮ up, ▪ slow, ▯ down).
+const DAY_MARKS = { "▮": theme.online, "▪": theme.amber, "▯": theme.error };
 function cardLine(els, key, line, color) {
   const { Box, Text } = els;
   const m = /^\S(?:.*?\S)?( {2,})/.exec(line);
   const label = m && m[0].length <= 12 ? m[0] : "";
   const bits = [
     ...(label ? [{ text: label, color: theme.muted }] : []),
-    ...line.slice(label.length).split(/([━╸]+|─+)/).filter(Boolean)
-      .map((t) => ({ text: t, color: /^[━╸]/.test(t) ? color : t.startsWith("─") ? theme.muted : theme.theirText })),
+    ...line.slice(label.length).split(/([━╸]+|─+|▮+|▪+|▯+)/).filter(Boolean)
+      .map((t) => ({ text: t, color: DAY_MARKS[t[0]] ?? (/^[━╸]/.test(t) ? color : t.startsWith("─") ? theme.muted : theme.theirText) })),
   ];
   return Box({ key, flexDirection: "row", overflow: "hidden", children: bits.map((b, i) => (i === bits.length - 1
     ? Box({ key: `b${i}`, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [Text({ key: "t", wrap: "truncate-end", color: b.color, children: b.text })] })
@@ -860,11 +861,18 @@ function inlineView(els, props, handlers) {
     if (share) parts.push(share);
   } else if (state.auth === "signed_in" && room) {
     const names = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id).map((u) => u.name);
-    parts.push(Box({ key: "header", flexDirection: "row", justifyContent: "space-between", children: [
-      Box({ key: "left", flexDirection: "row", gap: 1, flexShrink: 1, children: [
-        Text({ key: "room", bold: true, color: theme.accent, children: `${glyph.brand} #${room.slug}` }),
+    // Where the pane draws pictures (VS Code) the room is picked from a menu
+    // of the rooms joined, each with its unread count. The terminal has /room.
+    const { Select } = els;
+    const pick = els.Svg && Select && state.rooms.length > 1;
+    parts.push(Box({ key: "header", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", justifyContent: "space-between", children: [
+      Box({ key: "left", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", columnGap: 1, flexShrink: 1, minWidth: 0, children: [
+        pick
+          ? Text({ key: "brand", bold: true, color: theme.accent, children: glyph.brand })
+          : Text({ key: "room", bold: true, color: theme.accent, children: `${glyph.brand} #${room.slug}` }),
+        pick ? Select({ key: "room-pick", value: room.id, options: state.rooms.map((r) => ({ value: r.id, label: `#${r.slug}${r.unread ? ` · ${r.unread} new` : ""}` })), onSelect: (id) => handlers.onSelectRoom(id) }) : null,
         Text({ key: "online", color: names.length ? theme.online : theme.muted, wrap: "truncate-end", children: names.length ? `${glyph.on} ${names.join(", ")}` : "just you" }),
-      ] }),
+      ].filter(Boolean) }),
       Text({ key: "conn", color: conn.color, children: conn.text }),
     ] }));
     const list = roomMessages().slice(-5);
@@ -875,7 +883,7 @@ function inlineView(els, props, handlers) {
     for (const m of list) {
       const name = m.user_id === prevUser ? "" : displayName(m).slice(0, nameWidth);
       prevUser = m.user_id;
-      parts.push(Box({ key: `m${m.id}`, flexDirection: "row", gap: 1, children: [
+      parts.push(Box({ key: `m${m.id}`, flexDirection: "row", flexWrap: "nowrap", columnGap: 1, children: [
         Box({ key: "n", width: nameWidth, flexShrink: 0, children: [
           Text({ key: "t", bold: true, color: m.mine ? theme.you : nameColor(m.user_id), children: name }),
         ] }),
@@ -909,7 +917,7 @@ function inlineView(els, props, handlers) {
 // The chat room on the desktop: faces of who's online, what's new, and the
 // latest message (or who's typing).
 function chatBandDesktop(els, { onOpen, onCycle, columns }) {
-  const room = currentRoom();
+  const room = bandRoom();
   const others = (state.online.get(room.id) ?? []).filter((u) => u.user_id !== state.user?.id);
   const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
   const unreadHere = room.unread ?? 0;
@@ -935,7 +943,7 @@ function chatBandDesktop(els, { onOpen, onCycle, columns }) {
       ] });
     }
     const typing = typingText(room.id);
-    const last = lastMessage();
+    const last = lastMessage(room.id);
     if (typing) sections.push({ key: "msg", color: theme.muted, grow: true, parts: [draw(K.typing(theme.muted), typing), pMsg(typing, { dim: true })] });
     else if (last) {
       const who = last.mine ? theme.you : nameColor(last.user_id);
@@ -943,6 +951,26 @@ function chatBandDesktop(els, { onOpen, onCycle, columns }) {
     }
   }
   return capsule(els, { room: `${glyph.brand} #${room.slug}`, color: theme.accent, sections, onOpen, onCycle, columns });
+}
+
+// A band's text. The terminal cuts it to its columns, which are exact there.
+// VS Code counts columns in a proportional font's "0"s, too few for the room
+// the text has, so it draws all of it and the row ends it with "…" where the
+// band runs out, as wide or narrow as the panel is.
+function bandMsg(els, view, props, meta, onCycle) {
+  const { Box, Text } = els;
+  const terminal = props.surface === "terminal";
+  const pieces = sysBandPieces(view, terminal ? Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16 - (onCycle ? CYCLE_CELLS : 0)) : 0);
+  const text = (p, wrap) => Text({ key: "t", color: p.color, bold: p.bold, wrap, children: p.text });
+  if (terminal) return pieces.map((p, i) => Box({ key: `p${i}`, flexShrink: 0, children: [text(p)] }));
+  // Each piece sits beside a box of the ones after it, which gives way
+  // first: the band shortens from its end, one piece at a time, and only the
+  // piece where it runs out shows "…". Shrink weights alone squeezed them all.
+  const rest = (i) => i >= pieces.length ? [] : [
+    Box({ key: `p${i}`, flexShrink: 1, minWidth: 0, children: [text(pieces[i], "truncate-end")] }),
+    ...(i + 1 < pieces.length ? [Box({ key: `r${i + 1}`, flexDirection: "row", flexWrap: "nowrap", flexShrink: 10000, minWidth: 0, overflow: "hidden", children: rest(i + 1) })] : []),
+  ];
+  return rest(0);
 }
 
 // One line above the prompt while the pane can't be seen (terminal too
@@ -961,12 +989,12 @@ export function bandView(els, props, { onOpen, onCycle }) {
   }
   if (view !== "chat") {
     const meta = roomMeta(view);
-    return Box({ flexDirection: "row", children: [
-      Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: [
+    // VS Code wraps a row that doesn't fit: these give way instead.
+    return Box({ flexDirection: "row", flexWrap: "nowrap", children: [
+      Box({ key: "line", flexDirection: "row", flexWrap: "nowrap", columnGap: 1, flexGrow: 1, flexShrink: 1, minWidth: 0, children: [
         Box({ key: "room", flexShrink: 0, children: [Text({ key: "t", bold: true, color: meta.color, children: `${meta.icon} ${meta.label}` })] }),
         Box({ key: "sep", flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: glyph.bar })] }),
-        Box({ key: "msg", flexDirection: "row", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: sysBandPieces(view, Math.max(20, (props.bodyColumns || 100) - cells(`${meta.icon} ${meta.label}`) - 16 - (onCycle ? CYCLE_CELLS : 0))).map((p, i) => (
-          Box({ key: `p${i}`, flexShrink: 0, children: [Text({ key: "t", color: p.color, bold: p.bold, children: p.text })] }))) }),
+        Box({ key: "msg", flexDirection: "row", flexWrap: "nowrap", flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: "hidden", children: bandMsg(els, view, props, meta, onCycle) }),
       ] }),
       Box({ key: "open-box", flexDirection: "row", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [
         ...cycleButtons(els, onCycle),
@@ -974,12 +1002,12 @@ export function bandView(els, props, { onOpen, onCycle }) {
       ] }),
     ] });
   }
-  const room = currentRoom();
+  const room = bandRoom();
   const here = (state.online.get(room?.id) ?? []).filter((u) => u.user_id !== state.user?.id).length;
   const unreadHere = room.unread ?? 0;
   const unreadElsewhere = totalUnread() - unreadHere;
   const live = state.bridge === "ready" && state.roomStatus.get(room.id) === "SUBSCRIBED";
-  const last = lastMessage();
+  const last = lastMessage(room.id);
   const typing = typingText(room.id);
   // Everything but the message keeps its size; the message gives way.
   const fixed = (key, children, style = {}) => Box({ key, flexShrink: 0, children: [Text({ key: "t", children, ...style })] });
@@ -1005,7 +1033,7 @@ export function bandView(els, props, { onOpen, onCycle }) {
     }
   }
   return Box({ flexDirection: "row", children: [
-    Box({ key: "line", flexDirection: "row", gap: 1, flexGrow: 1, flexShrink: 1, children: bits }),
+    Box({ key: "line", flexDirection: "row", columnGap: 1, flexGrow: 1, flexShrink: 1, children: bits }),
     Box({ key: "open-box", flexDirection: "row", columnGap: 1, flexShrink: 0, marginLeft: 1, children: [
       ...cycleButtons(els, onCycle),
       Button({ key: "open", label: "Open", variant: "primary", onPress: onOpen }),
