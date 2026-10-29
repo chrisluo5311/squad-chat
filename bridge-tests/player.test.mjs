@@ -105,6 +105,33 @@ describe("player", () => {
     assert.equal(d.share, "♫ now listening: Puff Dragon - Cascade (Groove Salad · stream)");
   });
 
+  it("on Windows, starts mpv under a Node watchdog on a named pipe, and stops them together", async () => {
+    const m = fakeMpv();
+    m.ctx.platform = "win32";
+    await player.actions.play(params, { id: "s2" }, m.ctx);
+    const { argv, opts } = m.spawned[0];
+    assert.deepEqual(argv.slice(0, 2), [process.execPath, "-e"]);
+    assert.match(argv[2], /process\.kill\(Number\(bridge\), 0\)/);   // stops with the bridge, however it goes
+    assert.deepEqual(argv.slice(3, 6), ["--", String(process.pid), "mpv"]);
+    const pipe = (a) => a.find((x) => x.startsWith("--input-ipc-server="));
+    assert.match(pipe(argv), new RegExp(`^--input-ipc-server=\\\\\\\\\\.\\\\pipe\\\\squad-chat-mpv-${process.pid}-\\d+$`));
+    assert.equal(opts.windowsHide, true);
+    player.close();
+    assert.ok(m.runs.includes("taskkill /pid 4242 /T /F"));
+    // Played again at once: the last mpv may hold its pipe till taskkill ends it.
+    await player.actions.play(params, { id: "s2" }, m.ctx);
+    assert.notEqual(pipe(m.spawned[1].argv), pipe(argv));
+  });
+
+  it("says where to get mpv, on Windows as on macOS", async () => {
+    const mac = fakeMpv({ tools: { mpv: false, ytdlp: false } });
+    assert.equal((await player.fetch(params, mac.ctx)).hint, "Lo-fi needs mpv: brew install mpv yt-dlp");
+    resetPlayer();
+    const win = fakeMpv({ tools: { mpv: false, ytdlp: false } });
+    win.ctx.platform = "win32";
+    assert.equal((await player.fetch(params, win.ctx)).hint, "Lo-fi needs mpv on PATH: https://mpv.io/installation/");
+  });
+
   it("plays a YouTube channel's live streams, looked up when played", async () => {
     const m = fakeMpv();
     await player.actions.play(params, { name: "lofi girl" }, m.ctx);

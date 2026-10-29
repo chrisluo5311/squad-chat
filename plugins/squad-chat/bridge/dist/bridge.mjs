@@ -22848,9 +22848,9 @@ function sessionBoard({ dir, emit: emit2, pid = process.pid, staleMs = 3e4, repo
 import { readdirSync as readdirSync2, readFileSync as readFileSync7, writeFileSync as writeFileSync7, renameSync as renameSync7, statSync as statSync3 } from "node:fs";
 import { join as join7 } from "node:path";
 import { execFile, spawn } from "node:child_process";
-import { readFile, stat, readdir } from "node:fs/promises";
+import { readFile, stat, readdir, statfs } from "node:fs/promises";
 import { connect } from "node:net";
-import { cpus, loadavg, homedir } from "node:os";
+import { cpus, loadavg, totalmem, freemem, homedir } from "node:os";
 
 // src/rooms/manifest.mjs
 var SCHEMA = 1;
@@ -23958,6 +23958,65 @@ async function linux(ctx) {
     sensorHint: ""
   };
 }
+function parseNetstatE(text) {
+  for (const line of String(text ?? "").split("\n")) {
+    const m = /\s(\d+)\s+(\d+)\s*$/.exec(line);
+    if (m) return { rx: Number(m[1]), tx: Number(m[2]) };
+  }
+  return null;
+}
+var WIN_BATTERY = { 1: "on battery", 3: "charged", 4: "on battery", 5: "on battery", 6: "charging", 7: "charging", 8: "charging", 9: "charging" };
+function parseWinSlow(text) {
+  let d;
+  try {
+    d = JSON.parse(String(text ?? "").trim());
+  } catch {
+    return null;
+  }
+  const b = (d?.battery ?? [])[0];
+  const pages = d?.page ?? [];
+  const mb = (k) => pages.reduce((a, p) => a + (Number(p?.[k]) || 0), 0) * 1024 * 1024;
+  const state = b ? WIN_BATTERY[b.status] ?? "plugged in" : null;
+  const left = b && state === "on battery" && b.minutes > 0 && b.minutes < 71582788 ? `${Math.floor(b.minutes / 60)}:${String(b.minutes % 60).padStart(2, "0")} left` : "";
+  return {
+    // A battery with no charge to report (pct null) isn't one at 0%.
+    battery: b && b.pct != null && Number.isFinite(Number(b.pct)) ? { pct: Number(b.pct), state, timeText: left, power: "" } : null,
+    swapTotal: mb("total"),
+    swapUsed: mb("used")
+  };
+}
+var WIN_SLOW_MS = 3e4;
+var WIN_QUERY = "$b=@(Get-CimInstance Win32_Battery|%{@{pct=$_.EstimatedChargeRemaining;status=$_.BatteryStatus;minutes=$_.EstimatedRunTime}});$p=@(Get-CimInstance Win32_PageFileUsage|%{@{total=$_.AllocatedBaseSize;used=$_.CurrentUsage}});@{battery=$b;page=$p}|ConvertTo-Json -Compress -Depth 4";
+async function windows(ctx, s) {
+  let query = null;
+  if (s.winSlowAt == null || ctx.now() - s.winSlowAt >= WIN_SLOW_MS) {
+    s.winSlowAt = ctx.now();
+    query = ctx.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WIN_QUERY], { timeoutMs: 1e4 }).then((out) => {
+      s.winSlow = parseWinSlow(out);
+    }, () => {
+    });
+  }
+  const [net, fsStat, gpu] = await Promise.all([
+    ctx.run(["netstat", "-e"]),
+    ctx.fs?.statfs?.(`${process.env.SystemDrive || "C:"}\\`),
+    ctx.run(["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,power.draw", "--format=csv,noheader,nounits"]),
+    s.winSlow === void 0 ? query : null
+  ]);
+  const slow = s.winSlow;
+  const total = ctx.totalmem?.();
+  const disk = fsStat ? { total: fsStat.blocks * fsStat.bsize, free: fsStat.bavail * fsStat.bsize } : null;
+  const [gUse, gTemp, gPower] = gpu?.trim() ? gpu.trim().split("\n")[0].split(",").map((x) => Number(x.trim())) : [];
+  return {
+    mem: total ? { used: total - ctx.freemem(), total, swapUsed: slow?.swapUsed ?? 0, swapTotal: slow?.swapTotal ?? 0 } : null,
+    pressure: null,
+    net: parseNetstatE(net),
+    disk: disk && disk.total > 0 ? { ...disk, used: disk.total - disk.free } : null,
+    battery: slow?.battery ?? null,
+    gpuUse: Number.isFinite(gUse) ? gUse : null,
+    sensors: Number.isFinite(gTemp) ? { gpuTemp: gTemp, gpuPower: Number.isFinite(gPower) ? gPower : void 0, fans: [] } : null,
+    sensorHint: ""
+  };
+}
 var sysinfo_default = {
   type: "sysinfo",
   hosts: [],
@@ -23973,7 +24032,7 @@ var sysinfo_default = {
     const dTotal = t.total - s.cpu.total;
     const cpuPct = dTotal > 0 ? Math.round((1 - (t.idle - s.cpu.idle) / dTotal) * 100) : 0;
     s.cpu = t;
-    const os = ctx.platform === "darwin" ? await macos(ctx) : await linux(ctx);
+    const os = ctx.platform === "darwin" ? await macos(ctx) : ctx.platform === "win32" ? await windows(ctx, s) : await linux(ctx);
     const now = ctx.now();
     let rx = null;
     let tx = null;
@@ -23994,7 +24053,7 @@ var sysinfo_default = {
     const net = { rxText: rx == null ? "\u2013" : rate(rx), txText: tx == null ? "\u2013" : rate(tx) };
     const netMax = Math.max(...s.hist.rx, ...s.hist.tx, 1);
     const sen = os.sensors;
-    const load2 = ctx.loadavg?.() ?? [];
+    const load2 = ctx.platform === "win32" ? [] : ctx.loadavg?.() ?? [];
     const gpu = os.gpuUse != null || Number.isFinite(sen?.gpuTemp) ? { pct: os.gpuUse, tempText: celsius(sen?.gpuTemp), power: watts(sen?.gpuPower) } : null;
     const d = os.disk;
     const b = os.battery;
@@ -24324,6 +24383,8 @@ function entries(params, ctx) {
   return [...stations.filter((s) => !hidden.has(s.target)), ...own.map((x) => ({ ...x, kind: kindOf(x.target) }))];
 }
 var tools = null;
+var needsMpv = (ctx) => ctx.platform === "win32" ? "Lo-fi needs mpv on PATH: https://mpv.io/installation/" : "Lo-fi needs mpv: brew install mpv yt-dlp";
+var needsYtdlp = (ctx) => ctx.platform === "win32" ? "YouTube needs yt-dlp on PATH: https://github.com/yt-dlp/yt-dlp" : "YouTube needs yt-dlp: brew install yt-dlp";
 async function findTools(ctx) {
   if (tools) return tools;
   const find2 = async (names) => {
@@ -24341,7 +24402,7 @@ async function liveStreams(url, ctx) {
   const was = channels.get(url);
   if (was && ctx.now() - was.at < CHANNEL_TTL_MS && was.streams.length) return was.streams;
   const t = await findTools(ctx);
-  if (!t.ytdlp) throw new RoomError(400, "YouTube needs yt-dlp: brew install yt-dlp");
+  if (!t.ytdlp) throw new RoomError(400, needsYtdlp(ctx));
   const out = await ctx.run([t.ytdlp, "--flat-playlist", "--playlist-end", "10", "--print", "%(live_status)s	%(id)s	%(title)s", url], { timeoutMs: 3e4 });
   if (out == null) throw new RoomError(502, "yt-dlp couldn't read that channel");
   const streams = out.split("\n").map((l) => l.split("	")).filter(([st, id]) => st === "is_live" && /^[\w-]{6,20}$/.test(id ?? "")).map(([, id, title]) => ({ id, title: title ?? id }));
@@ -24376,7 +24437,7 @@ async function get2(prop) {
 }
 function stop() {
   if (!mpv) return;
-  const { child, conn } = mpv;
+  const { child, conn, killTree } = mpv;
   mpv = null;
   try {
     conn?.write(`${JSON.stringify({ command: ["quit"] })}
@@ -24387,6 +24448,10 @@ function stop() {
     conn?.destroy();
   } catch {
   }
+  if (killTree) {
+    killTree();
+    return;
+  }
   try {
     process.kill(-child.pid, "SIGTERM");
   } catch {
@@ -24396,16 +24461,20 @@ function stop() {
     }
   }
 }
+var WIN_WATCH = "const [bridge, bin, ...args] = process.argv.slice(1);const m = require('node:child_process').spawn(bin, args, { stdio: 'ignore', windowsHide: true });m.on('exit', () => process.exit(0)); m.on('error', () => process.exit(1));setInterval(() => { try { process.kill(Number(bridge), 0); } catch { m.kill(); process.exit(0); } }, 1000);";
+var pipes = 0;
 async function start(ctx, volume2) {
   if (mpv?.conn) return mpv;
   const t = await findTools(ctx);
-  if (!t.mpv) throw new RoomError(400, "Lo-fi needs mpv: brew install mpv yt-dlp");
-  const sock = join5(ctx.runtimeDir, `mpv-${process.pid}.sock`);
+  if (!t.mpv) throw new RoomError(400, needsMpv(ctx));
+  const win = ctx.platform === "win32";
+  const sock = win ? `\\\\.\\pipe\\squad-chat-mpv-${process.pid}-${++pipes}` : join5(ctx.runtimeDir, `mpv-${process.pid}.sock`);
   const watch3 = '"$0" "$@" & m=$!; while kill -0 $PPID 2>/dev/null && kill -0 $m 2>/dev/null; do sleep 1; done; kill $m 2>/dev/null';
   const args = ["--idle=yes", "--no-video", "--no-terminal", "--force-window=no", `--volume=${volume2}`, `--input-ipc-server=${sock}`, "--ytdl-format=bestaudio/best"];
   if (t.ytdlp?.startsWith("/")) args.push(`--script-opts=ytdl_hook-ytdl_path=${t.ytdlp}`);
-  const child = ctx.spawn(["/bin/sh", "-c", watch3, t.mpv, ...args], { detached: true });
-  const state = { child, conn: null, pending: /* @__PURE__ */ new Map(), seq: 0, buf: "", entryId: null, owner: ctx.dataDir };
+  const child = win ? ctx.spawn([process.execPath, "-e", WIN_WATCH, "--", String(process.pid), t.mpv, ...args], { windowsHide: true }) : ctx.spawn(["/bin/sh", "-c", watch3, t.mpv, ...args], { detached: true });
+  const killTree = win ? () => ctx.run(["taskkill", "/pid", String(child.pid), "/T", "/F"]) : null;
+  const state = { child, conn: null, pending: /* @__PURE__ */ new Map(), seq: 0, buf: "", entryId: null, owner: ctx.dataDir, killTree };
   mpv = state;
   child.on?.("exit", () => {
     if (mpv === state) {
@@ -24455,7 +24524,7 @@ async function start(ctx, volume2) {
   throw new RoomError(502, "mpv didn't start");
 }
 async function playEntry(entry, ctx, params) {
-  if (entry.kind === "youtube" && !(await findTools(ctx)).ytdlp) throw new RoomError(400, "YouTube needs yt-dlp: brew install yt-dlp");
+  if (entry.kind === "youtube" && !(await findTools(ctx)).ytdlp) throw new RoomError(400, needsYtdlp(ctx));
   const queue = entry.kind === "channel" ? (await liveStreams(entry.target, ctx)).map((s) => `https://www.youtube.com/watch?v=${s.id}`) : [entry.target];
   if (!queue.length) throw new RoomError(404, `${entry.name} has no live streams right now`);
   await start(ctx, params.volume ?? 60);
@@ -24573,7 +24642,7 @@ var player_default = {
       }
       if (Number.isFinite(vol)) now.volume = Math.round(vol);
     }
-    const hint = !t.mpv ? "Lo-fi needs mpv: brew install mpv yt-dlp" : !t.ytdlp ? "YouTube needs yt-dlp: brew install yt-dlp" : "";
+    const hint = !t.mpv ? needsMpv(ctx) : !t.ytdlp ? needsYtdlp(ctx) : "";
     const conflict = now.state === "playing" && await pixelPlaying(ctx) ? "Pixel Play is playing too." : "";
     return {
       available: !!t.mpv,
@@ -25061,20 +25130,25 @@ function parseTarget(text) {
     const key = `${u.protocol}//${u.host}${path}${u.search}`;
     return { key, kind: u.protocol === "https:" ? "HTTPS" : "HTTP", host: host2, url: u.href, name: `${u.hostname}${u.port ? `:${u.port}` : ""}${path}`.slice(0, 40) };
   }
-  const tcp = /^(?:tcp:\/\/)?(\[[0-9a-f:]+\]|[^:/\s]+):(\d{1,5})$/i.exec(raw);
-  if (tcp) {
-    const host2 = tcp[1].replace(/^\[|\]$/g, "");
-    const port = Number(tcp[2]);
+  const tcp2 = /^(?:tcp:\/\/)?(\[[0-9a-f:]+\]|[^:/\s]+):(\d{1,5})$/i.exec(raw);
+  if (tcp2) {
+    const host2 = tcp2[1].replace(/^\[|\]$/g, "");
+    const port = Number(tcp2[2]);
     if (!(port >= 1 && port <= 65535)) return null;
     if (!(HOSTNAME.test(host2) || host2.includes(":") && IPV6.test(host2))) return null;
-    return { key: `${tcp[1]}:${port}`.toLowerCase(), kind: "TCP", host: host2, port, name: `${tcp[1]}:${port}`.slice(0, 40) };
+    return { key: `${tcp2[1]}:${port}`.toLowerCase(), kind: "TCP", host: host2, port, name: `${tcp2[1]}:${port}`.slice(0, 40) };
   }
   if (HOSTNAME.test(raw) || (raw.match(/:/g) ?? []).length >= 2 && IPV6.test(raw)) {
     return { key: raw.toLowerCase(), kind: "ICMP", host: raw, name: raw.slice(0, 40) };
   }
   return null;
 }
-function parsePing(text) {
+var WIN_PACKETS = 3;
+function parsePing(text, platform) {
+  if (platform === "win32") {
+    const times2 = [...String(text ?? "").matchAll(/[=<](\d+(?:\.\d+)?) ?[^\s\d=<>,.:;()]+(?=\s|$)/gm)].map((m) => Number(m[1]));
+    return { times: times2, sent: WIN_PACKETS, got: times2.length };
+  }
   const times = [...String(text ?? "").matchAll(/time[=<]([\d.]+)\s*ms/g)].map((m) => Number(m[1]));
   const sum = /(\d+) packets transmitted, (\d+) (?:packets )?received/.exec(String(text ?? ""));
   const sent = sum ? Number(sum[1]) : times.length;
@@ -25089,12 +25163,13 @@ var median = (xs) => {
 function pingArgv(t, platform) {
   const v6 = t.host.includes(":");
   if (platform === "darwin") return [v6 ? "/sbin/ping6" : "/sbin/ping", "-c", "3", "-i", "0.2", ...v6 ? [] : ["-W", "2000"], "--", t.host];
+  if (platform === "win32") return ["ping", "-n", String(WIN_PACKETS), "-w", "2000", ...v6 ? ["-6"] : [], t.host];
   return ["ping", ...v6 ? ["-6"] : [], "-c", "3", "-i", "0.2", "-W", "2", "--", t.host];
 }
 async function probeIcmp(t, ctx) {
-  if (ctx.platform !== "darwin" && ctx.platform !== "linux") return { ok: false, why: "ping needs macOS or Linux" };
+  if (!["darwin", "linux", "win32"].includes(ctx.platform)) return { ok: false, why: "ping needs macOS, Linux or Windows" };
   const out = await ctx.run(pingArgv(t, ctx.platform), { timeoutMs: 8e3 });
-  const { times, sent, got } = parsePing(out);
+  const { times, sent, got } = parsePing(out, ctx.platform);
   if (!got || !times.length) return { ok: false, why: "no reply", loss: 1 };
   return { ok: true, ms: median(times), loss: sent ? (sent - got) / sent : 0 };
 }
@@ -25180,11 +25255,11 @@ function httpProbe(url, { timeoutMs = TIMEOUT_MS2 } = {}) {
       const first = performance.now();
       res.resume();
       const dns = at.dns ? at.dns - t0 : 0;
-      const tcp = at.tcp ? at.tcp - (at.dns ?? t0) : 0;
+      const tcp2 = at.tcp ? at.tcp - (at.dns ?? t0) : 0;
       const tls = at.tls && at.tcp ? at.tls - at.tcp : 0;
       const wait = first - (at.tls ?? at.tcp ?? t0);
       const code = res.statusCode;
-      finish({ ok: code < 400, ms: first - t0, code, why: code >= 400 ? `HTTP ${code}` : void 0, split: [dns, tcp, tls, wait].map((x) => Math.max(0, Math.round(x))), certEnd: at.certEnd });
+      finish({ ok: code < 400, ms: first - t0, code, why: code >= 400 ? `HTTP ${code}` : void 0, split: [dns, tcp2, tls, wait].map((x) => Math.max(0, Math.round(x))), certEnd: at.certEnd });
     });
     req.on("error", (err) => finish({ ok: false, why: whyOf(err) }));
     req.end();
@@ -25507,7 +25582,7 @@ var ping_default = {
 var PROVIDERS = Object.fromEntries([local_list_default, open_meteo_default, hn_default, rss_default, sysinfo_default, quotes_default, player_default, http_json_default, docker_default, ping_default].map((p) => [p.type, p]));
 function runCommand(argv, { timeoutMs = 3e3, maxBytes = 4 * 1024 * 1024 } = {}) {
   return new Promise((resolve2) => {
-    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve2(err ? null : String(stdout)));
+    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" }, windowsHide: true }, (err, stdout) => resolve2(err ? null : String(stdout)));
   });
 }
 function parseSetting(st, raw, current) {
@@ -25684,12 +25759,14 @@ function roomRegistry({ dirs, dataDir, runtimeDir, emit: emit2, log: log2 = () =
       read: (file) => readFile(file, "utf8").catch(() => null),
       cpus,
       loadavg,
+      totalmem,
+      freemem,
       now: Date.now,
       home: homedir(),
       runtimeDir,
       spawn: (argv, opts) => spawn(argv[0], argv.slice(1), { stdio: "ignore", ...opts }),
       connect,
-      fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []) },
+      fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []), statfs: (p2) => statfs(p2).catch(() => null) },
       hosts: hostsOf(m),
       // the manifest's own, for what a provider hands to another program (Lo-fi's mpv)
       log: log2,
@@ -26023,8 +26100,9 @@ var configDir = env.SQUAD_CONFIG_DIR || join9(env.XDG_CONFIG_HOME || join9(homed
 var socketDir = env.SQUAD_SOCKET_DIR || join9(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
 mkdirSync8(socketDir, { recursive: true, mode: 448 });
 chmodSync7(socketDir, 448);
-var socketPath = join9(socketDir, `${process.pid}.sock`);
-rmSync5(socketPath, { force: true });
+var tcp = process.platform === "win32";
+var socketPath = tcp ? null : join9(socketDir, `${process.pid}.sock`);
+if (!tcp) rmSync5(socketPath, { force: true });
 var chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
   key: env.SQUAD_SUPABASE_KEY,
@@ -26137,7 +26215,7 @@ async function shutdown(code) {
   stopping = true;
   clearInterval(watch2);
   server.close();
-  rmSync5(socketPath, { force: true });
+  if (!tcp) rmSync5(socketPath, { force: true });
   board.close();
   fnRooms.close();
   await chat?.shutdown().catch(() => {
@@ -26151,10 +26229,13 @@ var parent = process.ppid;
 var watch2 = setInterval(() => {
   if (process.ppid !== parent) shutdown(0);
 }, 5e3);
-server.listen(socketPath, () => {
-  chmodSync7(socketPath, 384);
-  emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
+var listening = () => {
+  if (!tcp) chmodSync7(socketPath, 384);
+  const where = tcp ? { url: `http://127.0.0.1:${server.address().port}` } : { socket: socketPath };
+  emit({ type: "ready", ...where, pid: process.pid, platform: process.platform, chat: configured });
   board.report();
   fnRooms.report();
   chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
-});
+};
+if (tcp) server.listen(0, "127.0.0.1", listening);
+else server.listen(socketPath, listening);

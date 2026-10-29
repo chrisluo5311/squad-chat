@@ -30,6 +30,59 @@ const PING_LINUX_LOSS = `PING nas.local (192.168.1.10) 56(84) bytes of data.
 rtt min/avg/max/mdev = 0.980/1.095/1.210/0.115 ms
 `;
 
+// Windows: one reply lost, and its summary's "= 0ms" isn't a reply.
+const PING_WIN_EN = `
+Pinging 1.1.1.1 with 32 bytes of data:
+Reply from 1.1.1.1: bytes=32 time<1ms TTL=57
+Request timed out.
+Reply from 1.1.1.1: bytes=32 time=12ms TTL=57
+
+Ping statistics for 1.1.1.1:
+    Packets: Sent = 3, Received = 2, Lost = 1 (33% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = 0ms, Maximum = 12ms, Average = 6ms
+`;
+
+const PING_WIN_ZH = `
+Ping 1.1.1.1 (使用 32 位元組的資料):
+回覆自 1.1.1.1: 位元組=32 時間=5ms TTL=57
+回覆自 1.1.1.1: 位元組=32 時間=6ms TTL=57
+回覆自 1.1.1.1: 位元組=32 時間=7ms TTL=57
+
+1.1.1.1 的 Ping 統計資料:
+    封包: 已傳送 = 3，已收到 = 3, 已遺失 = 0 (0% 遺失)，
+大約的來回時間 (毫秒):
+    最小值 = 5ms，最大值 = 7ms，平均 = 6ms
+`;
+
+// French puts a space before "ms"; Russian's "мс" comes in cp866, which
+// reads back as replacement characters, and an IPv6 reply has no TTL.
+const PING_WIN_FR = `
+Envoi d'une requête 'Ping'  1.1.1.1 avec 32 octets de données :
+Réponse de 1.1.1.1 : octets=32 temps=14 ms TTL=57
+Réponse de 1.1.1.1 : octets=32 temps=16 ms TTL=57
+Délai d'attente de la demande dépassé.
+
+Statistiques Ping pour 1.1.1.1:
+    Paquets : envoyés = 3, reçus = 2, perdus = 1 (perte 33%),
+Durée approximative des boucles en millisecondes :
+    Minimum = 14ms, Maximum = 16ms, Moyenne = 15ms
+`;
+
+const PING_WIN_RU = "Ответ от 1.1.1.1: число байт=32 время=14\uFFFD\uFFFD TTL=57\r\n"
+  + "Reply from 2606:4700::1111: time=9ms \r\n"
+  + "    Минимальное = 9мсек, Максимальное = 14 мсек\r\n";
+
+const PING_WIN_LOST = `
+Pinging 10.255.255.1 with 32 bytes of data:
+Reply from 192.168.1.1: Destination host unreachable.
+Request timed out.
+Request timed out.
+
+Ping statistics for 10.255.255.1:
+    Packets: Sent = 3, Received = 1, Lost = 2 (66% loss),
+`;
+
 const ROOM = JSON.parse(readFileSync(new URL("../plugins/squad-chat/rooms/ping/room.json", import.meta.url), "utf8"));
 const T0 = new Date(2026, 9, 17, 14, 0, 0).getTime();
 const SETTINGS = { slowMs: 500, alertAfter: 3 };
@@ -72,6 +125,14 @@ describe("ping: what ping prints", () => {
     assert.deepEqual(parsePing(PING_MAC), { times: [9.812, 11.204, 10.33], sent: 3, got: 3 });
     assert.deepEqual(parsePing(PING_LINUX_LOSS), { times: [1.21, 0.98], sent: 3, got: 2 });
     assert.deepEqual(parsePing(null), { times: [], sent: 0, got: 0 });
+  });
+
+  it("takes the replies on Windows, in English or another language, not its summary", () => {
+    assert.deepEqual(parsePing(PING_WIN_EN, "win32"), { times: [1, 12], sent: 3, got: 2 });
+    assert.deepEqual(parsePing(PING_WIN_ZH, "win32"), { times: [5, 6, 7], sent: 3, got: 3 });
+    assert.deepEqual(parsePing(PING_WIN_LOST, "win32"), { times: [], sent: 3, got: 0 });
+    assert.deepEqual(parsePing(PING_WIN_FR, "win32"), { times: [14, 16], sent: 3, got: 2 });
+    assert.deepEqual(parsePing(PING_WIN_RU, "win32"), { times: [14, 9], sent: 3, got: 2 });
   });
 
   it("names an error in a few words", () => {
@@ -307,9 +368,16 @@ describe("ping: a run", () => {
     assert.equal(d.targets.find((r) => r.name === "nas.local").state, "down");
   });
 
-  it("says ping needs macOS or Linux elsewhere", async () => {
-    const d = await ping.fetch(params({ targets: ["1.1.1.1"] }), { ...ctx(), platform: "win32" });
-    assert.match(d.targets[0].why, /ping needs macOS or Linux/);
+  it("pings on Windows its own way, in whatever language it answers", async () => {
+    const win = { ...ctx(), platform: "win32", run: async (argv) => { runs.push(argv); return PING_WIN_ZH; } };
+    const d = await ping.fetch(params({ targets: ["1.1.1.1"] }), win);
+    assert.deepEqual(runs.at(-1), ["ping", "-n", "3", "-w", "2000", "1.1.1.1"]);
+    assert.equal(d.targets[0].msText, "6 ms");
+  });
+
+  it("says where ping can't run", async () => {
+    const d = await ping.fetch(params({ targets: ["1.1.1.1"] }), { ...ctx(), platform: "aix" });
+    assert.match(d.targets[0].why, /ping needs macOS, Linux or Windows/);
   });
 });
 

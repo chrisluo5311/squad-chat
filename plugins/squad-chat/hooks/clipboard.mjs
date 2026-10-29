@@ -1,6 +1,7 @@
 // The Clipboard room: what was copied lately, newest first, to copy again.
 // The mod reads the clipboard every couple of seconds while the room has a
-// tab (pbpaste on a Mac, wl-paste or xclip on Linux). The history lives in
+// tab (pbpaste on a Mac, wl-paste or xclip on Linux, a PowerShell that
+// stays up on Windows). The history lives in
 // this session's memory only and is gone when the session ends. Anything
 // that looks like a secret is drawn masked, though ⧉ still copies it, and a
 // room's history is never shared to a chat.
@@ -23,6 +24,21 @@ export const CLIP_READERS = [
   ["wl-paste", "--no-newline"],
   ["xclip", "-selection", "clipboard", "-o"],
 ];
+
+// Windows has no command that prints the clipboard, and starting PowerShell
+// every couple of seconds costs too much. So when none of the readers above
+// runs, one PowerShell stays up instead: it looks once a second and writes
+// {"text": …} on a line (UTF-8) when the text changes, once at the start
+// too, and leaves when its parent, the mod, is gone.
+const WATCH_SCRIPT = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);"
+  + " $pp=(Get-CimInstance Win32_Process -Filter \"ProcessId=$PID\").ParentProcessId; $last=[guid]::NewGuid().ToString();"
+  + " while ($true) { if (-not (Get-Process -Id $pp -ErrorAction SilentlyContinue)) { exit };"
+  + " try { $t=Get-Clipboard -Raw } catch { $t=$null };"
+  + " if ($t -ne $last) { $last=$t; [Console]::Out.WriteLine((ConvertTo-Json -Compress @{ text = [string]$t })); [Console]::Out.Flush() };"
+  + " Start-Sleep -Milliseconds 1000 }";
+export const CLIP_WATCH = ["powershell", "-NoProfile", "-NonInteractive", "-Sta", "-Command", WATCH_SCRIPT];
+// The Toolbox's paste, once, where only the watcher reads the clipboard.
+export const CLIP_ONCE_WIN = ["powershell", "-NoProfile", "-NonInteractive", "-Sta", "-Command", "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); Get-Clipboard -Raw"];
 
 export function createClipboard() {
   return {

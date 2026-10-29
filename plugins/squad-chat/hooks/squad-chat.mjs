@@ -21,7 +21,7 @@ import { heartbeat, beatKey } from "./sessions.mjs";
 import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge, dayOf } from "./focus.mjs";
 import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggleHabit, deleteHabit, undeleteHabit } from "./habits.mjs";
 import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
-import { createClipboard, addClip, removeClip, CLIP_READERS } from "./clipboard.mjs";
+import { createClipboard, addClip, removeClip, CLIP_READERS, CLIP_WATCH, CLIP_ONCE_WIN } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
 
 state.focus = createFocus();
@@ -147,11 +147,12 @@ async function callBridge($, path, body) {
   if (!state.socket) {
     throw new Error(state.bridge === "unavailable" ? state.detail : "chat is still connecting, try again in a moment");
   }
-  const res = await $.http.fetch(`http://bridge${path}`, {
+  const tcp = state.socket.startsWith("http://");
+  const res = await $.http.fetch(tcp ? `${state.socket}${path}` : `http://bridge${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: { "content-type": "application/json", "x-squad-token": state.token },
     body: body === undefined ? undefined : JSON.stringify(body),
-    socketPath: state.socket,
+    ...(tcp ? {} : { socketPath: state.socket }),
   });
   let data = {};
   try { data = JSON.parse(res.text || "{}"); } catch { /* keep {} */ }
@@ -818,8 +819,59 @@ const CLIP_EMPTY = /nothing is copied|no selection|not available/i;
 const CLIP_ENV = { LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" };
 let clipBusy = false;
 let clipAt = 0;
+const NO_CLIP_READER = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste).";
+const NO_CLIP_WIN = "Can't read the clipboard here: PowerShell didn't run (is it blocked by policy?).";
+const noClipReader = () => (state.platform === "win32" ? NO_CLIP_WIN : NO_CLIP_READER);
+let clipWatch = null;   // the Windows watcher's stream, while it runs
+
+// The watcher (CLIP_WATCH): each line it writes is the clipboard now. Its
+// first line says it runs. When it ends on its own, the room says so and
+// the readers are tried again later.
+function watchClipboard($) {
+  const c = state.clipboard;
+  let stream;
+  try { stream = $.process.spawn({ argv: CLIP_WATCH }); } catch {
+    c.error = NO_CLIP_WIN;
+    return $.ui.invalidate("ui.render");
+  }
+  clipWatch = stream;
+  c.reader = CLIP_WATCH;
+  void (async () => {
+    let buf = "";
+    try {
+      for await (const { stream: from, text } of stream) {
+        if (from !== "stdout") continue;
+        buf += text;
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          let got;
+          try { got = JSON.parse(line); } catch { continue; }
+          const changed = addClip(c, String(got?.text ?? "").replace(/\r\n/g, "\n"), Date.now());
+          if (c.error) c.error = "";
+          if (changed || !c.items.length) $.ui.invalidate("ui.render");
+        }
+      }
+    } catch { /* no PowerShell here */ }
+    if (clipWatch !== stream) return;   // stopped: the room was taken off
+    clipWatch = null;
+    c.reader = null;
+    c.error = NO_CLIP_WIN;
+    $.ui.invalidate("ui.render");
+  })();
+}
+
+function stopClipWatch() {
+  const stream = clipWatch;
+  clipWatch = null;
+  if (state.clipboard.reader === CLIP_WATCH) state.clipboard.reader = null;
+  void stream?.return?.();
+}
+
 async function readClipboard($, now) {
   const c = state.clipboard;
+  if (c.reader === CLIP_WATCH) return;   // the watcher reads it
   if (clipBusy || now - clipAt < (c.error ? CLIP_RETRY_MS : CLIP_EVERY_MS)) return;
   clipBusy = true;
   clipAt = now;
@@ -836,8 +888,12 @@ async function readClipboard($, now) {
       if (r.exitCode === 0 && addClip(c, r.stdout, now)) $.ui.invalidate("ui.render");
       return;
     }
+    // None runs: on Windows, the watcher does. Until the bridge has said
+    // which OS this is, the readers are tried again soon, with no error.
+    if (state.platform === "win32") return watchClipboard($);
+    if (!state.platform && state.bridge !== "unavailable") return;
     if (!c.error) {
-      c.error = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste).";
+      c.error = NO_CLIP_READER;
       $.ui.invalidate("ui.render");
     }
   } finally {
@@ -849,6 +905,8 @@ async function readClipboard($, now) {
 // or null when there's no reader here.
 async function readClipOnce($) {
   const c = state.clipboard;
+  // The watcher has the clipboard as of a second ago.
+  if (c.reader === CLIP_WATCH) return c.seen ?? "";
   for (const argv of c.reader ? [c.reader] : CLIP_READERS) {
     let r;
     try { r = await $.process.run(argv, { timeoutMs: 2_000, env: CLIP_ENV }); } catch { continue; }
@@ -856,6 +914,13 @@ async function readClipOnce($) {
     c.reader = argv;
     return r.exitCode === 0 ? String(r.stdout ?? "") : "";
   }
+  // Windows, with no Clipboard room watching: PowerShell once. It isn't kept
+  // as the reader, which the room would run every couple of seconds.
+  if (state.platform !== "win32") return null;
+  try {
+    const r = await $.process.run(CLIP_ONCE_WIN, { timeoutMs: 5_000 });
+    if (r.exitCode === 0) return String(r.stdout ?? "").replace(/\r?\n$/, "").replace(/\r\n/g, "\n");
+  } catch { /* no PowerShell either */ }
   return null;
 }
 
@@ -893,7 +958,7 @@ async function copyTool($, text, surface) {
 
 async function pasteTool($) {
   const text = await readClipOnce($);
-  if (text == null) { state.notice = "Can't read the clipboard here: install wl-clipboard or xclip (macOS has pbpaste)."; return $.ui.invalidate("ui.render"); }
+  if (text == null) { state.notice = noClipReader(); return $.ui.invalidate("ui.render"); }
   if (!text.trim()) { state.notice = "The clipboard is empty."; return $.ui.invalidate("ui.render"); }
   const cut = setToolInput(state.toolbox, text);
   state.notice = cut ? `Pasted the first ${MAX_TOOL_INPUT.toLocaleString("en-US")} characters.` : "";
@@ -972,6 +1037,7 @@ async function roomsTick($) {
   const status = focusStatus(now);
   if (status !== state.focusStatus) { state.focusStatus = status; $.ui.status(statusText()); }
   if (state.sysRooms.includes("clipboard")) void readClipboard($, now);
+  else if (clipWatch) stopClipWatch();
   const u = state.usage;
   // Clawd keeps to the wall clock, as its drawing does.
   const wall = Date.now();

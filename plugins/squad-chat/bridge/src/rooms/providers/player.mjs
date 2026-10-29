@@ -116,6 +116,10 @@ function entries(params, ctx) {
 
 let tools = null;   // { mpv, ytdlp } paths, found once per bridge
 
+// How to get mpv or yt-dlp: Homebrew's names, or on Windows where they come from.
+const needsMpv = (ctx) => (ctx.platform === "win32" ? "Lo-fi needs mpv on PATH: https://mpv.io/installation/" : "Lo-fi needs mpv: brew install mpv yt-dlp");
+const needsYtdlp = (ctx) => (ctx.platform === "win32" ? "YouTube needs yt-dlp on PATH: https://github.com/yt-dlp/yt-dlp" : "YouTube needs yt-dlp: brew install yt-dlp");
+
 async function findTools(ctx) {
   if (tools) return tools;
   const find = async (names) => {
@@ -135,7 +139,7 @@ async function liveStreams(url, ctx) {
   const was = channels.get(url);
   if (was && ctx.now() - was.at < CHANNEL_TTL_MS && was.streams.length) return was.streams;
   const t = await findTools(ctx);
-  if (!t.ytdlp) throw new RoomError(400, "YouTube needs yt-dlp: brew install yt-dlp");
+  if (!t.ytdlp) throw new RoomError(400, needsYtdlp(ctx));
   const out = await ctx.run([t.ytdlp, "--flat-playlist", "--playlist-end", "10", "--print", "%(live_status)s\t%(id)s\t%(title)s", url], { timeoutMs: 30_000 });
   if (out == null) throw new RoomError(502, "yt-dlp couldn't read that channel");
   const streams = out.split("\n").map((l) => l.split("\t")).filter(([st, id]) => st === "is_live" && /^[\w-]{6,20}$/.test(id ?? "")).map(([, id, title]) => ({ id, title: title ?? id }));
@@ -169,24 +173,41 @@ async function get(prop) {
 
 function stop() {
   if (!mpv) return;
-  const { child, conn } = mpv;
+  const { child, conn, killTree } = mpv;
   mpv = null;
   try { conn?.write(`${JSON.stringify({ command: ["quit"] })}\n`); } catch { /* gone */ }
   try { conn?.destroy(); } catch { /* gone */ }
+  if (killTree) { killTree(); return; }
   try { process.kill(-child.pid, "SIGTERM"); } catch { try { child.kill("SIGTERM"); } catch { /* gone */ } }
 }
+
+// Windows has no sh and no process groups: a Node watchdog starts mpv and
+// ends it once the bridge or mpv is gone. Its arguments: the bridge's pid,
+// mpv, mpv's arguments.
+const WIN_WATCH = "const [bridge, bin, ...args] = process.argv.slice(1);"
+  + "const m = require('node:child_process').spawn(bin, args, { stdio: 'ignore', windowsHide: true });"
+  + "m.on('exit', () => process.exit(0)); m.on('error', () => process.exit(1));"
+  + "setInterval(() => { try { process.kill(Number(bridge), 0); } catch { m.kill(); process.exit(0); } }, 1000);";
+let pipes = 0;   // Windows: each mpv started gets a pipe of its own
 
 async function start(ctx, volume) {
   if (mpv?.conn) return mpv;
   const t = await findTools(ctx);
-  if (!t.mpv) throw new RoomError(400, "Lo-fi needs mpv: brew install mpv yt-dlp");
-  const sock = join(ctx.runtimeDir, `mpv-${process.pid}.sock`);
+  if (!t.mpv) throw new RoomError(400, needsMpv(ctx));
+  const win = ctx.platform === "win32";
+  // mpv's IPC on Windows is a named pipe, a new one each start: taskkill
+  // ends the mpv stopped last a moment later, and it holds its pipe till then.
+  const sock = win ? `\\\\.\\pipe\\squad-chat-mpv-${process.pid}-${++pipes}` : join(ctx.runtimeDir, `mpv-${process.pid}.sock`);
   // $0 is mpv; the loop ends it once the bridge ($PPID) or mpv itself is gone.
   const watch = '"$0" "$@" & m=$!; while kill -0 $PPID 2>/dev/null && kill -0 $m 2>/dev/null; do sleep 1; done; kill $m 2>/dev/null';
   const args = ["--idle=yes", "--no-video", "--no-terminal", "--force-window=no", `--volume=${volume}`, `--input-ipc-server=${sock}`, "--ytdl-format=bestaudio/best"];
   if (t.ytdlp?.startsWith("/")) args.push(`--script-opts=ytdl_hook-ytdl_path=${t.ytdlp}`);
-  const child = ctx.spawn(["/bin/sh", "-c", watch, t.mpv, ...args], { detached: true });
-  const state = { child, conn: null, pending: new Map(), seq: 0, buf: "", entryId: null, owner: ctx.dataDir };
+  const child = win
+    ? ctx.spawn([process.execPath, "-e", WIN_WATCH, "--", String(process.pid), t.mpv, ...args], { windowsHide: true })
+    : ctx.spawn(["/bin/sh", "-c", watch, t.mpv, ...args], { detached: true });
+  // Stopping on Windows ends the watchdog and mpv together.
+  const killTree = win ? () => ctx.run(["taskkill", "/pid", String(child.pid), "/T", "/F"]) : null;
+  const state = { child, conn: null, pending: new Map(), seq: 0, buf: "", entryId: null, owner: ctx.dataDir, killTree };
   mpv = state;
   child.on?.("exit", () => { if (mpv === state) { try { state.conn?.destroy(); } catch { /* gone */ } mpv = null; } });
   for (let waited = 0; waited < 5_000 && mpv === state; waited += 100) {
@@ -220,7 +241,7 @@ async function start(ctx, volume) {
 }
 
 async function playEntry(entry, ctx, params) {
-  if (entry.kind === "youtube" && !(await findTools(ctx)).ytdlp) throw new RoomError(400, "YouTube needs yt-dlp: brew install yt-dlp");
+  if (entry.kind === "youtube" && !(await findTools(ctx)).ytdlp) throw new RoomError(400, needsYtdlp(ctx));
   const queue = entry.kind === "channel"
     ? (await liveStreams(entry.target, ctx)).map((s) => `https://www.youtube.com/watch?v=${s.id}`)
     : [entry.target];
@@ -331,7 +352,7 @@ export default {
       }
       if (Number.isFinite(vol)) now.volume = Math.round(vol);
     }
-    const hint = !t.mpv ? "Lo-fi needs mpv: brew install mpv yt-dlp" : !t.ytdlp ? "YouTube needs yt-dlp: brew install yt-dlp" : "";
+    const hint = !t.mpv ? needsMpv(ctx) : !t.ytdlp ? needsYtdlp(ctx) : "";
     const conflict = now.state === "playing" && (await pixelPlaying(ctx)) ? "Pixel Play is playing too." : "";
     return {
       available: !!t.mpv,

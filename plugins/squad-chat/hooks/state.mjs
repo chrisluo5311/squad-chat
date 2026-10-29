@@ -19,6 +19,7 @@ export const state = {
   bridge: "starting",     // starting | ready | restarting | unavailable | unconfigured
   detail: "",             // why the bridge isn't ready
   socket: null,
+  platform: null,         // the bridge's process.platform, once it's ready
   token: null,
   auth: "starting",       // starting | signed_out | code_sent | signed_in
   email: null,            // where the code went
@@ -188,7 +189,10 @@ function addMessage(m) {
 export function applyEvent(event) {
   switch (event.type) {
     case "ready":
-      state.socket = event.socket;
+      // Its Unix socket, or on Windows its http://127.0.0.1 address.
+      state.socket = event.socket ?? event.url;
+      // The mod can't see the OS; the bridge, in Node, says which it is.
+      if (event.platform) state.platform = event.platform;
       // Without a server the bridge runs for the Agents room's heartbeats alone.
       if (event.chat === false) return true;
       state.bridge = "ready";

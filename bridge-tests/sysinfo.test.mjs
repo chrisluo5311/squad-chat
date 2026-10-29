@@ -3,7 +3,7 @@
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import sysinfo, { parseVmStat, parseSysctl, parseNetstat, parseDf, parsePmset, parseBatteryPower, parseGpuUse, parseMacmon, parseMeminfo, parseNetDev, bytes, resetSamples } from "../plugins/squad-chat/bridge/src/rooms/providers/sysinfo.mjs";
+import sysinfo, { parseVmStat, parseSysctl, parseNetstat, parseDf, parsePmset, parseBatteryPower, parseGpuUse, parseMacmon, parseMeminfo, parseNetDev, parseNetstatE, parseWinSlow, bytes, resetSamples, GB } from "../plugins/squad-chat/bridge/src/rooms/providers/sysinfo.mjs";
 
 const VM_STAT = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
 Pages free:                                     4211.
@@ -145,9 +145,70 @@ describe("sysinfo on Linux", () => {
   });
 });
 
+describe("sysinfo on Windows", () => {
+  beforeEach(() => resetSamples());
+
+  it("reads Windows from Node, netstat and PowerShell (now and then), with no load average or GPU it hasn't got", async () => {
+    let clock = 1;
+    const runs = [];
+    const ctx = {
+      dataDir: "/rooms/monitor-win", platform: "win32", now: () => clock, loadavg: () => [0, 0, 0],
+      cpus: () => [core(100, 100)],
+      totalmem: () => 16 * GB, freemem: () => 4 * GB,
+      fs: { statfs: async () => ({ bsize: 4096, blocks: 100 * GB / 4096, bavail: 25 * GB / 4096 }) },
+      run: async (argv) => {
+        runs.push(argv[0]);
+        if (argv[0] === "netstat") return "Interface Statistics\n\n    Received   Sent\n\n位元組    5000000   250000\nUnicast packets   10   9\n";
+        if (argv[0] === "powershell") return '{"battery":[{"pct":42,"status":1,"minutes":95}],"page":[{"total":2048,"used":512}]}';
+        return null;   // no nvidia-smi
+      },
+    };
+    const d = await sysinfo.fetch({}, ctx);
+    assert.deepEqual([d.mem.pct, d.mem.usedText, d.mem.swapText], [75, "12.0 GB / 16 GB", "512 MB / 2 GB"]);
+    assert.equal(d.disk.pct, 75);
+    assert.deepEqual(d.battery, { pct: 42, state: "on battery", charging: false, tone: "leaf", detail: "on battery · 1:35 left" });
+    assert.equal(d.gpu, null);
+    assert.equal(d.cpu.load, "");
+    clock += 2_000;
+    await sysinfo.fetch({}, ctx);
+    assert.equal(runs.filter((x) => x === "powershell").length, 1);   // not again within 30 s
+    clock += 30_000;
+    await sysinfo.fetch({}, ctx);
+    assert.equal(runs.filter((x) => x === "powershell").length, 2);
+  });
+
+  it("doesn't wait on a slow PowerShell after the first sample, nor start a second", async () => {
+    let clock = 1;
+    let ps = 0;
+    let answer;
+    const ctx = {
+      dataDir: "/rooms/monitor-win-slow", platform: "win32", now: () => clock, loadavg: () => [0, 0, 0],
+      cpus: () => [core(100, 100)], totalmem: () => 16 * GB, freemem: () => 4 * GB,
+      run: async (argv) => {
+        if (argv[0] !== "powershell") return null;
+        ps += 1;
+        if (ps === 1) return '{"battery":[],"page":[{"total":1024,"used":256}]}';
+        return new Promise((r) => { answer = r; });   // the next one hangs
+      },
+    };
+    await sysinfo.fetch({}, ctx);
+    clock += 30_000;
+    const d = await sysinfo.fetch({}, ctx);   // would hang here if it waited
+    assert.equal(d.mem.swapText, "256 MB / 1 GB");
+    clock += 2_000;
+    await sysinfo.fetch({}, ctx);
+    assert.equal(ps, 2);   // that one's still running: no second beside it
+    answer('{"battery":[],"page":[{"total":1024,"used":512}]}');
+  });
+
+  it("takes a battery with no charge to report as none, not 0%", () => {
+    assert.equal(parseWinSlow('{"battery":[{"pct":null,"status":1,"minutes":null}],"page":[]}').battery, null);
+  });
+});
+
 describe("sysinfo parsers", () => {
   it("survive missing or odd output", () => {
-    for (const parse of [parseVmStat, parseSysctl, parseNetstat, parseDf, parsePmset, parseBatteryPower, parseMacmon, parseMeminfo, parseNetDev]) {
+    for (const parse of [parseVmStat, parseSysctl, parseNetstat, parseDf, parsePmset, parseBatteryPower, parseMacmon, parseMeminfo, parseNetDev, parseNetstatE, parseWinSlow]) {
       assert.equal(parse(null), null, parse.name);
     }
     assert.equal(parseGpuUse("nothing"), null);

@@ -73,8 +73,19 @@ export function parseTarget(text) {
 
 // ---------------------------------------------------------------- probes
 
+const WIN_PACKETS = 3;
+
 // `ping`'s replies: the times, and how many were sent and came back.
-export function parsePing(text) {
+// Windows writes its words in the system's language ("time<1ms",
+// "時間=5ms", "temps=14 ms", "время=14мс" in a codepage that isn't UTF-8),
+// so there a reply is a time written right after = or <, then its unit,
+// whatever letters those are; its summary ("Minimum = 0ms") has a space
+// after the =, and "bytes=32 time" an = after the word.
+export function parsePing(text, platform) {
+  if (platform === "win32") {
+    const times = [...String(text ?? "").matchAll(/[=<](\d+(?:\.\d+)?) ?[^\s\d=<>,.:;()]+(?=\s|$)/gm)].map((m) => Number(m[1]));
+    return { times, sent: WIN_PACKETS, got: times.length };
+  }
   const times = [...String(text ?? "").matchAll(/time[=<]([\d.]+)\s*ms/g)].map((m) => Number(m[1]));
   const sum = /(\d+) packets transmitted, (\d+) (?:packets )?received/.exec(String(text ?? ""));
   const sent = sum ? Number(sum[1]) : times.length;
@@ -93,15 +104,18 @@ function pingArgv(t, platform) {
   // A user may not send faster than 0.2 s apart. -W is how long to wait for
   // each reply: milliseconds on macOS, seconds on Linux.
   if (platform === "darwin") return [v6 ? "/sbin/ping6" : "/sbin/ping", "-c", "3", "-i", "0.2", ...(v6 ? [] : ["-W", "2000"]), "--", t.host];
+  // Windows sends one a second and takes no "--": a target never starts
+  // with "-" (parseTarget). -w is milliseconds.
+  if (platform === "win32") return ["ping", "-n", String(WIN_PACKETS), "-w", "2000", ...(v6 ? ["-6"] : []), t.host];
   return ["ping", ...(v6 ? ["-6"] : []), "-c", "3", "-i", "0.2", "-W", "2", "--", t.host];
 }
 
 async function probeIcmp(t, ctx) {
-  if (ctx.platform !== "darwin" && ctx.platform !== "linux") return { ok: false, why: "ping needs macOS or Linux" };
+  if (!["darwin", "linux", "win32"].includes(ctx.platform)) return { ok: false, why: "ping needs macOS, Linux or Windows" };
   // ping exits 0 when at least one reply came back, so null means none did
   // (or ping is missing, which the next line can't tell apart).
   const out = await ctx.run(pingArgv(t, ctx.platform), { timeoutMs: 8_000 });
-  const { times, sent, got } = parsePing(out);
+  const { times, sent, got } = parsePing(out, ctx.platform);
   if (!got || !times.length) return { ok: false, why: "no reply", loss: 1 };
   return { ok: true, ms: median(times), loss: sent ? (sent - got) / sent : 0 };
 }

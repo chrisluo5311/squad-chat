@@ -117,7 +117,7 @@ Code you use repeatedly.
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/monitor.png" alt="The Monitor room: CPU with load and temperature, memory and swap, GPU and power with the fans, and the network chart." /></figure>
 
-Live system figures for this computer, without sudo: CPU, memory, GPU, network, disk and battery. Temperatures and power need [macmon](https://github.com/vladkens/macmon) on a Mac (`brew install macmon`). It shows a notification when a component runs hot or nearly fills up. `/chat set monitor alerts off` disables this.
+Live system figures for this computer, without sudo: CPU, memory, GPU, network, disk and battery. Temperatures and power need [macmon](https://github.com/vladkens/macmon) on a Mac (`brew install macmon`). Windows keeps temperatures from anyone but an administrator, so there it shows none, except an NVIDIA GPU's through `nvidia-smi`. It shows a notification when a component runs hot or nearly fills up. `/chat set monitor alerts off` disables this.
 
 ## ⧉ Clipboard
 
@@ -153,7 +153,7 @@ Whether your servers and devices answer, and how fast. Type one into the room's 
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="The Lo-fi room: the player and its volume, and the stations." /></figure>
 
-Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`). Paste a link or a folder into the box to add your own. `p` plays or pauses, and `n` skips. Nothing plays until you press play.
+Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`brew install mpv yt-dlp`; on Windows, put both on your `PATH`). Paste a link or a folder into the box to add your own. `p` plays or pauses, and `n` skips. Nothing plays until you press play.
 
 ## ◰ Docker
 
