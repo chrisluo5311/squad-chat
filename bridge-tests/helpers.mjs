@@ -36,7 +36,8 @@ export class Bridge {
     this.url = url;
     this.sessionsDir = sessionsDir;
     this.configDir = configDir ?? mkdtempSync(join(tmpdir(), `sq-${name}-`));
-    this.socketDir = mkdtempSync("/tmp/sqs-");    // short: socket paths max ~100 bytes
+    // short: socket paths max ~100 bytes (Windows has no /tmp, nor a socket)
+    this.socketDir = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "sqs-"));
     this.token = randomBytes(16).toString("hex");
     this.events = [];
     this.stderr = "";
@@ -69,7 +70,7 @@ export class Bridge {
         if (!line.trim()) continue;
         const event = JSON.parse(line);
         this.events.push(event);
-        if (event.type === "ready") this.socket = event.socket;
+        if (event.type === "ready") { this.socket = event.socket; this.controlUrl = event.url; }
         for (const w of this.waiters) w();
       }
     });
@@ -107,7 +108,7 @@ export class Bridge {
     return new Promise((resolve, reject) => {
       const data = body === undefined ? undefined : JSON.stringify(body);
       const req = request({
-        socketPath: this.socket, path, method,
+        ...(this.controlUrl ? { host: "127.0.0.1", port: new URL(this.controlUrl).port } : { socketPath: this.socket }), path, method,
         headers: { "x-squad-token": this.token, "content-type": "application/json" },
       }, (res) => {
         let text = "";

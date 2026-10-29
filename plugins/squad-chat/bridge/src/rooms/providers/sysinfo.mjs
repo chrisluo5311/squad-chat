@@ -6,6 +6,8 @@
 //          power by part and fans, which macOS keeps from anyone without root.
 //   Linux  os.cpus(), /proc/meminfo, /proc/net/dev, df, /sys/class/power_supply,
 //          /sys/class/thermal, nvidia-smi.
+//   Windows  os.cpus(), os.totalmem/freemem, statfs, netstat -e, nvidia-smi,
+//          and PowerShell (CIM) every 30 s for the battery and page file.
 //
 // Rates and charts need the sample before, so each room keeps its last
 // sample and 60 points of history while the bridge runs. Display strings are
@@ -222,6 +224,79 @@ async function linux(ctx) {
   };
 }
 
+// ---------------------------------------------------------------- Windows
+
+// `netstat -e`: its first row of two counts is bytes received and sent,
+// whatever language it labels them in.
+export function parseNetstatE(text) {
+  for (const line of String(text ?? "").split("\n")) {
+    const m = /\s(\d+)\s+(\d+)\s*$/.exec(line);
+    if (m) return { rx: Number(m[1]), tx: Number(m[2]) };
+  }
+  return null;
+}
+
+// Win32_Battery's BatteryStatus, as the room's words.
+const WIN_BATTERY = { 1: "on battery", 3: "charged", 4: "on battery", 5: "on battery", 6: "charging", 7: "charging", 8: "charging", 9: "charging" };
+
+// The battery and the page file (swap): one PowerShell query, as JSON.
+export function parseWinSlow(text) {
+  let d;
+  try { d = JSON.parse(String(text ?? "").trim()); } catch { return null; }
+  const b = (d?.battery ?? [])[0];
+  const pages = d?.page ?? [];
+  const mb = (k) => pages.reduce((a, p) => a + (Number(p?.[k]) || 0), 0) * 1024 * 1024;
+  const state = b ? WIN_BATTERY[b.status] ?? "plugged in" : null;
+  // EstimatedRunTime is minutes, or 71582788 when there's nothing to estimate.
+  const left = b && state === "on battery" && b.minutes > 0 && b.minutes < 71582788 ? `${Math.floor(b.minutes / 60)}:${String(b.minutes % 60).padStart(2, "0")} left` : "";
+  return {
+    // A battery with no charge to report (pct null) isn't one at 0%.
+    battery: b && b.pct != null && Number.isFinite(Number(b.pct)) ?{ pct: Number(b.pct), state, timeText: left, power: "" } : null,
+    swapTotal: mb("total"),
+    swapUsed: mb("used"),
+  };
+}
+
+const WIN_SLOW_MS = 30_000;   // PowerShell takes about half a second to start
+const WIN_QUERY = "$b=@(Get-CimInstance Win32_Battery|%{@{pct=$_.EstimatedChargeRemaining;status=$_.BatteryStatus;minutes=$_.EstimatedRunTime}});"
+  + "$p=@(Get-CimInstance Win32_PageFileUsage|%{@{total=$_.AllocatedBaseSize;used=$_.CurrentUsage}});"
+  + "@{battery=$b;page=$p}|ConvertTo-Json -Compress -Depth 4";
+
+// Memory and disk from Node, network from netstat, the battery and page
+// file from PowerShell now and then. Temperatures need an administrator on
+// Windows, so there are none; nvidia-smi gives an NVIDIA GPU's.
+async function windows(ctx, s) {
+  // The PowerShell query is asked for once at a time, and only the first
+  // sample waits for it: later ones show the last answer while it runs.
+  let query = null;
+  if (s.winSlowAt == null || ctx.now() - s.winSlowAt >= WIN_SLOW_MS) {
+    s.winSlowAt = ctx.now();
+    query = ctx.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WIN_QUERY], { timeoutMs: 10_000 })
+      .then((out) => { s.winSlow = parseWinSlow(out); }, () => {});
+  }
+  const [net, fsStat, gpu] = await Promise.all([
+    ctx.run(["netstat", "-e"]),
+    ctx.fs?.statfs?.(`${process.env.SystemDrive || "C:"}\\`),
+    ctx.run(["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,power.draw", "--format=csv,noheader,nounits"]),
+    s.winSlow === undefined ? query : null,
+  ]);
+  const slow = s.winSlow;
+  const total = ctx.totalmem?.();
+  const disk = fsStat ? { total: fsStat.blocks * fsStat.bsize, free: fsStat.bavail * fsStat.bsize } : null;
+  // No nvidia-smi is no GPU figures (Number("") would be a 0%).
+  const [gUse, gTemp, gPower] = gpu?.trim() ? gpu.trim().split("\n")[0].split(",").map((x) => Number(x.trim())) : [];
+  return {
+    mem: total ? { used: total - ctx.freemem(), total, swapUsed: slow?.swapUsed ?? 0, swapTotal: slow?.swapTotal ?? 0 } : null,
+    pressure: null,
+    net: parseNetstatE(net),
+    disk: disk && disk.total > 0 ? { ...disk, used: disk.total - disk.free } : null,
+    battery: slow?.battery ?? null,
+    gpuUse: Number.isFinite(gUse) ? gUse : null,
+    sensors: Number.isFinite(gTemp) ? { gpuTemp: gTemp, gpuPower: Number.isFinite(gPower) ? gPower : undefined, fans: [] } : null,
+    sensorHint: "",
+  };
+}
+
 // ---------------------------------------------------------------- the sample
 
 export default {
@@ -239,7 +314,7 @@ export default {
     const cpuPct = dTotal > 0 ? Math.round((1 - (t.idle - s.cpu.idle) / dTotal) * 100) : 0;
     s.cpu = t;
 
-    const os = ctx.platform === "darwin" ? await macos(ctx) : await linux(ctx);
+    const os = ctx.platform === "darwin" ? await macos(ctx) : ctx.platform === "win32" ? await windows(ctx, s) : await linux(ctx);
     const now = ctx.now();
     let rx = null;
     let tx = null;
@@ -262,7 +337,8 @@ export default {
     const netMax = Math.max(...s.hist.rx, ...s.hist.tx, 1);
 
     const sen = os.sensors;
-    const load = ctx.loadavg?.() ?? [];
+    // Windows has no load average: Node gives it as zeros there.
+    const load = ctx.platform === "win32" ? [] : ctx.loadavg?.() ?? [];
     const gpu = os.gpuUse != null || Number.isFinite(sen?.gpuTemp)
       ? { pct: os.gpuUse, tempText: celsius(sen?.gpuTemp), power: watts(sen?.gpuPower) }
       : null;

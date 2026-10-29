@@ -117,7 +117,7 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/monitor.png" alt="Monitor 房間：CPU 和負載與溫度、記憶體和 swap、GPU 和功耗與風扇，以及網路圖表。" /></figure>
 
-即時顯示本機狀態，不需要 sudo：CPU、記憶體、GPU、網路、磁碟和電池。在 Mac 上，溫度和功耗需要 [macmon](https://github.com/vladkens/macmon)（`brew install macmon`）。溫度過高或容量將滿時會發出通知，可用 `/chat set monitor alerts off` 關閉。
+即時顯示本機狀態，不需要 sudo：CPU、記憶體、GPU、網路、磁碟和電池。在 Mac 上，溫度和功耗需要 [macmon](https://github.com/vladkens/macmon)（`brew install macmon`）。Windows 只讓系統管理員讀取溫度，所以在 Windows 上不顯示溫度，NVIDIA GPU 則透過 `nvidia-smi` 顯示。溫度過高或容量將滿時會發出通知，可用 `/chat set monitor alerts off` 關閉。
 
 ## ⧉ Clipboard
 
@@ -153,7 +153,7 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="Lo-fi 房間：播放器和音量，以及電台。" /></figure>
 
-透過 [mpv](https://mpv.io) 和 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（`brew install mpv yt-dlp`）播放 Lofi Girl 和 SomaFM。在輸入框貼上連結或資料夾，即可加入自訂的音樂。`p` 播放或暫停，`n` 跳至下一首。按下播放前不會播放任何內容。
+透過 [mpv](https://mpv.io) 和 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（`brew install mpv yt-dlp`；Windows 上請把兩者加入 `PATH`）播放 Lofi Girl 和 SomaFM。在輸入框貼上連結或資料夾，即可加入自訂的音樂。`p` 播放或暫停，`n` 跳至下一首。按下播放前不會播放任何內容。
 
 ## ◰ Docker
 

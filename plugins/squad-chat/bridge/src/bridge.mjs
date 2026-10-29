@@ -5,7 +5,8 @@
 // the heartbeats and the function rooms.
 //
 //   events  → stdout, one JSON object per line (NDJSON)
-//   control ← HTTP on a private Unix socket; every request carries
+//   control ← HTTP on a private Unix socket (on Windows, a loopback port,
+//             given as `url` in the ready event); every request carries
 //             x-squad-token: $SQUAD_BRIDGE_TOKEN
 //
 // Environment:
@@ -59,8 +60,11 @@ const socketDir = env.SQUAD_SOCKET_DIR
   || join(process.platform === "darwin" ? "/tmp" : tmpdir(), `squad-chat-${process.getuid?.() ?? "u"}`);
 mkdirSync(socketDir, { recursive: true, mode: 0o700 });
 chmodSync(socketDir, 0o700);
-const socketPath = join(socketDir, `${process.pid}.sock`);
-rmSync(socketPath, { force: true });
+// Windows has no Unix sockets, and the mod's fetch won't take a named pipe:
+// there control is HTTP on a loopback port of its own, guarded by the token.
+const tcp = process.platform === "win32";
+const socketPath = tcp ? null : join(socketDir, `${process.pid}.sock`);
+if (!tcp) rmSync(socketPath, { force: true });
 
 const chat = configured ? new Chat({
   url: env.SQUAD_SUPABASE_URL,
@@ -179,7 +183,7 @@ async function shutdown(code) {
   stopping = true;
   clearInterval(watch);
   server.close();
-  rmSync(socketPath, { force: true });
+  if (!tcp) rmSync(socketPath, { force: true });
   board.close();
   fnRooms.close();
   await chat?.shutdown().catch(() => {});
@@ -194,10 +198,13 @@ process.on("unhandledRejection", (err) => log(`unhandled: ${err?.stack ?? err}`)
 const parent = process.ppid;
 const watch = setInterval(() => { if (process.ppid !== parent) shutdown(0); }, 5000);
 
-server.listen(socketPath, () => {
-  chmodSync(socketPath, 0o600);
-  emit({ type: "ready", socket: socketPath, pid: process.pid, chat: configured });
+const listening = () => {
+  if (!tcp) chmodSync(socketPath, 0o600);
+  const where = tcp ? { url: `http://127.0.0.1:${server.address().port}` } : { socket: socketPath };
+  emit({ type: "ready", ...where, pid: process.pid, platform: process.platform, chat: configured });
   board.report();
   fnRooms.report();
   chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));
-});
+};
+if (tcp) server.listen(0, "127.0.0.1", listening);
+else server.listen(socketPath, listening);

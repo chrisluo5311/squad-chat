@@ -22,9 +22,9 @@
 import { readdirSync, readFileSync, writeFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execFile, spawn } from "node:child_process";
-import { readFile, stat, readdir } from "node:fs/promises";
+import { readFile, stat, readdir, statfs } from "node:fs/promises";
 import { connect } from "node:net";
-import { cpus, loadavg, homedir } from "node:os";
+import { cpus, loadavg, totalmem, freemem, homedir } from "node:os";
 import { checkManifest, parseInterval, settingError, compareVersions } from "./manifest.mjs";
 import { allowedHosts, limitedFetch, clean, RoomError } from "./net.mjs";
 import { locked } from "./lock.mjs";
@@ -46,7 +46,7 @@ export const PROVIDERS = Object.fromEntries([localList, openMeteo, hn, rss, sysi
 // Resolves its stdout, or null when it's missing, fails or overruns.
 function runCommand(argv, { timeoutMs = 3_000, maxBytes = 4 * 1024 * 1024 } = {}) {
   return new Promise((resolve) => {
-    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" } }, (err, stdout) => resolve(err ? null : String(stdout)));
+    execFile(argv[0], argv.slice(1), { timeout: timeoutMs, maxBuffer: maxBytes, env: { ...process.env, LC_ALL: "C" }, windowsHide: true }, (err, stdout) => resolve(err ? null : String(stdout)));
   });
 }
 
@@ -232,12 +232,14 @@ export function roomRegistry({ dirs, dataDir, runtimeDir, emit, log = () => {}, 
       read: (file) => readFile(file, "utf8").catch(() => null),
       cpus,
       loadavg,
+      totalmem,
+      freemem,
       now: Date.now,
       home: homedir(),
       runtimeDir,
       spawn: (argv, opts) => spawn(argv[0], argv.slice(1), { stdio: "ignore", ...opts }),
       connect,
-      fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []) },
+      fs: { stat: (f) => stat(f).catch(() => null), readdir: (d) => readdir(d).catch(() => []), statfs: (p) => statfs(p).catch(() => null) },
       hosts: hostsOf(m),   // the manifest's own, for what a provider hands to another program (Lo-fi's mpv)
       log,
       // Only headers come from the provider: the time and size limits stay ours.

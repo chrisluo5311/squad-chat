@@ -4,10 +4,11 @@ import { test, expect, mock } from 'claude-code/testing'
 // child prints whatever the test pushes, and control requests are recorded and
 // answered from `replies`.
 type Run = { exitCode: number; stdout?: string; stderr?: string }
-function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, unknown>, git = '', gh = null as null | ((argv: string[]) => Run), run = null as null | ((argv: string[], init: any) => Run | null) } = {}) {
+function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, unknown>, git = '', gh = null as null | ((argv: string[]) => Run), run = null as null | ((argv: string[], init: any) => Run | null), clipWatch = null as null | (() => AsyncGenerator<{ stream: string; text: string }>) } = {}) {
   const lines: string[] = []
   let wake: (() => void) | null = null
   const calls: { path: string; body: any }[] = []
+  const reached: { url: string; socketPath?: string }[] = []
   const spawned: any[] = []
   const replies: Record<string, (body: any) => [number, any]> = {}
   const runs: { argv: string[]; init: any }[] = []
@@ -35,6 +36,13 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
   })
   on('process.spawn', async function* (_$: any, e: any) {
     spawned.push(e)
+    // Windows' clipboard watcher, a PowerShell: `clipWatch` plays it, or
+    // there's no PowerShell here.
+    if (e.argv[0] === 'powershell') {
+      if (!clipWatch) throw new Error('powershell: not found')
+      yield* clipWatch()
+      return { code: 0, signal: null }
+    }
     for (;;) {
       while (lines.length) yield { stream: 'stdout', text: lines.shift()! }
       await new Promise<void>((r) => { wake = r })
@@ -44,6 +52,7 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
     const path = new URL(e.url).pathname
     const body = e.init?.body ? JSON.parse(e.init.body) : undefined
     calls.push({ path, body })
+    reached.push({ url: e.url, socketPath: e.init?.socketPath })
     const [status, data] = replies[path]?.(body) ?? [200, { ok: true }]
     return { value: { status, ok: status < 400, headers: {}, text: JSON.stringify(data) } }
   })
@@ -52,6 +61,7 @@ function fakeBridge(on: any, { node = 'v22.17.0', store = {} as Record<string, u
     clock,
     runs,
     calls,
+    reached,
     replies,
     spawned,
     start: ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true }),
@@ -1386,6 +1396,24 @@ const snippetsLoaded = (items = SNIPS) => [
   { type: 'fnrooms', rooms: [SNIPPET_ROOM], invalid: [] },
   { type: 'fnroom', id: 'snippet', provider: 'list', data: { items, count: items.length }, at: Date.now() },
 ]
+
+// On Windows the bridge listens on a loopback port and says so as `url`;
+// elsewhere on a Unix socket.
+test('the rooms reach the bridge on its Unix socket', SLOW, async ($, on) => {
+  const unix = fakeBridge(on, { store: { view: 'snippet' } })
+  await unix.start($)
+  unix.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, chat: false }, ...snippetsLoaded())
+  await settle()
+  expect(unix.reached.at(-1)).toEqual({ url: 'http://bridge/fnroom/visible', socketPath: '/tmp/fake.sock' })
+})
+
+test('the rooms reach a Windows bridge on its loopback URL, with no socket', SLOW, async ($, on) => {
+  const win = fakeBridge(on, { store: { view: 'snippet' } })
+  await win.start($)
+  win.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, chat: false }, ...snippetsLoaded())
+  await settle()
+  expect(win.reached.at(-1)).toEqual({ url: 'http://127.0.0.1:50123/fnroom/visible', socketPath: undefined })
+})
 
 test('Snippet room: a numbered snippet\'s first line leaves room for its tag', SLOW, async ($, on) => {
   const body = `const answer = await fetch(url).then((r) => r.json()).catch(() => null) // ${'and a long tail '.repeat(20)}`
@@ -3159,6 +3187,84 @@ test('Clipboard: wl-paste with nothing copied yet is a reader that works, not a 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
   expect(await ui.find({ type: 'Text', text: /install wl-clipboard/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'hello from wayland' })).toBeDefined()
+  await ui.unmount()
+})
+
+// Windows: none of pbpaste, wl-paste or xclip, so one PowerShell watches
+// the clipboard and says what it holds on a line each time it changes.
+const noReaders = (argv: string[]) => (['pbpaste', 'wl-paste', 'xclip'].includes(argv[0]) ? { exitCode: 127, stderr: 'not found' } : null)
+const CLIP_STORE = { view: 'clipboard', sysRooms: ['clipboard'], roomsOffered: ['usage', 'git', 'agents', 'focus', 'pet', 'snippet', 'monitor'] }
+
+test('Clipboard on Windows: one PowerShell watches it, and stops when the room goes', SLOW, async ($, on) => {
+  recordUi(on)
+  const said: string[] = []
+  let wake: (() => void) | null = null
+  let stopped = false
+  const bridge = fakeBridge(on, {
+    store: { ...CLIP_STORE },
+    run: noReaders,
+    clipWatch: async function* () {
+      try {
+        for (;;) {
+          while (said.length) yield { stream: 'stdout', text: `${JSON.stringify({ text: said.shift() })}\n` }
+          await new Promise<void>((r) => { wake = r })
+        }
+      } finally { stopped = true }
+    },
+  })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, platform: 'win32', chat: false })
+  await settle()
+  await bridge.clock.advance(3_000)
+  said.push('', '中文也行\r\nsecond line'); wake?.()
+  await settle()
+  const watchers = () => bridge.spawned.filter((e: any) => e.argv[0] === 'powershell')
+  expect(watchers().length).toBe(1)
+  expect(watchers()[0].argv).toContain('-Sta')
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: /install wl-clipboard/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /中文也行/ })).toBeDefined()
+  await ui.unmount()
+  // Read every couple of seconds no more: the watcher alone, once.
+  const polls = bridge.runs.filter((r: any) => r.argv[0] === 'pbpaste').length
+  await bridge.clock.advance(10_000)
+  expect(bridge.runs.filter((r: any) => r.argv[0] === 'pbpaste').length).toBe(polls)
+  expect(watchers().length).toBe(1)
+
+  await $.command.run({ command: 'chat', args: 'rooms -clipboard' })
+  await bridge.clock.advance(2_000)
+  // The fake waits for a line: give it one, so it reaches the return the
+  // room asked for (a real PowerShell is killed where it is).
+  said.push('after'); wake?.()
+  await settle()
+  expect(stopped).toBe(true)
+})
+
+test('Clipboard on Linux with no reader says what to install, and starts no PowerShell', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { ...CLIP_STORE }, run: noReaders })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1, platform: 'linux', chat: false })
+  await settle()
+  await bridge.clock.advance(3_000)
+  await settle()
+  expect(bridge.spawned.filter((e: any) => e.argv[0] === 'powershell').length).toBe(0)
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: /install wl-clipboard/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Clipboard on Windows with no PowerShell says so, not what Linux needs', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { ...CLIP_STORE }, run: noReaders })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, platform: 'win32', chat: false })
+  await settle()
+  await bridge.clock.advance(3_000)
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: /PowerShell didn't run/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /install wl-clipboard/ })).toBeUndefined()
   await ui.unmount()
 })
 
