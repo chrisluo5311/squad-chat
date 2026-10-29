@@ -3100,6 +3100,36 @@ test('Toolbox bands: the tools, then the last result, kept clear of ‹ › and 
   await ui.unmount()
 })
 
+test('on Windows the terminal gives ⚒ ☀ ⏸ and the like the emoji selector, so they take the two cells they are drawn in', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { view: 'toolbox' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, platform: 'win32', chat: false })
+  await settle()
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: / ⚒️ Toolbox / })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / ⚒ Toolbox / })).toBeUndefined()
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await ui.find({ type: 'Text', text: /⚒️ Toolbox/ })).toBeDefined()
+  await ui.unmount()
+  // The desktop draws them as text, as it does everywhere.
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /️/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('off Windows the terminal leaves ⚒ as it is', SLOW, async ($, on) => {
+  const bridge = fakeBridge(on, { store: { view: 'toolbox' } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, platform: 'darwin', chat: false })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: / ⚒ Toolbox / })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /️/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('Toolbox band with the Clipboard room on: a JWT copied shows how long it has, and the tab warns before it expires', SLOW, async ($, on) => {
   recordUi(on)
   const token = jwtFor({ role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 5 * 60 + 30 })

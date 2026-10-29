@@ -16,6 +16,13 @@ export function cells(str) {
   return n;
 }
 
+// Symbols that are text by default but that Windows Terminal finds only in
+// Segoe UI Emoji: it draws them in two cells where the engine gave one, over
+// the cell after. The emoji selector makes them two cells for both. `cells`
+// counts them as two either way. (↗ ▶ ™ ▪ stay text there, and stay as they are.)
+const TEXT_EMOJI = /([☀☁☂🌤🌧🌦❄🌨⛈🌫⚠⏸⏭⚙⌨⏯⚒🌡⏮⏹])(?!️)/gu;
+export const emojiSelected = (str) => String(str).replace(TEXT_EMOJI, "$1️");
+
 // Rows a text takes when word-wrapped at `width`, the way the terminal wraps.
 export function rowsFor(text, width) {
   width = Math.max(10, width);

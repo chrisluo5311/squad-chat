@@ -23,6 +23,7 @@ import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggle
 import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS, CLIP_WATCH, CLIP_ONCE_WIN } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
+import { emojiSelected } from "./widgets.mjs";
 
 state.focus = createFocus();
 state.habits = createHabits();
@@ -185,6 +186,23 @@ function redact(content) {
 }
 
 // ---------------------------------------------------------------- pane and commands
+
+// The terminal's elements on Windows: each text gets the emoji selector after
+// ☀ ⚒ ⏸ and the like, which Windows Terminal draws two cells wide
+// (widgets.mjs). Elsewhere, and in Svg, they're left as they are.
+const TEXT_PROPS = ["children", "label", "placeholder", "submitLabel", "title"];
+
+function terminalEls(els) {
+  if (state.platform !== "win32") return els;
+  const fix = (v) => (typeof v === "string" ? emojiSelected(v) : Array.isArray(v) ? v.map(fix) : v);
+  const wrap = (make) => (props = {}) => {
+    const out = { ...props };
+    for (const k of TEXT_PROPS) if (k in out) out[k] = fix(out[k]);
+    if (Array.isArray(out.options)) out.options = out.options.map((o) => ({ ...o, label: fix(o.label) }));
+    return make(out);
+  };
+  return Object.fromEntries(Object.entries(els).map(([k, make]) => [k, typeof make === "function" && k !== "Svg" ? wrap(make) : make]));
+}
 
 // The band shows the room with the newest message: Open goes to that room.
 async function openFromBand($) {
@@ -1207,7 +1225,7 @@ export function register(on, options) {
     // The pane draws lines and charts as Svg where a surface paints them; the
     // terminal keeps its glyphs, so it is drawn as though it had no Svg.
     const els = $.ui.resolve(e);
-    return paneView(e.surface === "terminal" ? { ...els, Svg: undefined } : els, { ...props, surface: e.surface }, {
+    return paneView(e.surface === "terminal" ? terminalEls({ ...els, Svg: undefined }) : els, { ...props, surface: e.surface }, {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void (async () => { if (state.view !== "chat") await setView($, "chat"); await selectRoom($, id); })(); },
@@ -1322,7 +1340,8 @@ export function register(on, options) {
     if (e.props?.hasSurvey || (activeView() === "chat" && !chatShown)) return next(e);
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
-    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openFromBand($); }, onCycle: (dir) => { void cycleBand($, dir); } });
+    const els = $.ui.resolve(e);
+    return bandView(e.surface === "terminal" ? terminalEls(els) : els, { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openFromBand($); }, onCycle: (dir) => { void cycleBand($, dir); } });
   });
 
   // "auto" do not disturb: a turn still running after LONG_TURN_MS goes quiet
