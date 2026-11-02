@@ -3100,11 +3100,11 @@ test('Toolbox bands: the tools, then the last result, kept clear of ‹ › and 
   await ui.unmount()
 })
 
-test('on Windows the terminal gives ⚒ ☀ ⏸ and the like the emoji selector, so they take the two cells they are drawn in', SLOW, async ($, on) => {
+test('in Windows Terminal ⚒ ☀ ⏸ and the like get the emoji selector, so they take the two cells they are drawn in', SLOW, async ($, on) => {
   recordUi(on)
   const bridge = fakeBridge(on, { store: { view: 'toolbox' } })
   await bridge.start($)
-  bridge.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, platform: 'win32', chat: false })
+  bridge.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, platform: 'win32', windowsTerminal: true, chat: false })
   await settle()
   let ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
   expect(await ui.find({ type: 'Text', text: / ⚒️ Toolbox / })).toBeDefined()
@@ -3115,6 +3115,20 @@ test('on Windows the terminal gives ⚒ ☀ ⏸ and the like the emoji selector,
   await ui.unmount()
   // The desktop draws them as text, as it does everywhere.
   ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /️/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('in Orca on Windows ⚒ and a saved ⌨️ go without the selector, so they take the one cell they are drawn in', SLOW, async ($, on) => {
+  recordUi(on)
+  const bridge = fakeBridge(on, { store: { pet: { log: [{ at: Date.now(), icon: '⌨️', text: 'Worked with Claude for 7m' }] } } })
+  await bridge.start($)
+  bridge.emit({ type: 'ready', url: 'http://127.0.0.1:50123', pid: 1, platform: 'win32', windowsTerminal: false, chat: false })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await ui.press({ key: 'sys-pet' })
+  expect(await ui.find({ type: 'Text', text: /⌨ Worked with Claude for 7m/ })).toBeDefined()
+  expect((await ui.find({ type: 'Button', key: 'sys-toolbox' }))!.props.label).toBe(' ⚒')
   expect(await ui.find({ type: 'Text', text: /️/ })).toBeUndefined()
   await ui.unmount()
 })

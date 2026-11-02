@@ -37,6 +37,9 @@ const MAX_BODY = 64 * 1024;   // a snippet is up to 8000 characters
 
 const env = process.env;
 const token = env.SQUAD_BRIDGE_TOKEN;
+// Windows Terminal sets WT_SESSION and no TERM_PROGRAM; a terminal started
+// from it (Orca, VS Code) inherits WT_SESSION but sets TERM_PROGRAM.
+const windowsTerminal = Boolean(env.WT_SESSION) && !env.TERM_PROGRAM;
 
 function emit(event) {
   process.stdout.write(JSON.stringify(event) + "\n");
@@ -201,7 +204,7 @@ const watch = setInterval(() => { if (process.ppid !== parent) shutdown(0); }, 5
 const listening = () => {
   if (!tcp) chmodSync(socketPath, 0o600);
   const where = tcp ? { url: `http://127.0.0.1:${server.address().port}` } : { socket: socketPath };
-  emit({ type: "ready", ...where, pid: process.pid, platform: process.platform, chat: configured });
+  emit({ type: "ready", ...where, pid: process.pid, platform: process.platform, windowsTerminal, chat: configured });
   board.report();
   fnRooms.report();
   chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));

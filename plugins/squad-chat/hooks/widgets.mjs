@@ -18,10 +18,15 @@ export function cells(str) {
 
 // Symbols that are text by default but that Windows Terminal finds only in
 // Segoe UI Emoji: it draws them in two cells where the engine gave one, over
-// the cell after. The emoji selector makes them two cells for both. `cells`
+// the cell after. The emoji selector makes them two cells for both. Orca and
+// the other xterm.js terminals ignore the selector and draw them in one cell
+// where the engine, given it, counts two: there they go without it. `cells`
 // counts them as two either way. (↗ ▶ ™ ▪ stay text there, and stay as they are.)
-const TEXT_EMOJI = /([☀☁☂🌤🌧🌦❄🌨⛈🌫⚠⏸⏭⚙⌨⏯⚒🌡⏮⏹])(?!️)/gu;
-export const emojiSelected = (str) => String(str).replace(TEXT_EMOJI, "$1️");
+const TEXT_EMOJI = "[☀☁☂🌤🌧🌦❄🌨⛈🌫⚠⏸⏭⚙⌨⏯⚒🌡⏮⏹]";
+const UNSELECTED = new RegExp(`(${TEXT_EMOJI})(?!️)`, "gu");
+const SELECTED = new RegExp(`(${TEXT_EMOJI})️`, "gu");
+export const emojiSelected = (str) => String(str).replace(UNSELECTED, "$1️");
+export const emojiUnselected = (str) => String(str).replace(SELECTED, "$1");
 
 // Rows a text takes when word-wrapped at `width`, the way the terminal wraps.
 export function rowsFor(text, width) {

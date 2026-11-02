@@ -20,6 +20,7 @@ export const state = {
   detail: "",             // why the bridge isn't ready
   socket: null,
   platform: null,         // the bridge's process.platform, once it's ready
+  windowsTerminal: false, // the bridge runs in Windows Terminal (not Orca, VS Code…)
   token: null,
   auth: "starting",       // starting | signed_out | code_sent | signed_in
   email: null,            // where the code went
@@ -193,6 +194,7 @@ export function applyEvent(event) {
       state.socket = event.socket ?? event.url;
       // The mod can't see the OS; the bridge, in Node, says which it is.
       if (event.platform) state.platform = event.platform;
+      state.windowsTerminal = event.windowsTerminal === true;
       // Without a server the bridge runs for the Agents room's heartbeats alone.
       if (event.chat === false) return true;
       state.bridge = "ready";

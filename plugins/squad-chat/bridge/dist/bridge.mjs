@@ -26092,6 +26092,7 @@ function roomStore({ url = DEFAULT_STORE, configDir: configDir2, dataDir, regist
 var MAX_BODY2 = 64 * 1024;
 var env = process.env;
 var token = env.SQUAD_BRIDGE_TOKEN;
+var windowsTerminal = Boolean(env.WT_SESSION) && !env.TERM_PROGRAM;
 function emit(event) {
   process.stdout.write(JSON.stringify(event) + "\n");
 }
@@ -26241,7 +26242,7 @@ var watch2 = setInterval(() => {
 var listening = () => {
   if (!tcp) chmodSync7(socketPath, 384);
   const where = tcp ? { url: `http://127.0.0.1:${server.address().port}` } : { socket: socketPath };
-  emit({ type: "ready", ...where, pid: process.pid, platform: process.platform, chat: configured });
+  emit({ type: "ready", ...where, pid: process.pid, platform: process.platform, windowsTerminal, chat: configured });
   board.report();
   fnRooms.report();
   chat?.start().catch((err) => emit({ type: "error", message: `startup failed: ${err.message}` }));

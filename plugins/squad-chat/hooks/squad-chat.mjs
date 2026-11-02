@@ -23,7 +23,7 @@ import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggle
 import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS, CLIP_WATCH, CLIP_ONCE_WIN } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
-import { emojiSelected } from "./widgets.mjs";
+import { emojiSelected, emojiUnselected } from "./widgets.mjs";
 
 state.focus = createFocus();
 state.habits = createHabits();
@@ -187,14 +187,16 @@ function redact(content) {
 
 // ---------------------------------------------------------------- pane and commands
 
-// The terminal's elements on Windows: each text gets the emoji selector after
-// ☀ ⚒ ⏸ and the like, which Windows Terminal draws two cells wide
+// The terminal's elements on Windows: in Windows Terminal each text gets the
+// emoji selector after ☀ ⚒ ⌨ and the like, which it draws two cells wide; in
+// Orca and the other xterm.js terminals, which draw them in one, it loses it
 // (widgets.mjs). Elsewhere, and in Svg, they're left as they are.
 const TEXT_PROPS = ["children", "label", "placeholder", "submitLabel", "title"];
 
 function terminalEls(els) {
   if (state.platform !== "win32") return els;
-  const fix = (v) => (typeof v === "string" ? emojiSelected(v) : Array.isArray(v) ? v.map(fix) : v);
+  const emoji = state.windowsTerminal ? emojiSelected : emojiUnselected;
+  const fix = (v) => (typeof v === "string" ? emoji(v) : Array.isArray(v) ? v.map(fix) : v);
   const wrap = (make) => (props = {}) => {
     const out = { ...props };
     for (const k of TEXT_PROPS) if (k in out) out[k] = fix(out[k]);
