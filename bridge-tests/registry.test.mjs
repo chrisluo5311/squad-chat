@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { roomRegistry, PROVIDERS } from "../plugins/squad-chat/bridge/src/rooms/registry.mjs";
 import { locked } from "../plugins/squad-chat/bridge/src/rooms/lock.mjs";
 
@@ -26,7 +26,7 @@ function setup(rooms) {
   };
   for (const id of rooms) write(id);
   const runs = [];
-  const counter = { type: "counter", hosts: [], async fetch(params, ctx) { runs.push({ room: ctx.dataDir.split("/").at(-1), word: params.word }); await sleep(30); return { n: runs.length }; } };
+  const counter = { type: "counter", hosts: [], async fetch(params, ctx) { runs.push({ room: basename(ctx.dataDir), word: params.word }); await sleep(30); return { n: runs.length }; } };
   const events = [];
   const reg = roomRegistry({ dirs: [join(dir, "rooms")], dataDir: join(dir, "data"), emit: (e) => events.push(e), providers: { ...PROVIDERS, counter } });
   return { dir, write, runs, events, reg, count: (id) => runs.filter((r) => r.room === id).length };

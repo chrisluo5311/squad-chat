@@ -7,7 +7,7 @@ import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync, readFileSync, statSync, existsSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { Bridge } from "./helpers.mjs";
 import { limitedFetch, clean, allowedHosts } from "../plugins/squad-chat/bridge/src/rooms/net.mjs";
 import { checkManifest } from "../plugins/squad-chat/bridge/src/rooms/manifest.mjs";
@@ -16,6 +16,8 @@ import { PROVIDERS } from "../plugins/squad-chat/bridge/src/rooms/registry.mjs";
 const SNIPPET = JSON.parse(readFileSync(new URL("../plugins/squad-chat/rooms/snippet/room.json", import.meta.url), "utf8"));
 const latest = (b, id) => b.events.filter((e) => e.type === "fnroom" && e.id === id).at(-1);
 const count = (b) => latest(b, "snippet")?.data?.count;
+// Windows has no Unix permission bits to check.
+const POSIX = process.platform !== "win32";
 
 describe("function rooms in the bridge", () => {
   const b = new Bridge("rooms", { url: null });
@@ -30,7 +32,7 @@ describe("function rooms in the bridge", () => {
     await b.start();
     const ev = await b.waitFor((e) => e.type === "fnrooms");
     assert.deepEqual(ev.rooms.map((r) => r.id), ["docker", "lofi", "monitor", "news", "ping", "snippet", "stock", "weather"]);
-    const why = Object.fromEntries(ev.invalid.map((x) => [x.dir.split("/").at(-1), x.errors.join("; ")]));
+    const why = Object.fromEntries(ev.invalid.map((x) => [basename(x.dir), x.errors.join("; ")]));
     assert.match(why.broken, /no provider called "shell"/);
     assert.match(why.snippet, /already a room/);
   });
@@ -46,8 +48,8 @@ describe("function rooms in the bridge", () => {
     assert.equal(r.item.body, "jq . file.json");
     assert.equal(count(b), 1);
     const file = join(b.configDir, "room-data", "snippet", "list.json");
-    assert.equal(statSync(file).mode & 0o777, 0o600);
-    assert.equal(statSync(join(b.configDir, "room-data", "snippet")).mode & 0o777, 0o700);
+    if (POSIX) assert.equal(statSync(file).mode & 0o777, 0o600);
+    if (POSIX) assert.equal(statSync(join(b.configDir, "room-data", "snippet")).mode & 0o777, 0o700);
 
     const dup = await b.call("POST", "/fnroom/action", { room: "snippet", action: "add", args: { name: "JQ Pretty", body: "x" } });
     assert.equal(dup.status, 409);
@@ -120,7 +122,7 @@ describe("function rooms in the bridge", () => {
     assert.equal(r.values.units, "imperial");
     assert.deepEqual(values("weather"), { cities: ["Taipei", "New York", "Osaka"], units: "imperial", city: "Taipei" });
     const file = join(b.configDir, "room-data", "weather", "settings.json");
-    assert.equal(statSync(file).mode & 0o777, 0o600);
+    if (POSIX) assert.equal(statSync(file).mode & 0o777, 0o600);
     assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { cities: ["Taipei", "New York", "Osaka"], units: "imperial" });
 
     const bad = async (body, want) => {
