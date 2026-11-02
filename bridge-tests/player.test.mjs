@@ -174,6 +174,13 @@ describe("player", () => {
     await assert.rejects(player.actions.play(params, { name: "nope" }, m.ctx), /Nothing called "nope"/);
   });
 
+  it("on Windows, ~\\ is home too", async () => {
+    const at = resolve("/Users/me\\Music\\chill");   // C:\Users\me\Music\chill there
+    const m = fakeMpv({ dirs: { [at]: ["a.mp3"] } });
+    m.ctx.platform = "win32";
+    assert.deepEqual(await player.actions.add(params, { target: "~\\Music\\chill" }, m.ctx), { ok: true, added: 1, first: "a" });
+  });
+
   it("adds URLs, files and folders, removes, and imports Pixel Play's playlist", async () => {
     // Paths as the player makes them: C:\Users\me\… when the tests run on Windows.
     const chill = resolve("/Users/me/Music/chill");

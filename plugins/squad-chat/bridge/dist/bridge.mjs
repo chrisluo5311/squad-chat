@@ -24691,7 +24691,7 @@ var player_default = {
       const items = loadList(ctx.dataDir);
       const fresh = [];
       if (kindOf(raw) === "file") {
-        const path = resolve(raw.replace(/^~(?=\/|$)/, ctx.home ?? "~"));
+        const path = resolve(raw.replace(ctx.platform === "win32" ? /^~(?=[\\/]|$)/ : /^~(?=\/|$)/, ctx.home ?? "~"));
         const st = await ctx.fs.stat(path);
         if (!st) throw new RoomError(404, `No file or folder at ${path}.`);
         const files = st.isDirectory?.() ? (await ctx.fs.readdir(path)).filter((n) => AUDIO.has(extname(n).toLowerCase())).sort().map((n) => join5(path, n)) : AUDIO.has(extname(path).toLowerCase()) ? [path] : [];
