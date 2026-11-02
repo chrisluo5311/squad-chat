@@ -1421,7 +1421,7 @@ export function register(on, options) {
   // Each tool call, timed. Passed through untouched: never denied, never changed.
   on("tool.call", async ($, e, next) => {
     let key = null;
-    try { key = toolStarted(state.usage, { tool: e.tool, agentId: e.agentId, input: e, at: Date.now() }); sysChanged($); }
+    try { key = toolStarted(state.usage, { tool: e.tool, agentId: e.agentId, input: e, at: Date.now(), platform: state.platform }); sysChanged($); }
     catch { /* the call matters more than its timing */ }
     let r;
     try {

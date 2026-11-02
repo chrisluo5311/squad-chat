@@ -112,6 +112,18 @@ test('a Bash summary skips a leading cd, so it names the command that runs', () 
   expect(toolSummary('Bash', { command: 'npm test' })).toBe('npm test')
 })
 
+test('a file summary is its name: on Windows a path splits at \\ too, elsewhere only at /', () => {
+  expect(toolSummary('Read', { file_path: 'C:\\Users\\me\\squad-chat\\hooks\\metrics.mjs' }, 'win32')).toBe('metrics.mjs')
+  expect(toolSummary('Edit', { file_path: 'C:/Users/me/squad-chat/README.md' }, 'win32')).toBe('README.md')
+  expect(toolSummary('Read', { file_path: '/Users/me/a\\b.txt' }, 'darwin')).toBe('a\\b.txt')
+  expect(toolSummary('Read', { file_path: '/Users/me/squad-chat/hooks/metrics.mjs' })).toBe('metrics.mjs')
+})
+
+test('a Skill summary names the skill and its arguments', () => {
+  expect(toolSummary('Skill', { skill: 'caveman' })).toBe('caveman')
+  expect(toolSummary('Skill', { skill: 'code-review', args: 'high --fix' })).toBe('code-review high --fix')
+})
+
 test('Requests tip: a file read once is said to be resent, never read again', () => {
   const u = createUsage()
   const usage = (input: number, output: number) => ({ input_tokens: 500, cache_read_input_tokens: input - 500, cache_creation_input_tokens: 0, output_tokens: output })

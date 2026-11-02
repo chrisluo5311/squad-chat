@@ -147,8 +147,10 @@ export function spendSeries(u, now, n = 12, bucketMs = 5 * 60_000) {
 
 // A few words on what a call is about, with anything that looks like a
 // secret masked: the command for Bash, a file's name, a search pattern.
-export function toolSummary(tool, input = {}) {
-  const base = (p) => String(p ?? "").split("/").filter(Boolean).at(-1) ?? "";
+// On Windows a path is split at \ as well as /.
+export function toolSummary(tool, input = {}, platform = null) {
+  const sep = platform === "win32" ? /[\\/]/ : "/";
+  const base = (p) => String(p ?? "").split(sep).filter(Boolean).at(-1) ?? "";
   let s;
   switch (tool) {
     // A leading "cd <dir> &&" says where, not what: the command after it is the news.
@@ -159,6 +161,7 @@ export function toolSummary(tool, input = {}) {
     case "WebFetch": s = input.url; break;
     case "WebSearch": s = input.query; break;
     case "Agent": case "Task": s = input.description; break;
+    case "Skill": s = [input.skill, input.args].filter(Boolean).join(" "); break;
     default: s = input.description ?? input.command ?? input.query ?? "";
   }
   s = String(s ?? "").replace(/\s+/g, " ").trim();
@@ -168,9 +171,9 @@ export function toolSummary(tool, input = {}) {
 
 let seq = 0;
 
-export function toolStarted(u, { tool, agentId, input, at }) {
+export function toolStarted(u, { tool, agentId, input, at, platform }) {
   const key = `c${++seq}`;
-  const entry = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input), at, ms: null, isError: false, done: false };
+  const entry = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input, platform), at, ms: null, isError: false, done: false };
   u.calls.set(key, entry);
   u.feed.push(entry);
   if (u.feed.length > FEED) u.feed.splice(0, u.feed.length - FEED);
