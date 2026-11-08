@@ -662,10 +662,15 @@ function toggleBreakdown($) {
 let gitBusy = false;
 async function refreshGit($, { ifOlderThan = 0 } = {}) {
   if (gitBusy || !state.sysRooms.includes("git")) return;
-  if (ifOlderThan && Date.now() - state.git.fetchedAt < ifOlderThan) return;
+  // From the last try, not the last success: a folder with no repository (or
+  // no gh, or a failure) never gets a fetchedAt, and it was tried again every
+  // tick, each one redrawing the room through "loading".
+  if (ifOlderThan && Date.now() - state.gitTriedAt < ifOlderThan) return;
   gitBusy = true;
+  state.gitTriedAt = Date.now();
   const prev = state.git;
-  if (!prev.fetchedAt) { state.git = { ...prev, status: "loading" }; $.ui.invalidate("ui.render"); }
+  // "loading" for the first look, or a refresh asked for; a timed one keeps what shows.
+  if (!prev.fetchedAt && (prev.status === "idle" || !ifOlderThan)) { state.git = { ...prev, status: "loading" }; $.ui.invalidate("ui.render"); }
   try {
     const cwd = await $.session.cwd();
     const run = (argv) => $.process.run(argv, { cwd, timeoutMs: 15_000 });

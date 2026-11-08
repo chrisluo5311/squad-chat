@@ -52,6 +52,7 @@ export const state = {
   fnToasts: [],           // function rooms' new alerts, waiting to be toasted
   usage: createUsage(),   // this session's numbers (metrics.mjs)
   git: emptyGit(),        // the Git room's snapshot (github.mjs)
+  gitTriedAt: 0,          // when it was last fetched, whatever came of it
   focus: null,            // the Focus room's timer (focus.mjs), set when the mod loads
   habits: null,           // the Habits room's goals and days (habits.mjs), likewise
   toolbox: null,          // the Toolbox room's tool, input and result (toolbox.mjs), likewise
