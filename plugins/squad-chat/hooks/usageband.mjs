@@ -1,16 +1,19 @@
 // The Usage band on the desktop:
 //
-//   ◔ Usage │ ☀ 77k │ ▂▅▃█ ▲ +5.3k │ (ring·moon) 5h 31% │ (ring·moon) 7d 58% │ $4.21 │ ▮▮▮▮▯ 98% cache │ ●●○ 2 running
+//   ◔ Usage │ ☀ 77k │ ▂▅▃█ ▲ +5.3k │ (ring·moon) 5h 31% │ #7 update_plan 0.4s │ $4.21 │ ▮▮▮▮▯ 98% cache
 //
 // The context leads with the weather and a bar per recent prompt for what it
 // added. The rings are "orbits": the arc is the share used, and for a
 // rate-limit window a small moon rides the ring at the share of time already
 // gone. Arc behind the moon: on pace. Arc past it: using faster than time,
-// drawn warm. The terminal keeps its line of text (sysBandPieces).
+// drawn warm. Then the trajectory: what Claude is doing, or how many
+// requests once idle (the 7-day window is the room's). The terminal keeps
+// its line of text (sysBandPieces).
 
 import { state } from "./state.mjs";
 import { theme, level, palette } from "./theme.mjs";
-import { limitWindows, cacheRatio, burnRate, agentCounts, isEnded, totalTokens } from "./metrics.mjs";
+import { limitWindows, cacheRatio, burnRate, totalTokens, trajectoryLive, trajectoryTotals } from "./metrics.mjs";
+import { took, shortTool } from "./trajview.mjs";
 import { fmtTokens, fmtUsd, resetLabel } from "./widgets.mjs";
 import { forecast, shortModel } from "./sysviews.mjs";
 import * as K from "./bandkit.mjs";
@@ -66,8 +69,8 @@ export function usageSections(now, columns = 100) {
       ],
     });
   }
-  for (const l of limitWindows(u).filter((l) => WINDOW_MS[l.kind])) {
-    if (l.kind === "seven_day" && columns < 50) continue;
+  // The 5-hour window; the 7-day one is the room's, its place the trajectory's.
+  for (const l of limitWindows(u).filter((l) => l.kind === "five_hour")) {
     const used = l.percentUsed;
     const elapsed = elapsedOf(l, now);
     const pace = paceWord(used, elapsed);
@@ -85,6 +88,49 @@ export function usageSections(now, columns = 100) {
         elapsed != null ? `${Math.round(elapsed)}% of the time gone` : null,
         pace,
         l.resetsAt ? `resets ${resetLabel(l.resetsAt, new Date(now))}` : null,
+      ],
+    });
+  }
+  // The trajectory, after the 5-hour window: while Claude works what it is
+  // doing ("#7 update_plan 0.4s"), once idle how many requests and how fast.
+  // Narrower forms for a narrow band, down to the tool alone or "7 req"; the
+  // chart over the last requests on a wide one.
+  if (u.steps.length) {
+    const live = trajectoryLive(u);
+    const tt = trajectoryTotals(u);
+    const wide = columns >= 130;
+    const marks = u.steps.slice(-10).map((s) => ({
+      live: s.status === "streaming",
+      calls: s.calls.map((c) => ({ color: c.isError ? theme.error : c.tool === "Agent" || c.tool === "Task" ? palette.teal : theme.accent, live: !c.done })),
+    }));
+    const cut = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+    const chart = wide ? draw(K.lanes(marks, theme.agents), "The last requests and their calls") : null;
+    let parts, smaller, head;
+    if (live) {
+      const tool = live.call ? shortTool(live.call.tool) : null;
+      const doing = !tool ? live.doing : wide && live.call.summary ? `${tool} ${live.call.summary}` : tool;
+      const n = value(`#${live.step.n}`, theme.agents);
+      const time = sub(took(now - live.since));
+      head = `Request #${live.step.n} · ${doing}`;
+      parts = [chart, n, sub(cut(doing, wide ? 18 : 12)), time];
+      smaller = [[n, sub(cut(doing, 12)), time], [n, sub(cut(doing, 8))], [value(cut(tool ?? live.doing, 6), theme.agents)]];
+    } else {
+      const reqs = `request${tt.requests === 1 ? "" : "s"}`;
+      head = `${tt.requests} ${reqs}${tt.tps ? ` · ${tt.tps} tok/s` : ""}`;
+      parts = [chart, value(String(tt.requests)), sub(reqs), tt.tps ? sub(`· ${tt.tps} tok/s`) : null];
+      smaller = [[value(String(tt.requests)), sub(reqs)], [value(String(tt.requests)), sub("req")]];
+    }
+    out.push({
+      key: "trajectory",
+      color: theme.agents,
+      parts,
+      smaller,
+      tip: [
+        head,
+        ...u.steps.slice(-3).flatMap((s) => [
+          `#${s.n} ${s.status === "failed" ? "failed" : s.status === "streaming" ? "writing" : `${s.output ?? 0} tokens out`}`,
+          ...s.calls.slice(-3).map((c) => `  ${c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : c.done ? "" : " …"}`),
+        ]).slice(-6),
       ],
     });
   }
@@ -111,25 +157,6 @@ export function usageSections(now, columns = 100) {
       tip: [
         `${Math.round(cache)}% of input read from the cache`,
         `${fmtTokens(u.tokens.cacheRead)} read · ${fmtTokens(u.tokens.cacheWrite)} written · ${fmtTokens(u.tokens.input)} fresh`,
-      ],
-    });
-  }
-  const agents = [...u.agents.values()];
-  if (agents.length && columns >= 60) {
-    const { running, done } = agentCounts(u);
-    const marks = agents.map((a) => (!isEnded(a.status) ? "live" : a.status === "completed" ? "done" : "failed"));
-    out.push({
-      key: "agents",
-      color: theme.agents,
-      parts: [
-        draw(K.dots(marks, theme.agents), `${running} running · ${done} done`),
-        value(running ? `${running}` : `${done}`),
-        sub(running ? "running" : "done"),
-        agents.length > 6 ? sub(`+${agents.length - 6}`) : null,
-      ],
-      tip: [
-        `${running} running · ${done} done`,
-        ...agents.slice(-5).map((a) => `${isEnded(a.status) ? (a.status === "completed" ? "✓" : "✗") : "●"} ${a.type}: ${a.description ?? ""}`),
       ],
     });
   }

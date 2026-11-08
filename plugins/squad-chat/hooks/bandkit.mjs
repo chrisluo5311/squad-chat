@@ -127,6 +127,22 @@ export function dots(list, color, { max = 6 } = {}) {
   return { source: svg(width, 14, style + body), width, height: 14 };
 }
 
+// The last requests as two rows of marks: each request on top, the calls it
+// made under it, split across its slot. `steps` is [{ live, calls: [{ color, live }] }].
+export function lanes(steps, top, { n = 10, w = 64 } = {}) {
+  const shown = steps.slice(-n);
+  const slot = w / n;
+  let body = "";
+  shown.forEach((s, i) => {
+    const x = i * slot + 0.5;
+    body += `<rect x="${f1(x)}" y="1" width="${f1(slot - 1.5)}" height="3.5" rx="1" fill="${top}"${s.live ? ' class="b"' : ""}/>`;
+    const cw = (slot - 1.5) / Math.max(1, s.calls.length);
+    s.calls.forEach((c, j) => { body += `<rect x="${f1(x + j * cw)}" y="7" width="${f1(Math.max(0.8, cw - 0.6))}" height="3.5" rx="1" fill="${c.color}"${c.live ? ' class="b"' : ""}/>`; });
+  });
+  const style = shown.some((s) => s.live || s.calls.some((c) => c.live)) ? css(".b{animation:b 1.6s ease-in-out infinite}@keyframes b{50%{opacity:.35}}") : "";
+  return { source: svg(w, 12, style + body), width: w, height: 12 };
+}
+
 // Faces, overlapping: each a circle in its person's color with an initial.
 export function faces(people, { max = 4 } = {}) {
   const shown = people.slice(0, max);

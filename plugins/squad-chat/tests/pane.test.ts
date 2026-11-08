@@ -982,33 +982,35 @@ test('switching to a built-in room and back keeps the chat room you were in', SL
   await ui.unmount()
 })
 
-test('Usage room: the Requests card draws the context as strata, with plain-word tips', SLOW, async ($, on) => {
+test('Usage room: the Trajectory card lists each prompt, request and tool call, each opening to its details', SLOW, async ($, on) => {
   recordUi(on)
   const usage = (input: number, cacheRead: number, output: number) => ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' })
   // The demo: "explain readme.md" reads a file, then answers.
   on('turn.step', async function* (_$: any, e: any) {
     if (e.index === 0) {
       yield { kind: 'tool', index: 0, id: 'tu_1', name: 'Read' }
-      return { turnId: e.turnId, index: 0, answer: '', toolUses: [], stopReason: 'tool_use', usage: usage(300, 53_800, 70) }
+      return { turnId: e.turnId, index: 0, answer: 'Let me read it.', toolUses: [], stopReason: 'tool_use', usage: usage(300, 53_800, 70) }
     }
     yield { kind: 'text', index: 0, text: 'Here is what it says.' }
-    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: usage(2_130, 54_100, 2_300) }
+    return { turnId: e.turnId, index: e.index, answer: 'Here is what it says.', toolUses: [], stopReason: 'end_turn', usage: usage(2_130, 54_100, 2_300) }
   })
-  on('tool.call', () => ({ result: 'x'.repeat(8000), text: 'x'.repeat(8000) }))
+  on('tool.call', () => ({ result: '# README\nline two\n' + 'x'.repeat(8000), text: '# README\nline two\n' + 'x'.repeat(8000) }))
   on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   const copied: string[] = []
   on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
   const asked: any[] = []
+  const tools = Array.from({ length: 10 }, (_, i) => ({ name: `Tool${i}`, tokens: 2_000 - i * 100 }))
   on('session.usage', (_$: any, e: any) => {
     asked.push(e)
+    const full = e?.breakdown === 'full' ? { systemTools: tools, mcpTools: [{ name: 'mcp__chrome__navigate', serverName: 'chrome', tokens: 800 }] } : {}
     return { value: { startedAt: 0, context: { tokens: 58_500, window: 1_000_000, percent: 6, ...(e?.breakdown ? { breakdown: { maxTokens: 1_000_000, categories: [
       { name: 'System prompt', tokens: 3_100, kind: 'used' },
       { name: 'MCP tools', tokens: 31_000, kind: 'used' },
       { name: 'System tools', tokens: 20_000, kind: 'used' },
       { name: 'Messages', tokens: 4_000, kind: 'used' },
       { name: 'Free space', tokens: 900_000, kind: 'free' },
-    ] } } : {}) }, rateLimits: [] } }
+    ], ...full } } : {}) }, rateLimits: [] } }
   })
   const bridge = fakeBridge(on, { store: { view: 'usage' } })
   await bridge.start($)
@@ -1032,48 +1034,131 @@ test('Usage room: the Requests card draws the context as strata, with plain-word
   await step(1)
   await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' } as any)
   await settle()
-  expect(asked.some((e) => e?.breakdown === 'summary')).toBe(true)   // read once for the bedrock
+  expect(asked.some((e) => e?.breakdown === 'summary')).toBe(true)   // read once for FIXED's total
 
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
-  expect(await ui.find({ type: 'Text', text: 'REQUESTS' })).toBeDefined()
+  // The band, once Claude is done: how many requests.
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect((await band.findAll({ type: 'Text' })).map((x: any) => x.text).join('')).toContain(' · 2 req')
+  await band.unmount()
+
+  const tall = { ...props('dock'), scroll: { offset: 0, bodyRows: 60 } }
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: tall })
+  expect(await ui.find({ type: 'Text', text: 'TRAJECTORY' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '2 requests' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /█/ })).toBeDefined()                   // the strata, in block cells
-  expect(await ui.find({ type: 'Text', text: /^■ Read README\.md 2(\.\d)?k$/ })).toBeDefined()   // the key under the strata, each layer with what it holds
-  expect(await ui.find({ type: 'Text', text: '54k fixed + 4.4k new = 59k' })).toBeDefined()   // the context as a sum: bedrock, then what came after
-  expect(await ui.find({ type: 'Text', text: '  next' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: ' (54k): sent with every request, 96% of the last request. Biggest: MCP tools (31k).' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: "Claude's reply" })).toBeDefined()         // 2.3k, more than the file's 2.1k
-  expect(await ui.find({ type: 'Text', text: /#\d/ })).toBeUndefined()                // no request numbers to decode
-  expect(await ui.find({ type: 'Text', text: '59k' })).toBeDefined()                 // the next request: 56.2k in, 2.3k out
+  expect(await ui.find({ type: 'Text', text: 'Fixed overhead' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'explain readme.md' })).toBeDefined()           // YOU: the prompt
+  expect(await ui.find({ type: 'Text', text: '#1 Let me read it.' })).toBeDefined()          // CLAUDE: a request and its reply
+  expect(await ui.find({ type: 'Text', text: '#2 Here is what it says.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Read README.md' })).toBeDefined()              // TOOL: the call the first request made
+  expect(await ui.find({ type: 'Text', text: '2.3k' })).toBeDefined()                        // a request's output, a plain number
+  expect(await ui.find({ type: 'Text', text: /↓/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /━/ })).toBeDefined()                           // the lanes, in cells
+  expect(await ui.find({ type: 'Text', text: '1 turn · 2 requests · 1 call' })).toBeDefined()
 
-  // Copy and Share take the card as text; Share asks first.
-  await ui.press({ key: 'requests-copy' })
+  // ▸ opens a row: a request's Summary, then its Timing.
+  await ui.press({ key: 'traj-r2' })
+  expect(await ui.find({ type: 'Text', text: '2.3k tokens' })).toBeDefined()
+  expect((await ui.find({ type: 'Box', key: 'guide' }) as any)?.children.length).toBeGreaterThan(3)   // a │ down the details' left
+  expect(await ui.find({ type: 'Text', text: /^56k tokens \(54k from cache\)$/ })).toBeDefined()
+  await ui.press({ key: 'traj-tab-r2-Timing' })
+  expect(await ui.find({ type: 'Text', text: 'TTFT' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}$/ })).toBeDefined()   // Started, to the millisecond
+  // A tool call: who called it, then its input and the first lines of its result.
+  const callKey = (await ui.findAll({ type: 'Button' }) as any[]).map((b) => b.props.key).find((k: string) => /^traj-cc\d+$/.test(k))
+  await ui.press({ key: callKey })
+  expect(await ui.find({ type: 'Text', text: 'Request #1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Rides along|so far/ })).toBeUndefined()
+  await ui.press({ key: `traj-tab-${callKey.slice(5)}-Input` })
+  expect(await ui.find({ type: 'Text', text: '/src/README.md' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: '/src/README.md' }) as any)?.props.wrap).toBe('wrap')   // a long value wraps, never cut
+  await ui.press({ key: `traj-tab-${callKey.slice(5)}-Result` })
+  expect(await ui.find({ type: 'Text', text: '# README' })).toBeDefined()
+
+  // Copy and Share take the card as text, without the prompt, the reply or any result; Share asks first.
+  await ui.press({ key: 'traj-copy' })
   expect(copied).toHaveLength(1)
-  expect(copied[0]).toMatch(/^Requests · 2 requests to Claude\nContext now: 54k fixed \+ 4\.4k new = 59k\./)
-  expect(copied[0]).toContain("Claude's reply")
+  expect(copied[0]).toMatch(/^Trajectory · 2 requests to Claude · 1 tool call\n/)
   expect(copied[0]).toContain('Read README.md')
-  expect(copied[0]).toContain('⚙ Fixed overhead (54k): sent with every request, 96% of the last request.')
-  await ui.press({ key: 'requests-share' })
+  expect(copied[0]).not.toContain('explain readme.md')
+  expect(copied[0]).not.toContain('Here is what it says')
+  expect(copied[0]).not.toContain('# README')
+  await ui.press({ key: 'traj-share' })
   await settle()
   expect(await ui.find({ type: 'Text', text: 'SHARE?' })).toBeDefined()
   await ui.press({ key: 'send' })
   await settle()
   expect(bridge.calls.at(-1)).toEqual({ path: '/send', body: { text: copied[0], room: LOBBY.id, kind: 'code' } })
+
+  // FIXED opens to its categories, read in full; a category opens to its items, eight at a time.
+  await ui.press({ key: 'traj-fixed' })
+  await settle()
+  expect(asked.some((e) => e?.breakdown === 'full')).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^Sent with every request: the system prompt and all tool definitions\./ })).toBeDefined()
+  await ui.press({ key: 'traj-fx-tools' })
+  expect(await ui.find({ type: 'Text', text: /1–8 of 10$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Tool0' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: 'Tool0' }) as any)?.props.wrap).toBe('wrap')   // a long name (a file's path) wraps
+  expect(await ui.find({ type: 'Text', text: 'Tool9' })).toBeUndefined()
+  await ui.press({ key: 'traj-down-tools' })
+  expect(await ui.find({ type: 'Text', text: /3–10 of 10$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Tool9' })).toBeDefined()
+  await ui.press({ key: 'traj-down-tools' })                          // pressed at the end: nothing to go past
+  await ui.press({ key: 'traj-up-tools' })
+  expect(await ui.find({ type: 'Text', text: /1–8 of 10$/ })).toBeDefined()   // and ▴ moves at once
   await ui.unmount()
 
+  // A short terminal, FIXED open and taller than the window: it shows cut to the window, and ▾ moves past it to the newest rows.
+  const short = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 30 } } })
+  await short.press({ key: 'traj-older' })                                         // up to the oldest: FIXED
+  for (let i = 0; i < 5; i++) await short.press({ key: 'traj-older' })
+  expect((await short.find({ type: 'Button', key: 'traj-older' }) as any)?.props.label).toBe('▴ 0 earlier')
+  expect(await short.find({ type: 'Text', text: 'Fixed overhead' })).toBeDefined()
+  for (let i = 0; i < 5; i++) await short.press({ key: 'traj-newer' })
+  expect((await short.find({ type: 'Button', key: 'traj-newer' }) as any)?.props.label).toBe('▾ 0 newer')   // down to the newest, the window full
+  expect(await short.find({ type: 'Text', text: '#2 Here is what it says.' })).toBeDefined()
+  expect(await short.find({ type: 'Box', key: 'cut' })).toBeUndefined()
+  await short.unmount()
+  const shorter = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...props('dock'), scroll: { offset: 0, bodyRows: 22 } } })
+  for (let i = 0; i < 6; i++) await shorter.press({ key: 'traj-older' })
+  expect(await shorter.find({ type: 'Box', key: 'cut' })).toBeDefined()           // FIXED taller than the window: cut to it
+  await shorter.press({ key: 'traj-newer' })
+  expect(await shorter.find({ type: 'Box', key: 'cut' })).toBeUndefined()         // and one move goes past it
+  expect(await shorter.find({ type: 'Text', text: '#2 Here is what it says.' })).toBeDefined()
+  // At the bottom the cards may fit the pane, no scrollbar of their own: the wheel still takes the rows back up.
+  await $.ui.scroll({ component: 'Pane', requestId: 'squad-chat', offset: 0, by: -6, bodyRows: 22, contentRows: 22, origin: { kind: 'person' } } as any)
+  expect(await shorter.find({ type: 'Box', key: 'cut' })).toBeDefined()           // back at FIXED
+  await shorter.unmount()
+
+  // The desktop draws the lanes, and every row whole.
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
-  expect(await desk.find({ type: 'Svg', alt: /^Context by request: Read README\.md, Claude's reply/ })).toBeDefined()
-  expect(await desk.find({ type: 'Text', text: /^54k fixed \+ 4\.4k new = 59k$/ })).toBeDefined()
-  expect(await desk.find({ type: 'Svg', alt: 'Before the first request: 54k fixed' })).toBeDefined()   // the bedrock, one drawing
-  const key = await desk.find({ type: 'Box', key: 'key' }) as any
-  expect(key?.props.flexWrap).toBe('wrap')                                         // the key wraps, never runs past the card
-  expect(await desk.find({ type: 'Text', text: /^■ Read README\.md 2(\.\d)?k$/ })).toBeDefined()   // every key entry says its size
-  expect(await desk.find({ type: 'Text', text: /^■ conversation \d+$/ })).toBeDefined()
-  expect(await desk.find({ type: 'Text', text: /█/ })).toBeUndefined()               // drawn, not set in a font
+  expect(await desk.find({ type: 'Svg', alt: 'Model lane' })).toBeDefined()
+  expect(await desk.find({ type: 'Text', text: /━/ })).toBeUndefined()               // drawn, not set in a font
+  expect(await desk.find({ type: 'Text', text: '#1 Let me read it.' })).toBeDefined()
+  await desk.press({ key: 'traj-r1' })
+  expect((await desk.find({ type: 'Box', key: 'r1-detail' }) as any)?.props.borderStyle).toBe('round')   // the details framed
   await desk.unmount()
+
+  // A new turn folds the one before: its header stays, its prompt said on it, the rest gone until ▸ opens it.
+  await $.turn.start({ text: 'now the band', turnId: 't2' } as any)
+  const s2 = $.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', messageCount: 5 } as any)
+  for (;;) if ((await s2.next()).done) break
+  await settle()
+  const again = await $.ui.mount({ ...PANE, surface: 'terminal', props: tall })
+  expect(await again.find({ type: 'Text', text: /^explain readme\.md$/ })).toBeUndefined()        // no YOU row
+  expect(await again.find({ type: 'Text', text: /^ · 2 requests · .* · explain readme\.md$/ })).toBeDefined()
+  expect(await again.find({ type: 'Text', text: '#1 Let me read it.' })).toBeUndefined()
+  expect(await again.find({ type: 'Text', text: '#3 Let me read it.' })).toBeDefined()   // the new turn, open
+  await again.press({ key: 'traj-t1' })
+  expect(await again.find({ type: 'Text', text: '#1 Let me read it.' })).toBeDefined()
+  await again.press({ key: 'traj-turns' })                                                  // Turns: all of them folded
+  expect(await again.find({ type: 'Text', text: '#3 Let me read it.' })).toBeUndefined()
+  expect(await again.find({ type: 'Text', text: /· now the band$/ })).toBeDefined()
+  await again.press({ key: 'traj-turns' })                                                  // and all open again
+  expect(await again.find({ type: 'Text', text: '#1 Let me read it.' })).toBeDefined()
+  await again.unmount()
 })
 
-test('Usage room: context, limits, spend, cache, tool timings and subagents', SLOW, async ($, on) => {
+test('Usage room: context, limits, spend and cache', SLOW, async ($, on) => {
   const seen = recordUi(on)
   on('session.measure', (_$: any, e: any) => ({ changed: e.changed }))
   on('turn.complete', () => ({ text: '', usage: { input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' } }))
@@ -1101,9 +1186,8 @@ test('Usage room: context, limits, spend, cache, tool timings and subagents', SL
   expect(await ui.find({ type: 'Text', text: /^\$4\.21/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^90%/ })).toBeDefined()            // 9000 of 10000 input tokens from the cache
   expect(await ui.find({ type: 'Text', text: /^12k/ })).toBeDefined()            // tokens in all
-  expect(await ui.find({ type: 'Text', text: /^Bash/ })).toBeDefined()           // the TOOLS card
-  expect(await ui.find({ type: 'Text', text: 'map the repo' })).toBeDefined()    // the SUBAGENTS card
-  expect(await ui.find({ type: 'Text', text: '1 running · 0 done' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'TRAJECTORY' })).toBeDefined()     // Tools and Subagents are its rows now
+  expect(await ui.find({ type: 'Text', text: 'TOOLS' })).toBeUndefined()
   expect(seen.statuses.at(-1)).toBe('◔ 85%')                                       // nearly full: the status line says so
   await ui.unmount()
 
@@ -1117,18 +1201,14 @@ test('Usage room: context, limits, spend, cache, tool timings and subagents', SL
   // Bars are drawn lines, not "━" set in a font that runs past their column.
   expect(await desk.find({ type: 'Svg', alt: '85%' })).toBeDefined()           // the context meter's bar
   expect(await desk.find({ type: 'Text', text: /━/ })).toBeUndefined()
-  // Spend as three tiles, each figure set large; Subagents' counts set large over the rows.
+  // Spend as three tiles, each figure set large.
   expect(await desk.find({ type: 'Svg', alt: '$4.21' })).toBeDefined()
   expect(await desk.find({ type: 'Svg', alt: '90%' })).toBeDefined()
   expect(await desk.find({ type: 'Svg', alt: 'cache ring' })).toBeDefined()
   expect(await desk.find({ type: 'Text', text: 'CACHE HITS' })).toBeDefined()
-  expect(await desk.find({ type: 'Text', text: 'RUNNING' })).toBeDefined()
-  expect(await desk.find({ type: 'Text', text: 'AGENT TIME' })).toBeDefined()
-  expect(await desk.find({ type: 'Text', text: 'map the repo' })).toBeDefined()
   // The field is sized to its frame, and the cards sit a row below the tabs.
   expect(await desk.find({ type: 'Text', text: '/help' })).toBeUndefined()         // the frame's spare room is Clawd's
   expect(await svgAlt(desk, /^Clawd: /)).toBeDefined()
-  expect(await desk.find({ type: 'Text', text: /^1 tool · 1 call$/ })).toBeDefined()   // Tools: a count up top, labels in a row of their own
   expect(await desk.find({ type: 'Svg', alt: 'gap' })).toBeDefined()
   await desk.unmount()
 })

@@ -130,7 +130,8 @@ The mod watches Claude Code events to draw its rooms. It never asks for permissi
 
 | Event | What it does |
 |---|---|
-| `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `agent.spawn`, `session.measure` | Measures timings, tokens and tool names for the Usage and Agents rooms, then passes each event on unchanged |
+| `tool.describe` | Notes which MCP server provides each tool, so the Usage room names servers by the name they were set up with, then passes the event on unchanged |
+| `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `agent.spawn`, `session.measure` | Measures timings, tokens and tool names for the Usage and Agents rooms, and keeps short previews of prompts, replies and tool calls in memory for the Usage room's Trajectory card, then passes each event on unchanged |
 | `session.append` | For `/say`, `/room` and `/chat-login` only, replaces the arguments with a placeholder before the transcript stores them, so messages and passcodes stay out of it |
 | `command.run` | Answers squad-chat's own slash commands |
 | `ui.*`, `clock`, `branch`, `pr`, `session.start`, `session.end` | Draws the pane and band, registers the commands, and stops the bridge when the session ends |

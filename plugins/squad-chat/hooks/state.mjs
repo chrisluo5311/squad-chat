@@ -67,6 +67,11 @@ export const state = {
   join: null,             // the desktop header's "＋ join": { step: "name" | "pass", name, error }
   moreOpen: new Set(),    // VS Code's lists opened past their rows ("room:widget"), for this session
   dockScroll: { view: null, offset: 0, max: 0 },
+  // The Usage room's Trajectory card: the row whose details are open, each
+  // row's tab, the folds (a turn opened or folded by hand, else only the
+  // newest is open), the FIXED categories open and how far each is paged,
+  // and in the terminal the row at the top of its window (null: the newest fill it).
+  traj: { sel: null, tabs: {}, duration: false, turnOpen: new Map(), calls: false, subcalls: false, open: new Set(), off: {}, top: null, above: 0, below: 0 },
   chatScroll: { room: null, back: 0 },   // the chat scrolled up: `back` of the newest messages hidden below   // the docked room's cards, scrolled past `offset` rows
   ended: false,
 };

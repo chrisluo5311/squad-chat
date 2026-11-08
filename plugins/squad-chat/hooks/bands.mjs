@@ -84,7 +84,9 @@ function sectionCells(s) {
 
 // The sections that fit in `columns` beside the room's name and the Open
 // button (and ‹ › before it, with `cycle`), the first always: the ones at
-// the end go first, as a drawing would otherwise run under the buttons.
+// the end go first, as a drawing would otherwise run under the buttons. A
+// section with `smaller` forms (each a list of parts, largest first) is drawn
+// in the largest that fits the room left before it is left out.
 const OPEN_CELLS = 10;
 export const CYCLE_CELLS = 4;
 export function fitSections(sections, room, columns, { cycle = false } = {}) {
@@ -92,8 +94,12 @@ export function fitSections(sections, room, columns, { cycle = false } = {}) {
   if (!columns) return list;
   let room_left = Math.floor(columns * 0.92) - OPEN_CELLS - (cycle ? CYCLE_CELLS : 0) - (cells(room) + 2) - 2;
   const out = [];
-  for (const s of list) {
-    const need = sectionCells(s);
+  for (let s of list) {
+    let need = sectionCells(s);
+    if (out.length && need > room_left && s.smaller) {
+      const parts = s.smaller.find((p) => sectionCells({ parts: p }) <= room_left);
+      if (parts) { s = { ...s, parts }; need = sectionCells(s); }
+    }
     if (out.length && need > room_left) break;
     out.push(s);
     room_left -= need;

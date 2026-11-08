@@ -7,7 +7,7 @@ These tabs appear before your chat rooms. They require no server and no sign-in,
 
 | Room | Shows | Tab |
 | --- | --- | --- |
-| [◔ Usage](#-usage) | Context, rate limits, spend, tool timings | on |
+| [◔ Usage](#-usage) | Context, rate limits, spend, each request and tool call | on |
 | [⎇ Git](#-git) | Your branch, its PR and checks, Actions | on |
 | [⟡ Agents](#-agents) | Every Claude Code session and its subagents | on |
 | [◷ Focus](#-focus) | A Pomodoro timer with a streak | on |
@@ -34,8 +34,7 @@ Live figures on how this session uses Claude.
 
 - **Context, 5-hour, 7-day**: how much of each is used, and when it resets.
 - **Spend**: cost, the rate per hour, tokens and the cache.
-- **Requests**: the context as strata. Each request to the model is a column, and each thing that came into the conversation (a file Claude read, a long answer) is a layer from then on, showing what continues to occupy the context. Under them is the fixed overhead every request carries: the system prompt, tools, MCP tools and memory. A few short tips follow, such as how much of a request that overhead is and what the next request will send. **⧉ Copy** puts the card on the clipboard as text, and **⇪ Share** posts it to a chat room after you review it.
-- **Tools and subagents**: each tool's p50, p95 and failures, and the work of each subagent.
+- **Trajectory**: everything this session did, one row per thing, oldest first. **FIXED** is what every request starts with: the system prompt and the definitions of every tool. Then come your prompts (**YOU**), each request Claude was sent (**CLAUDE**) and each tool call it made (**TOOL**, or **AGENT** with the subagent's own calls under it). Press **▸** to open a row and see a request's tokens, cache hits and timing, a call's input, the first lines of its result and how long it took, or FIXED's categories down to each MCP tool, skill and memory file. Three lanes over the rows show the same events in order, or in time with **◷ Duration**. **⊟ Turns**, **Calls** and **Subcalls** fold the list. **⧉ Copy** puts the card on the clipboard as text, and **⇪ Share** posts it to a chat room after you review it. Neither includes your prompts, Claude's replies or any tool's output.
 
 ## ⎇ Git
 

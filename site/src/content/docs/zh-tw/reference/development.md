@@ -51,7 +51,8 @@ claude --plugin-dir ./plugins/squad-chat
 | `plugins/squad-chat/hooks/views.mjs` | 停靠窗格、精簡窗格和橫條 |
 | `plugins/squad-chat/hooks/sysviews.mjs` | 內建房間：Usage、Git 和 Agents |
 | `plugins/squad-chat/hooks/widgets.mjs` | 內建房間共用的量表、迷您走勢圖、數據方格、列和卡片堆疊 |
-| `plugins/squad-chat/hooks/metrics.mjs` | 這個工作階段的用量、工具耗時和 subagent |
+| `plugins/squad-chat/hooks/metrics.mjs` | 這個工作階段的用量、它的軌跡（每則 prompt、每次請求與工具呼叫）和 subagent |
+| `plugins/squad-chat/hooks/trajview.mjs` | Usage 房間的 Trajectory 卡片 |
 | `plugins/squad-chat/hooks/github.mjs` | Git 房間的資料，透過 `git` 和 `gh` 讀取 |
 | `plugins/squad-chat/hooks/sessions.mjs` | 和這台電腦上其他工作階段共用的 heartbeat |
 | `plugins/squad-chat/hooks/theme.mjs` | 顏色和字元圖形 |

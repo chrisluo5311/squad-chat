@@ -51,7 +51,8 @@ Sign-in emails land in the local mail UI at http://127.0.0.1:56424. To chat with
 | `plugins/squad-chat/hooks/views.mjs` | The docked pane, the compact pane and the band |
 | `plugins/squad-chat/hooks/sysviews.mjs` | The built-in rooms: Usage, Git and Agents |
 | `plugins/squad-chat/hooks/widgets.mjs` | Meters, sparklines, stat tiles, rows and the card stack the built-in rooms share |
-| `plugins/squad-chat/hooks/metrics.mjs` | This session's usage, tool timings and subagents |
+| `plugins/squad-chat/hooks/metrics.mjs` | This session's usage, its trajectory (each prompt, request and tool call) and subagents |
+| `plugins/squad-chat/hooks/trajview.mjs` | The Usage room's Trajectory card |
 | `plugins/squad-chat/hooks/github.mjs` | The Git room's data, read through `git` and `gh` |
 | `plugins/squad-chat/hooks/sessions.mjs` | Heartbeats shared with the other sessions on this computer |
 | `plugins/squad-chat/hooks/theme.mjs` | Colors and glyphs |
