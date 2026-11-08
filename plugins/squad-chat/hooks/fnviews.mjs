@@ -110,8 +110,12 @@ function codeRow(els, k, b, item, title, handlers, room) {
       actOn != null ? Button({ key: `act-${k}`, label: isArmed ? "Sure?" : b.act.label, onPress: act }) : null,
     ].filter(Boolean) }),
     els.Svg({ key: `${k}-gap`, source: K.svg(1, 6, ""), alt: "gap", width: 1, height: 6 }),
+    // Code with a language keeps its block and colors; a note without one is
+    // text at the pane's size in a frame (VS Code sets a block's font small).
     Box({ key: `${k}-code`, marginBottom: 1, children: [
-      Code({ key: "c", source: shown, ...(tag ? { language: String(tag) } : {}) }),
+      tag
+        ? Code({ key: "c", source: shown, language: String(tag) })
+        : Box({ key: "c", borderStyle: "round", borderColor: theme.border, paddingX: 1, flexGrow: 1, minWidth: 0, children: [Text({ key: "t", wrap: "wrap", children: shown })] }),
     ] }),
     lines.length > CODE_LINES ? muted(els, `${k}-more`, `+ ${lines.length - CODE_LINES} more line${lines.length - CODE_LINES === 1 ? "" : "s"}`) : null,
   ].filter(Boolean);

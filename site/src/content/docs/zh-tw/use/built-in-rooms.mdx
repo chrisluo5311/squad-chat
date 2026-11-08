@@ -7,7 +7,7 @@ description: 位於聊天室之前的 Usage、Git、Agents、Focus、Habits、To
 
 | 房間 | 顯示 | 分頁 |
 | --- | --- | --- |
-| [◔ Usage](#-usage) | Context、速率限制、花費、工具耗時 | 預設開啟 |
+| [◔ Usage](#-usage) | Context、速率限制、花費、每次請求與工具呼叫 | 預設開啟 |
 | [⎇ Git](#-git) | 分支、其 PR 與檢查、Actions | 預設開啟 |
 | [⟡ Agents](#-agents) | 每個 Claude Code 工作階段及其 subagent | 預設開啟 |
 | [◷ Focus](#-focus) | 附連續紀錄的番茄鐘 | 預設開啟 |
@@ -34,8 +34,7 @@ description: 位於聊天室之前的 Usage、Git、Agents、Focus、Habits、To
 
 - **Context、5 小時、7 天**：各自的使用量，以及重置時間。
 - **花費**：費用、每小時的速率、token 和快取。
-- **Requests**：以地層的形式呈現 context。每次對模型的請求是一欄，每個進入對話的內容（Claude 讀取的檔案、較長的回答）自該處起形成一層，藉此可看出哪些內容持續佔用 context。最下方是每次請求皆須攜帶的固定開銷：system prompt、工具、MCP 工具和記憶。下方另有幾則簡要提示，例如固定開銷佔一次請求多少，以及下一次請求會送出多少。**⧉ Copy** 將卡片以文字形式複製至剪貼簿，**⇪ Share** 可在確認後分享至聊天室。
-- **工具和 subagent**：每個工具的 p50、p95 和失敗次數，以及各 subagent 的工作內容。
+- **Trajectory**：此工作階段做過的每件事，一列一項，由舊到新。**FIXED** 是每次請求一開始都會送出的內容：system prompt 和每個工具的定義。接著是您的 prompt（**YOU**）、Claude 收到的每次請求（**CLAUDE**），以及它發出的每次工具呼叫（**TOOL**，或 **AGENT**，底下列出該 subagent 自己的呼叫）。按 **▸** 可展開一列，查看請求的 token、快取命中與耗時，呼叫的輸入、結果的前幾行與耗時，或 FIXED 的各個類別，細到每個 MCP 工具、skill 與記憶檔案。列表上方的三條軌道依序呈現同樣的事件，按 **◷ Duration** 則改依時間呈現。**⊟ Turns**、**Calls** 和 **Subcalls** 可收合列表。**⧉ Copy** 將卡片以文字形式複製至剪貼簿，**⇪ Share** 可在確認後分享至聊天室，兩者皆不包含您的 prompt、Claude 的回覆或任何工具的輸出。
 
 ## ⎇ Git
 
@@ -153,7 +152,7 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 
 <figure class="shot pane"><img src="/squad-chat/media/rooms/lofi.png" alt="Lo-fi 房間：播放器和音量，以及電台。" /></figure>
 
-透過 [mpv](https://mpv.io) 和 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（`brew install mpv yt-dlp`；Windows 上請把兩者加入 `PATH`）播放 Lofi Girl 和 SomaFM。在輸入框貼上連結或資料夾，即可加入自訂的音樂。`p` 播放或暫停，`n` 跳至下一首。按下播放前不會播放任何內容。
+透過 [mpv](https://mpv.io) 和 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（`brew install mpv yt-dlp`，Windows 上請把兩者加入 `PATH`）播放 Lofi Girl 和 SomaFM。在輸入框貼上連結或資料夾，即可加入自訂的音樂。`p` 播放或暫停，`n` 跳至下一首。按下播放前不會播放任何內容。
 
 ## ◰ Docker
 

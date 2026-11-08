@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import player, { kindOf, parsePlaylist, resetPlayer } from "../plugins/squad-chat/bridge/src/rooms/providers/player.mjs";
 
 const STATIONS = [{ name: "Lofi Girl", url: "https://www.youtube.com/@LofiGirl/streams" }, { name: "Groove Salad", url: "https://ice2.somafm.com/groovesalad-128-mp3" }];
@@ -93,7 +93,7 @@ describe("player", () => {
     const { argv, opts } = m.spawned[0];
     assert.equal(argv[0], "/bin/sh");
     assert.match(argv[2], /kill -0 \$PPID/);   // stops with the bridge, however it goes
-    assert.ok(argv.includes("--no-video") && argv.includes("--volume=40") && argv.includes("--input-ipc-server=/tmp/sq-test/mpv-" + process.pid + ".sock"));
+    assert.ok(argv.includes("--no-video") && argv.includes("--volume=40") && argv.includes("--input-ipc-server=" + join("/tmp/sq-test", `mpv-${process.pid}.sock`)));
     assert.equal(opts.detached, true);   // its own process group, so closing stops sh and mpv together
     assert.deepEqual(m.sent.filter((c) => c[0] !== "get_property"), [["loadfile", "https://ice2.somafm.com/groovesalad-128-mp3", "replace"], ["set_property", "pause", false]]);
 
@@ -174,15 +174,24 @@ describe("player", () => {
     await assert.rejects(player.actions.play(params, { name: "nope" }, m.ctx), /Nothing called "nope"/);
   });
 
+  it("on Windows, ~\\ is home too", async () => {
+    const at = resolve("/Users/me\\Music\\chill");   // C:\Users\me\Music\chill there
+    const m = fakeMpv({ dirs: { [at]: ["a.mp3"] } });
+    m.ctx.platform = "win32";
+    assert.deepEqual(await player.actions.add(params, { target: "~\\Music\\chill" }, m.ctx), { ok: true, added: 1, first: "a" });
+  });
+
   it("adds URLs, files and folders, removes, and imports Pixel Play's playlist", async () => {
+    // Paths as the player makes them: C:\Users\me\… when the tests run on Windows.
+    const chill = resolve("/Users/me/Music/chill");
     const m = fakeMpv({
-      dirs: { "/Users/me/Music/chill": ["b.flac", "a.mp3", "cover.jpg", "notes.txt"] },
-      files: { "/Users/me/.claude/pixel-play/playlist.txt": "https://www.youtube.com/watch?v=abc # Lofi beats\nhttps://ice2.somafm.com/groovesalad-128-mp3\n" },
+      dirs: { [chill]: ["b.flac", "a.mp3", "cover.jpg", "notes.txt"] },
+      files: { [join("/Users/me", ".claude", "pixel-play", "playlist.txt")]: "https://www.youtube.com/watch?v=abc # Lofi beats\nhttps://ice2.somafm.com/groovesalad-128-mp3\n" },
     });
     assert.deepEqual(await player.actions.add(params, { target: "~/Music/chill" }, m.ctx), { ok: true, added: 2, first: "a" });
     assert.deepEqual(await player.actions.add(params, { target: "https://ice2.somafm.com/deepspaceone-128-mp3", name: "Deep Space One" }, m.ctx), { ok: true, added: 1, first: "Deep Space One" });
     await assert.rejects(player.actions.add(params, { target: "https://ice2.somafm.com/deepspaceone-128-mp3" }, m.ctx), /Already on the list/);
-    await assert.rejects(player.actions.add(params, { target: "~/nowhere" }, m.ctx), /No file or folder at \/Users\/me\/nowhere/);
+    await assert.rejects(player.actions.add(params, { target: "~/nowhere" }, m.ctx), (e) => e.message === `No file or folder at ${resolve("/Users/me/nowhere")}.`);
     assert.deepEqual(await player.actions.import(params, {}, m.ctx), { ok: true, added: 2 });
     assert.deepEqual(await player.actions.remove(params, { name: "deep space one" }, m.ctx), { ok: true, removed: "Deep Space One" });
     // A station of the room's own is hidden, not lost, and comes back with restore.
@@ -192,7 +201,7 @@ describe("player", () => {
     assert.ok((await player.fetch(params, m.ctx)).entries.some((e) => e.name === "Groove Salad"));
     await assert.rejects(player.actions.remove(params, { name: "nothing like it" }, m.ctx), /Nothing called/);
     const list = JSON.parse(readFileSync(join(m.ctx.dataDir, "list.json"), "utf8")).items.map((x) => `${x.name} ${x.target}`);
-    assert.deepEqual(list, ["a /Users/me/Music/chill/a.mp3", "b /Users/me/Music/chill/b.flac", "Lofi beats https://www.youtube.com/watch?v=abc", "ice2.somafm.com/groovesalad-128-mp3 https://ice2.somafm.com/groovesalad-128-mp3"]);
+    assert.deepEqual(list, [`a ${join(chill, "a.mp3")}`, `b ${join(chill, "b.flac")}`,"Lofi beats https://www.youtube.com/watch?v=abc", "ice2.somafm.com/groovesalad-128-mp3 https://ice2.somafm.com/groovesalad-128-mp3"]);
     assert.equal((await player.fetch(params, m.ctx)).count, 6);
   });
 

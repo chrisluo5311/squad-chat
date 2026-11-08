@@ -6,6 +6,7 @@ import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { Bridge } from "./helpers.mjs";
 
 const latestSessions = (b) => b.events.filter((e) => e.type === "sessions").at(-1)?.sessions ?? [];
@@ -13,7 +14,7 @@ const ids = (b) => latestSessions(b).map((s) => s.id).sort();
 const beat = (id, extra = {}) => ({ v: 1, id, project: id, activity: { state: "idle" }, agents: [], feed: [], updatedAt: Date.now(), ...extra });
 
 describe("session heartbeats", () => {
-  const dir = mkdtempSync("/tmp/sqh-");
+  const dir = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "sqh-"));
   const one = new Bridge("one", { url: null, sessionsDir: dir });
   const two = new Bridge("two", { url: null, sessionsDir: dir });
   after(async () => {

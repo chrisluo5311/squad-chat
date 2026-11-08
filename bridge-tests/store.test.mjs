@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { Bridge } from "./helpers.mjs";
 
+// Windows has no Unix permission bits to check.
+const POSIX = process.platform !== "win32";
 const repoRoom = (id) => JSON.parse(readFileSync(new URL(`../rooms/${id}/room.json`, import.meta.url), "utf8"));
 
 // A store folder: rooms/<id>/room.json plus an index built from them, which
@@ -81,8 +83,8 @@ describe("the room store", () => {
     assert.deepEqual([r.name, r.version], ["Dev Blogs", "1.0.0"]);
     await b.waitFor(() => ids().includes("dev-blogs"), 5_000, "dev-blogs loaded");
     const file = join(b.configDir, "rooms", "dev-blogs", "room.json");
-    assert.equal(statSync(file).mode & 0o777, 0o600);
-    assert.equal(statSync(join(b.configDir, "rooms", "dev-blogs")).mode & 0o777, 0o700);
+    if (POSIX) assert.equal(statSync(file).mode & 0o777, 0o600);
+    if (POSIX) assert.equal(statSync(join(b.configDir, "rooms", "dev-blogs")).mode & 0o777, 0o700);
     assert.equal((await b.call("POST", "/store/install", { id: "dev-blogs", sha256: p.sha256 })).status, 409);   // a look is good for one install
     const listed = (await b.ok("POST", "/store/list", {})).rooms.find((x) => x.id === "dev-blogs");
     assert.deepEqual([listed.installed, listed.update], ["1.0.0", false]);

@@ -16,6 +16,18 @@ export function cells(str) {
   return n;
 }
 
+// Symbols that are text by default but that Windows Terminal finds only in
+// Segoe UI Emoji: it draws them in two cells where the engine gave one, over
+// the cell after. The emoji selector makes them two cells for both. Orca and
+// the other xterm.js terminals ignore the selector and draw them in one cell
+// where the engine, given it, counts two: there they go without it. `cells`
+// counts them as two either way. (↗ ▶ ™ ▪ stay text there, and stay as they are.)
+const TEXT_EMOJI = "[☀☁☂🌤🌧🌦❄🌨⛈🌫⚠⏸⏭⚙⌨⏯⚒🌡⏮⏹]";
+const UNSELECTED = new RegExp(`(${TEXT_EMOJI})(?!️)`, "gu");
+const SELECTED = new RegExp(`(${TEXT_EMOJI})️`, "gu");
+export const emojiSelected = (str) => String(str).replace(UNSELECTED, "$1️");
+export const emojiUnselected = (str) => String(str).replace(SELECTED, "$1");
+
 // Rows a text takes when word-wrapped at `width`, the way the terminal wraps.
 export function rowsFor(text, width) {
   width = Math.max(10, width);
@@ -361,9 +373,13 @@ export function card(els, { key, title, color, meta, metaColor, metaNode, rows, 
   const body = grow
     ? [Box({ key: "body", flexDirection: "column", flexGrow: 1, overflow: "hidden", children: rows })]
     : rows;
+  // Where the pane draws pictures, a few pixels under the last row so a
+  // button or a tile doesn't sit on the frame (a Box is rows tall, so the
+  // gap is an empty drawing). The terminal's rows are cells: none there.
+  const under = els.Svg ? [els.Svg({ key: "under", source: svg(1, 6, ""), alt: "gap", width: 1, height: 6 })] : [];
   return Box({
     key, flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1,
-    flexGrow: grow ? 1 : 0, flexShrink: grow ? 1 : 0, children: [head, ...body],
+    flexGrow: grow ? 1 : 0, flexShrink: grow ? 1 : 0, children: [head, ...body, ...under],
   });
 }
 

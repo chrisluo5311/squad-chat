@@ -118,10 +118,10 @@ Every program is named in the code, with fixed arguments, and none comes from a 
 |---|---|---|
 | `node --version`, then `node bridge/dist/bridge.mjs` | When Claude Code starts | Checks for Node 22 or newer, then starts the bridge, the one process that talks to Supabase and the room hosts above |
 | `git`, `gh` | Git room, `/chat-share diff` | Reads this folder's branch, diff, pull requests and checks |
-| `pbpaste`, `wl-paste` or `xclip`; on Windows, `powershell` | Clipboard room, only once you add it; on Windows also the Toolbox's paste, once each time you press it | Reads the clipboard every 2 seconds (on Windows, one PowerShell that stays up looks once a second) |
+| `pbpaste`, `wl-paste` or `xclip`, or `powershell` on Windows | Clipboard room, only once you add it. On Windows also the Toolbox's paste, once each time you press it | Reads the clipboard every 2 seconds (on Windows, one PowerShell that stays up looks once a second) |
 | `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg`, `macmon` (Mac), `nvidia-smi` (Linux, Windows), `netstat -e` and `powershell` (Windows) | Monitor room | Reads CPU, memory, disk, network, battery and GPU figures. On Windows, PowerShell reads the battery and page file every 30 seconds. No shell, no sudo |
-| `docker` (`ps`, `images`, `volume ls`, `network ls`, `stats`, `logs`) | Docker room, only once you add it | Reads what Docker has, every 5 seconds while the room is on show. Read only. `logs` goes through `/bin/sh` only to keep the container's stderr |
-| `ping` (`/sbin/ping` on a Mac) | Ping room, only for the hosts you add | Sends 3 packets to each, the host passed as one argument after `--` (Windows' ping takes no `--`; a host never starts with `-`). No shell, no sudo |
+| `docker` (`ps`, `images`, `volume ls`, `network ls`, `stats`, `logs`) | Docker room, only once you add it | Reads what Docker has, every 5 seconds while the room is on show. Read only. No shell |
+| `ping` (`/sbin/ping` on a Mac) | Ping room, only for the hosts you add | Sends 3 packets to each, the host passed as one argument after `--` (Windows' ping takes no `--`, and a host never starts with `-`). No shell, no sudo |
 | `mpv`, and `yt-dlp` for YouTube | Lo-fi room, only when you press play | Plays the stream. A short `/bin/sh` loop around `mpv` (on Windows, a `node -e` watchdog) stops it when the bridge exits, and downloads nothing to run. On Windows, stopping runs `taskkill` on that watchdog and its `mpv` |
 
 ## What the mod hooks
@@ -130,7 +130,8 @@ The mod watches Claude Code events to draw its rooms. It never asks for permissi
 
 | Event | What it does |
 |---|---|
-| `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `agent.spawn`, `session.measure` | Measures timings, tokens and tool names for the Usage and Agents rooms, then passes each event on unchanged |
+| `tool.describe` | Notes which MCP server provides each tool, so the Usage room names servers by the name they were set up with, then passes the event on unchanged |
+| `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `agent.spawn`, `session.measure` | Measures timings, tokens and tool names for the Usage and Agents rooms, and keeps short previews of prompts, replies and tool calls in memory for the Usage room's Trajectory card, then passes each event on unchanged |
 | `session.append` | For `/say`, `/room` and `/chat-login` only, replaces the arguments with a placeholder before the transcript stores them, so messages and passcodes stay out of it |
 | `command.run` | Answers squad-chat's own slash commands |
 | `ui.*`, `clock`, `branch`, `pr`, `session.start`, `session.end` | Draws the pane and band, registers the commands, and stops the bridge when the session ends |

@@ -20,6 +20,7 @@ export const state = {
   detail: "",             // why the bridge isn't ready
   socket: null,
   platform: null,         // the bridge's process.platform, once it's ready
+  windowsTerminal: false, // the bridge runs in Windows Terminal (not Orca, VS Code…)
   token: null,
   auth: "starting",       // starting | signed_out | code_sent | signed_in
   email: null,            // where the code went
@@ -66,6 +67,11 @@ export const state = {
   join: null,             // the desktop header's "＋ join": { step: "name" | "pass", name, error }
   moreOpen: new Set(),    // VS Code's lists opened past their rows ("room:widget"), for this session
   dockScroll: { view: null, offset: 0, max: 0 },
+  // The Usage room's Trajectory card: the row whose details are open, each
+  // row's tab, the folds (a turn opened or folded by hand, else only the
+  // newest is open), the FIXED categories open and how far each is paged,
+  // and in the terminal the row at the top of its window (null: the newest fill it).
+  traj: { sel: null, tabs: {}, duration: false, turnOpen: new Map(), calls: false, subcalls: false, open: new Set(), off: {}, top: null, above: 0, below: 0 },
   chatScroll: { room: null, back: 0 },   // the chat scrolled up: `back` of the newest messages hidden below   // the docked room's cards, scrolled past `offset` rows
   ended: false,
 };
@@ -193,6 +199,7 @@ export function applyEvent(event) {
       state.socket = event.socket ?? event.url;
       // The mod can't see the OS; the bridge, in Node, says which it is.
       if (event.platform) state.platform = event.platform;
+      state.windowsTerminal = event.windowsTerminal === true;
       // Without a server the bridge runs for the Agents room's heartbeats alone.
       if (event.chat === false) return true;
       state.bridge = "ready";

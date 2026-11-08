@@ -39,6 +39,6 @@ description: 已完成和接下來要做的事。
 - [Resend](https://resend.com)（選用），為使用 email 登入的伺服器寄送驗證碼
 - [glowup](https://github.com/NovusEdge/glowup)，它的 classic pack 啟發了配色和卡片版面，它的文件啟發了這個網站
 - [token-weather](https://github.com/anthropics/claude-code-playground/tree/main/claude-code/mods/token-weather)，Usage 橫條畫的 context 預報來自它
-- [Turn Inspector](https://x.com/dani_avila7/status/2109822699174559748)，Usage 房間的 Requests 卡片源自它的構想
+- [Turn Inspector](https://x.com/dani_avila7/status/2109822699174559748)，Usage 房間逐步檢視請求的構想源自它，即現在的 Trajectory 卡片
 - [awesome-claude-code-mods](https://github.com/karanb192/awesome-claude-code-mods) 和上面列出的 mod，為內建房間提供了許多構想
 - [Starlight](https://starlight.astro.build)，用來建置這個網站

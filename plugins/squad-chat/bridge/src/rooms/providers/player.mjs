@@ -395,7 +395,8 @@ export default {
       const items = loadList(ctx.dataDir);
       const fresh = [];
       if (kindOf(raw) === "file") {
-        const path = resolve(raw.replace(/^~(?=\/|$)/, ctx.home ?? "~"));
+        // ~ is home; on Windows ~\Music as well as ~/Music.
+        const path = resolve(raw.replace(ctx.platform === "win32" ? /^~(?=[\\/]|$)/ : /^~(?=\/|$)/, ctx.home ?? "~"));
         const st = await ctx.fs.stat(path);
         if (!st) throw new RoomError(404, `No file or folder at ${path}.`);
         const files = st.isDirectory?.()

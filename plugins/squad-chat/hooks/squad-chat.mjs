@@ -15,7 +15,8 @@
 import { state, applyEvent, resetBridgeState, currentRoom, bandRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
-import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepToolUse, stepEnded, applyOverhead, wantsOverhead, toolSummary } from "./metrics.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, applyOverhead, wantsOverhead, noteProvider } from "./metrics.mjs";
+import { toggleTurn, scrollTraj } from "./trajview.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
 import { createFocus, isRunning, start as focusStart, pause as focusPause, skip as focusSkip, reset as focusReset, adjust as focusAdjust, setLengths, tickFocus, focusSettings, focusTimer, restoreFocus, focusStatus, focusBadge, dayOf } from "./focus.mjs";
@@ -23,6 +24,7 @@ import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggle
 import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS, CLIP_WATCH, CLIP_ONCE_WIN } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
+import { emojiSelected, emojiUnselected } from "./widgets.mjs";
 
 state.focus = createFocus();
 state.habits = createHabits();
@@ -185,6 +187,37 @@ function redact(content) {
 }
 
 // ---------------------------------------------------------------- pane and commands
+
+// The terminal's elements on Windows: in Windows Terminal each text gets the
+// emoji selector after ☀ ⚒ ⌨ and the like, which it draws two cells wide; in
+// Orca and the other xterm.js terminals, which draw them in one, it loses it
+// (widgets.mjs). Elsewhere, and in Svg, they're left as they are.
+const TEXT_PROPS = ["children", "label", "placeholder", "submitLabel", "title"];
+
+function terminalEls(els) {
+  if (state.platform !== "win32") return els;
+  const emoji = state.windowsTerminal ? emojiSelected : emojiUnselected;
+  const fix = (v) => (typeof v === "string" ? emoji(v) : Array.isArray(v) ? v.map(fix) : v);
+  const wrap = (make) => (props = {}) => {
+    const out = { ...props };
+    for (const k of TEXT_PROPS) if (k in out) out[k] = fix(out[k]);
+    if (Array.isArray(out.options)) out.options = out.options.map((o) => ({ ...o, label: fix(o.label) }));
+    return make(out);
+  };
+  return Object.fromEntries(Object.entries(els).map(([k, make]) => [k, typeof make === "function" && k !== "Svg" ? wrap(make) : make]));
+}
+
+// VS Code's elements: a row that doesn't fit wraps there, where the terminal
+// and the desktop keep it on one line and its pieces give way. A Hacker News
+// story fell to four lines, a stock's ✕ under its symbol. Rows there stay on
+// one line unless they ask to wrap (the tabs, chips).
+function ideEls(els) {
+  const { Box } = els;
+  return { ...els, Box: (props = {}) => Box((props.flexDirection ?? "row") === "row" && props.flexWrap == null ? { ...props, flexWrap: "nowrap" } : props) };
+}
+
+// A surface's elements: the terminal's glyph fixes, or VS Code's rows.
+const surfaceEls = (els, surface) => (surface === "terminal" ? terminalEls({ ...els, Svg: undefined }) : surface === "desktop" ? els : ideEls(els));
 
 // The band shows the room with the newest message: Open goes to that room.
 async function openFromBand($) {
@@ -585,9 +618,13 @@ async function restoreSessionUsage($) {
 
 async function refreshUsage($) {
   try {
-    // The breakdown when it's open, and now and then for the Requests card's bedrock.
-    const breakdown = state.usage.showBreakdown || wantsOverhead(state.usage);
-    const u = await $.session.usage(breakdown ? { breakdown: "summary" } : {});
+    // The breakdown when it's open, and now and then for the Trajectory card's
+    // FIXED row. Opening that row asks for the full one, which names what is
+    // in each category, once: after that the summary's totals do, and the
+    // lists it named stay until a full one is asked for again.
+    const full = state.traj.sel === "fixed" && (!state.usage.overhead?.parts || wantsOverhead(state.usage));
+    const breakdown = full || state.usage.showBreakdown || wantsOverhead(state.usage);
+    const u = await $.session.usage(breakdown ? { breakdown: full ? "full" : "summary" } : {});
     applyMeasure(state.usage, u, Date.now());
     if (u?.context?.breakdown) {
       state.usage.breakdown = u.context.breakdown;
@@ -597,6 +634,23 @@ async function refreshUsage($) {
   } catch (err) {
     $.ui.log(`squad-chat: could not read usage: ${err?.message ?? err}`, { to: "debug" });
   }
+}
+
+// The Trajectory card's buttons: a row opened or closed, a tab of its
+// details, a fold, a FIXED category opened, a list paged, and the
+// terminal's window over the rows moved.
+function trajAct($, act, arg) {
+  const t = state.traj;
+  if (act === "select") {
+    t.sel = t.sel === arg ? null : arg;
+    if (t.sel === "fixed" && !state.usage.overhead?.parts) void refreshUsage($);   // the full breakdown names each category's items
+  } else if (act === "tab") t.tabs[arg.id] = arg.tab;
+  else if (act === "fold") t[arg] = !t[arg];
+  else if (act === "turn") toggleTurn(state.usage, arg);
+  else if (act === "open") { if (!t.open.delete(arg)) t.open.add(arg); }
+  else if (act === "page") t.off[arg.key] = Math.max(0, (t.off[arg.key] ?? 0) + arg.by);
+  else if (act === "scroll") scrollTraj(arg);
+  $.ui.invalidate("ui.render");
 }
 
 function toggleBreakdown($) {
@@ -1207,7 +1261,7 @@ export function register(on, options) {
     // The pane draws lines and charts as Svg where a surface paints them; the
     // terminal keeps its glyphs, so it is drawn as though it had no Svg.
     const els = $.ui.resolve(e);
-    return paneView(e.surface === "terminal" ? { ...els, Svg: undefined } : els, { ...props, surface: e.surface }, {
+    return paneView(surfaceEls(els, e.surface), { ...props, surface: e.surface }, {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void (async () => { if (state.view !== "chat") await setView($, "chat"); await selectRoom($, id); })(); },
@@ -1246,6 +1300,7 @@ export function register(on, options) {
       onSetSetting: (room, key, value) => { void setRoomSetting($, room, key, value); },
       onRefresh: () => { void refreshGit($); },
       onToggleBreakdown: () => toggleBreakdown($),
+      onTraj: (act, arg) => trajAct($, act, arg),
       onToggleSession: (id) => { if (!state.collapsed.delete(id)) state.collapsed.add(id); $.ui.invalidate("ui.render"); },
       // The desktop's messages are tall: three a press there, five on the terminal.
       onChatScroll: (dir) => scrollChat($, dir === 0 ? 0 : dir * (paneSurface === "terminal" ? 5 : 3)),
@@ -1304,6 +1359,17 @@ export function register(on, options) {
       return {};
     }
     const scroll = state.dockScroll;
+    // The Usage room's Trajectory card has a window of its own over its rows.
+    // Down, the cards go first until the card is at the top, then its rows;
+    // up, its rows go first wherever the cards can't go up any more (at their
+    // top, or fitting the pane with no scroll of their own), and the cards
+    // after. Before, cards that fit handed every wheel to the pane, and the
+    // card's rows were stuck at the bottom.
+    const cardsStill = !scroll.max || (e.by > 0 ? scroll.offset === scroll.max : scroll.offset === 0);
+    if (e.requestId === PANE_ID && activeView() === "usage" && scroll.view === "usage" && cardsStill) {
+      const step = Math.max(1, Math.round(Math.abs(e.by) / 2));
+      if (scrollTraj(Math.sign(e.by) * step)) { $.ui.invalidate("ui.render"); return {}; }
+    }
     if (e.requestId !== PANE_ID || activeView() === "chat" || scroll.view !== activeView() || !scroll.max) return next(e);
     // A card at a time, or as many as the rows asked for pass (a page key).
     let offset = scroll.offset;
@@ -1322,7 +1388,8 @@ export function register(on, options) {
     if (e.props?.hasSurvey || (activeView() === "chat" && !chatShown)) return next(e);
     const panes = await $.ui.panes();
     if (panes.some((p) => p.id === PANE_ID && p.isPlaced && p.isShown)) return next(e);
-    return bandView($.ui.resolve(e), { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openFromBand($); }, onCycle: (dir) => { void cycleBand($, dir); } });
+    const els = $.ui.resolve(e);
+    return bandView(e.surface === "terminal" ? terminalEls(els) : els, { ...(e.props ?? {}), surface: e.surface }, { onOpen: () => { void openFromBand($); }, onCycle: (dir) => { void cycleBand($, dir); } });
   });
 
   // "auto" do not disturb: a turn still running after LONG_TURN_MS goes quiet
@@ -1331,7 +1398,12 @@ export function register(on, options) {
   on("turn.start", ($, e, next) => {
     const id = e.turnId;
     turn = id;
-    if (!e.agentId) { turnStarted(state.usage, Date.now()); stepPrompt(state.usage, e.text); sysChanged($); }
+    if (!e.agentId) {
+      turnStarted(state.usage, Date.now());
+      stepPrompt(state.usage, e.text, Date.now());
+      state.traj.turnOpen.clear();   // the Trajectory card: the new turn open, the ones before folded
+      sysChanged($);
+    }
     void (async () => {
       await $.clock.sleep(LONG_TURN_MS);
       if (turn !== id || state.dnd !== "auto") return;
@@ -1366,8 +1438,8 @@ export function register(on, options) {
     return r;
   });
 
-  // Each request of the main loop, for the Usage room's Requests card: the
-  // tools it called as they stream, then the API's usage for it. The stream
+  // Each request of the main loop, for the Usage room's Trajectory card:
+  // when its stream starts, then the API's usage and the reply. The stream
   // is passed on piece by piece, untouched.
   on("turn.step", async function* ($, e, next) {
     if (e.agentId) return yield* next(e);
@@ -1380,13 +1452,13 @@ export function register(on, options) {
     try {
       const stream = next(e);
       for await (const c of stream) {
-        if (c.kind === "tool") stepToolUse(step, c.name);
+        stepChunk(step, Date.now());
         yield c;
       }
       r = await stream.result;
       return r;
     } finally {
-      try { stepEnded(state.usage, step, r?.usage, r?.stopReason); sysChanged($); }
+      try { stepEnded(state.usage, step, r, Date.now()); sysChanged($); }
       catch { /* as above */ }
     }
   });
@@ -1402,7 +1474,12 @@ export function register(on, options) {
   // Each tool call, timed. Passed through untouched: never denied, never changed.
   on("tool.call", async ($, e, next) => {
     let key = null;
-    try { key = toolStarted(state.usage, { tool: e.tool, agentId: e.agentId, input: e, at: Date.now() }); sysChanged($); }
+    try {
+      const at = Date.now();
+      key = toolStarted(state.usage, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform });
+      traceCall(state.usage, key, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform });
+      sysChanged($);
+    }
     catch { /* the call matters more than its timing */ }
     let r;
     try {
@@ -1410,9 +1487,11 @@ export function register(on, options) {
       return r;
     } finally {
       try {
-        toolEnded(state.usage, key, { at: Date.now(), isError: !r || !!r.isError || !!r.deny });
-        // Its answer goes back to the model with the next request: only its size is kept.
-        if (!e.agentId && r) stepToolResult(state.usage, e.tool, String(r.deny ?? r.text ?? (r.result === undefined ? "" : JSON.stringify(r.result) ?? "")).length, toolSummary(e.tool, e));
+        const end = { at: Date.now(), isError: !r || !!r.isError || !!r.deny };
+        toolEnded(state.usage, key, end);
+        traceEnded(state.usage, key, end);
+        // Its answer goes back to the model with the next request: its size, and its first lines for the card.
+        if (r) stepToolResult(state.usage, key, String(r.deny ?? r.text ?? (r.result === undefined ? "" : JSON.stringify(r.result) ?? "")), { tool: e.tool, agentId: e.agentId });
         sysChanged($);
         // A push or a new PR: the Git room catches up once GitHub has.
         if (e.tool === "Bash" && PUSHED.test(String(e.command ?? ""))) {
@@ -1421,6 +1500,13 @@ export function register(on, options) {
       } catch { /* as above */ }
     }
   }).catch(($, e, next) => next(e));   // pass through: replays the call's own result
+
+  // Which MCP server provides each tool, by the name it was set up with, so
+  // the Usage room never names a server by its id. Passed on untouched.
+  on("tool.describe", ($, e, next) => {
+    try { noteProvider(state.usage, e.tool, e.provider); } catch { /* the description matters more */ }
+    return next(e);
+  }).catch(($, e, next) => next(e));
 
   on("agent.spawn", async ($, e, next) => {
     const r = await next(e);
