@@ -1255,6 +1255,28 @@ test('Git room: branch, PR, reviews and checks from gh; a refresh that turns CI 
   await desk.unmount()
 })
 
+test('Git room: a folder with no repository is checked once, not every tick, and never flickers through loading', SLOW, async ($, on) => {
+  recordUi(on)
+  on('session.cwd', () => ({ value: '/work/plain' }))
+  let checks = 0
+  const bridge = fakeBridge(on, { gh: (argv) => {
+    if (argv[0] === 'git' && argv[1] === 'status') checks++
+    return { exitCode: 128, stderr: 'fatal: not a git repository (or any of the parent directories): .git' }
+  } })
+  await bridge.start($)
+  signedIn(bridge)
+  await settle()
+  await $.command.run({ command: 'chat', args: 'git' })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  expect(await ui.find({ type: 'Text', text: /isn't a git repository/ })).toBeDefined()
+  const before = checks
+  expect(before).toBeGreaterThan(0)
+  for (let i = 0; i < 5; i++) { await bridge.clock.advance(1_000); await settle() }
+  expect(checks).toBe(before)                                         // each one redrew the room through "loading"
+  await ui.unmount()
+})
+
 test('Git room: says how to set up gh when it is missing', SLOW, async ($, on) => {
   recordUi(on)
   on('session.cwd', () => ({ value: '/work/app' }))
