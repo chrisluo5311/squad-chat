@@ -13,7 +13,7 @@
 
 import { state } from "./state.mjs";
 import { theme } from "./theme.mjs";
-import { card, stackCards, stretchBar, clip, xml } from "./widgets.mjs";
+import { card, stackCards, stretchBar, clip } from "./widgets.mjs";
 import { dayOf, spent as span } from "./focus.mjs";
 import { PALETTE, STICKERS } from "./petframes.mjs";
 import { clawdSvg, cornerSvg, walkSvg } from "./clawdsvg.mjs";
@@ -245,22 +245,18 @@ function when(at, now) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-// What Clawd noticed lately: small and dim, so the corner stays the point.
+// What Clawd noticed lately, dim, at the pane's own size (drawn smaller,
+// it was too small to read in VS Code): the time in a column of its own.
 function logCard(els, w, now, max) {
-  const { Text } = els;
+  const { Box, Text } = els;
   const p = state.pet;
   const items = p.log.slice(0, max);
-  let rows;
-  if (!items.length) rows = [Text({ key: "empty", color: theme.muted, children: "Nothing yet. Clawd notes what happens while you work." })];
-  else if (els.Svg) {
-    // Drawn, so the lines can be set smaller than the pane's text.
-    const lh = 17, H = items.length * lh;
-    const lines = items.map((x, i) => `<text x="0" y="${i * lh + 12}" font-size="11.5" fill="#9A968F">${when(x.at, now)}</text>`
-      + `<text x="40" y="${i * lh + 12}" font-size="11.5" fill="#BDB8B0">${xml(`${x.icon} ${clip(x.text, 56)}`)}</text>`).join("");
-    rows = [els.Svg({ key: "log", source: `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="${H}" viewBox="0 0 420 ${H}" font-family="-apple-system, system-ui, sans-serif">${lines}</svg>`, alt: items.map((x) => x.text).join(" · "), width: 420, height: H })];
-  } else {
-    rows = items.map((x, i) => Text({ key: `l${i}`, color: theme.muted, wrap: "truncate-end", children: `${when(x.at, now)}  ${x.icon} ${x.text}` }));
-  }
+  const rows = items.length
+    ? items.map((x, i) => Box({ key: `l${i}`, flexDirection: "row", flexWrap: "nowrap", columnGap: 1, children: [
+      Box({ key: "at", width: 6, flexShrink: 0, children: [Text({ key: "t", color: theme.muted, children: when(x.at, now) })] }),
+      Box({ key: "x", flexShrink: 1, minWidth: 0, children: [Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `${x.icon} ${x.text}` })] }),
+    ] }))
+    : [Text({ key: "empty", color: theme.muted, children: "Nothing yet. Clawd notes what happens while you work." })];
   return { name: "Lately", node: card(els, { key: "log", title: "LATELY", color: theme.muted, rows }), height: 3 + rows.length };
 }
 

@@ -207,6 +207,18 @@ function terminalEls(els) {
   return Object.fromEntries(Object.entries(els).map(([k, make]) => [k, typeof make === "function" && k !== "Svg" ? wrap(make) : make]));
 }
 
+// VS Code's elements: a row that doesn't fit wraps there, where the terminal
+// and the desktop keep it on one line and its pieces give way. A Hacker News
+// story fell to four lines, a stock's ✕ under its symbol. Rows there stay on
+// one line unless they ask to wrap (the tabs, chips).
+function ideEls(els) {
+  const { Box } = els;
+  return { ...els, Box: (props = {}) => Box((props.flexDirection ?? "row") === "row" && props.flexWrap == null ? { ...props, flexWrap: "nowrap" } : props) };
+}
+
+// A surface's elements: the terminal's glyph fixes, or VS Code's rows.
+const surfaceEls = (els, surface) => (surface === "terminal" ? terminalEls({ ...els, Svg: undefined }) : surface === "desktop" ? els : ideEls(els));
+
 // The band shows the room with the newest message: Open goes to that room.
 async function openFromBand($) {
   const room = activeView() === "chat" && state.auth === "signed_in" ? bandRoom() : null;
@@ -1249,7 +1261,7 @@ export function register(on, options) {
     // The pane draws lines and charts as Svg where a surface paints them; the
     // terminal keeps its glyphs, so it is drawn as though it had no Svg.
     const els = $.ui.resolve(e);
-    return paneView(e.surface === "terminal" ? terminalEls({ ...els, Svg: undefined }) : els, { ...props, surface: e.surface }, {
+    return paneView(surfaceEls(els, e.surface), { ...props, surface: e.surface }, {
       onInput: (value) => { state.draft = value; typingPing($, value); },
       onSubmit: (value) => { void submitFromPane($, value); },
       onSelectRoom: (id) => { void (async () => { if (state.view !== "chat") await setView($, "chat"); await selectRoom($, id); })(); },

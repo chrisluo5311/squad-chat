@@ -287,7 +287,9 @@ function lengthRow(els, key, label, value, handlers) {
 }
 
 function settingsCard(els, f, handlers) {
-  const rows = [lengthRow(els, "work", "Focus", f.work, handlers), lengthRow(els, "rest", "Break", f.rest, handlers)];
+  // A few pixels between the rows, so one row's − and + don't touch the next's.
+  const gap = els.Svg ? els.Svg({ key: "gap", source: K.svg(1, 6, ""), alt: "gap", width: 1, height: 6 }) : null;
+  const rows = [lengthRow(els, "work", "Focus", f.work, handlers), gap, lengthRow(els, "rest", "Break", f.rest, handlers)].filter(Boolean);
   const meta = f.focusedMs ? `${spent(f.focusedMs)} focused today` : "";
   return { name: "Settings", node: card(els, { key: "settings", title: "SETTINGS", color: FOCUS_META.color, meta, rows }), height: 3 + rows.length };
 }

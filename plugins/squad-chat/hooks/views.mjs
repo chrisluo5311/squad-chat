@@ -673,10 +673,10 @@ function dockView(els, props, handlers) {
   } else if (enabledRooms().length || (state.auth === "signed_in" && state.rooms.length)) {
     parts.push(roomTabs(els, handlers, width));
     used += tabRows(width);
-    // The desktop sets a room's first card half a row below its tabs. A Box
-    // is rows tall, so the gap is an empty drawing, sized in pixels; the
-    // chat's first card keeps its own margin.
-    if (props.surface === "desktop" && els.Svg && view !== "chat") {
+    // Where the pane draws pictures (the desktop, VS Code), a room's first
+    // card sits half a row below its tabs. A Box is rows tall, so the gap is
+    // an empty drawing, sized in pixels; the chat's first card keeps its own margin.
+    if (els.Svg && view !== "chat") {
       parts.push(els.Svg({ key: "gap-tabs", source: K.svg(1, 10, ""), alt: "gap", width: 1, height: 10 }));
     }
   }
@@ -685,10 +685,12 @@ function dockView(els, props, handlers) {
     const n = notice(els, handlers);
     const pending = shareCard(els, handlers, width);
     const tail = 1 + 3 + 1 + (n ? rowsFor(state.notice, width) : 0) + (pending?.height ?? 0);   // gap + input box + hints + notice + preview
-    // The desktop scrolls the pane itself (its own bar, the wheel and the
-    // trackpad), so there every card is drawn whole and nothing is windowed;
-    // the terminal keeps the cards in a window that fits, with its own bar.
-    const capacity = props.surface === "desktop" ? 1000 : Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
+    // The desktop and VS Code scroll the pane themselves (their own bar, the
+    // wheel and the trackpad), so there every card is drawn whole and nothing
+    // is windowed. VS Code neither clips a window nor keeps its bar beside it:
+    // the cards ran over the input and the bar fell under them. The terminal
+    // keeps the cards in a window that fits, with its own bar.
+    const capacity = props.surface !== "terminal" ? 1000 : Math.max(4, bodyRows - used - tail - 1);       // one row the dock reserves
     // The room's own scroll: it starts at the top, and cards taller than the
     // window are laid out a cell narrower to leave the scrollbar its column.
     if (state.dockScroll.view !== view) state.dockScroll = { view, offset: 0, max: 0 };
@@ -701,6 +703,8 @@ function dockView(els, props, handlers) {
     if (pending) parts.push(pending.node);
     if (n) parts.push(n);
     parts.push(inputBox(els, mode, handlers, props.isFocused, props.surface, props.bodyColumns));
+    // A few pixels between the input box and Share (an empty drawing: a Box is rows tall).
+    if (els.Svg) parts.push(els.Svg({ key: "gap-hints", source: K.svg(1, 6, ""), alt: "gap", width: 1, height: 6 }));
     parts.push(sysHints(els, view, handlers));
   } else if (state.auth === "signed_in" && room) {
     const friends = friendsCard(els, width);
@@ -773,11 +777,14 @@ const SYS_HINTS = {
 function sysHints(els, view, handlers) {
   const { Box, Text, Button } = els;
   const share = hasSnapshot(view);
-  return Box({ key: "hints", flexDirection: "row", gap: 1, flexShrink: 0, children: [
+  // columnGap, not gap: where VS Code wrapped the hint under Share, gap left a blank line too.
+  return Box({ key: "hints", flexDirection: "row", flexWrap: "nowrap", columnGap: 1, flexShrink: 0, children: [
     share ? Box({ key: "share", flexShrink: 0, children: [
       Button({ key: "share-snapshot", plain: true, label: "⇪ Share", onPress: () => handlers.onShare?.(view) }),
     ] }) : null,
-    Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `${share ? "· " : ""}${(els.Svg && view === "git" ? "↻ or r refreshes · ↗ opens a link" : SYS_HINTS[view]) ?? fnHint(view)}` }),
+    Box({ key: "hint", flexShrink: 1, minWidth: 0, overflow: "hidden", children: [
+      Text({ key: "t", color: theme.muted, wrap: "truncate-end", children: `${share ? "· " : ""}${(els.Svg && view === "git" ? "↻ or r refreshes · ↗ opens a link" : SYS_HINTS[view]) ?? fnHint(view)}` }),
+    ] }),
   ].filter(Boolean) });
 }
 

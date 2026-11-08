@@ -2847,9 +2847,9 @@ test('Pet room: on auto, Clawd vibes, then waves at a new message and logs it', 
   // Clawd's log notes who wrote and where, never what.
   const room = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
   await room.press({ key: 'sys-pet' })
-  const log = await svgAlt(room, /bob wrote in #lobby/)
+  const log = await room.find({ type: 'Text', text: /bob wrote in #lobby/ })
   expect(log).toBeDefined()
-  expect(log!.props.source).not.toMatch(/\bhi\b/)
+  expect(String(log!.props.children)).not.toMatch(/\bhi\b/)
   await room.unmount()
 })
 
