@@ -9,6 +9,7 @@
 // of the pane, ▴ and ▾ (or the wheel) moving it back and forth.
 
 import { state } from "./state.mjs";
+import { MAX_SNIPPET, MAX_SNIPPET_LINES } from "./share.mjs";
 import { theme, palette } from "./theme.mjs";
 import { clip, fmtTokens, rowsFor, line, card } from "./widgets.mjs";
 import { trajectory, trajectoryTotals, serverLabel } from "./metrics.mjs";
@@ -411,7 +412,7 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
   const metaNode = Box({ key: "meta", flexDirection: "row", alignItems: "center", columnGap: 2, flexShrink: 1, minWidth: 0, children: [
     Text({ key: "m", color: theme.muted, wrap: "truncate-start", children: meta }),
     Button({ key: "traj-copy", plain: true, label: "⧉ Copy", onPress: (press) => handlers.onCopy?.(trajectoryText(now), press?.surface) }),
-    Button({ key: "traj-share", plain: true, label: "⇪ Share", onPress: () => handlers.onShareItem?.({ title: "Trajectory", lang: null, body: trajectoryText(now) }) }),
+    Button({ key: "traj-share", plain: true, label: "⇪ Share", onPress: () => handlers.onShareItem?.({ title: "Trajectory", lang: null, body: trajectoryText(now, { maxChars: MAX_SNIPPET, maxLines: MAX_SNIPPET_LINES }) }) }),
   ] });
   if (!u.steps.length && !u.turns.length) {
     const rows = [Text({ key: "none", color: theme.muted, wrap: "truncate-end", children: "None yet. Each request to Claude shows up here." })];
@@ -499,25 +500,48 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
 // ---------------------------------------------------------------- as text
 
 // The card as plain text, for Copy and Share: each turn and request with its
-// figures, the calls by tool and what they were about. No prompt, reply,
-// input or result text: those stay in this pane.
-export function trajectoryText(now = Date.now()) {
+// figures, the calls by tool and what they were about (the brief description
+// its row shows). No prompt, reply, input or result text: those stay in this
+// pane. An agent's own calls are one line, counted by tool. Share passes a
+// chat snippet's limits, and the oldest requests give way until it fits.
+export function trajectoryText(now = Date.now(), { maxChars = Infinity, maxLines = Infinity } = {}) {
   const u = state.usage;
   const tt = trajectoryTotals(u);
-  const out = [`Trajectory · ${tt.requests} request${tt.requests === 1 ? "" : "s"} to Claude · ${tt.calls} tool call${tt.calls === 1 ? "" : "s"}`];
-  if (u.overhead) out.push(`Fixed overhead ${kTok(u.overhead.tokens)} tokens, sent with every request`);
-  for (const turn of trajectory(u)) {
-    out.push("", `${turn.earlier ? "Earlier" : `Turn ${turn.n}`} · ${turn.steps.length} request${turn.steps.length === 1 ? "" : "s"}`);
-    for (const s of turn.steps) {
-      if (s.isCompacted) out.push("  Context compacted");
-      out.push(`  #${s.n}  ${s.status === "failed" ? "failed, sent again" : `${kTok(s.input)} in · ${kTok(s.output)} out`} · ${took(stepMs(s, now))}`);
-      for (const c of s.calls) {
-        out.push(`    ${c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""} · ${kTok(tokensOf(c)) || "–"} · ${c.done ? took(c.ms) : "running"}`);
-        for (const sc of c.sub) out.push(`      ${sc.tool}${sc.summary ? ` ${sc.summary}` : ""}${sc.isError ? " ✗" : ""} · ${sc.done ? took(sc.ms) : "running"}`);
+  const head = [`Trajectory · ${tt.requests} request${tt.requests === 1 ? "" : "s"} to Claude · ${tt.calls} tool call${tt.calls === 1 ? "" : "s"}`];
+  if (u.overhead) head.push(`Fixed overhead ${kTok(u.overhead.tokens)} tokens, sent with every request`);
+  const foot = [tt.tps ? `${tt.tps} tok/s` : null, tt.next != null ? `the next request sends ${kTok(tt.next)}` : null].filter(Boolean).join(" · ");
+  const turns = trajectory(u);
+  const kept = turns.reduce((n, t) => n + t.steps.length, 0);
+  // The text with the first `skip` of the kept requests left out.
+  const write = (skip) => {
+    const out = [...head];
+    const before = u.stepN - kept + skip;   // sent before the first one written
+    if (before > 0) out.push(`${before} earlier request${before === 1 ? "" : "s"} not listed`);
+    let i = 0;
+    for (const turn of turns) {
+      const steps = turn.steps.filter(() => i++ >= skip);
+      if (!steps.length) continue;
+      out.push("", `${turn.earlier ? "Earlier" : `Turn ${turn.n}`} · ${turn.steps.length} request${turn.steps.length === 1 ? "" : "s"}`);
+      for (const s of steps) {
+        if (s.isCompacted) out.push("  Context compacted");
+        out.push(`  #${s.n}  ${s.status === "failed" ? "failed, sent again" : s.status === "streaming" ? "streaming" : `${kTok(s.input)} in · ${kTok(s.output)} out`} · ${took(stepMs(s, now))}`);
+        for (const c of s.calls) {
+          out.push(`    ${c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""} · ${kTok(tokensOf(c)) || "–"} · ${c.done ? took(c.ms) : "running"}`);
+          if (c.subN) out.push(`      ${c.subN} call${c.subN === 1 ? "" : "s"} of its own: ${subTools(c)}`);
+        }
       }
     }
-  }
-  out.push("", [tt.tps ? `${tt.tps} tok/s` : null, tt.next != null ? `the next request sends ${kTok(tt.next)}` : null].filter(Boolean).join(" · "));
-  return out.join("\n").trimEnd();
+    if (foot) out.push("", foot);
+    return out.join("\n").trimEnd();
+  };
+  let skip = 0;
+  let text = write(skip);
+  while (skip < kept && (text.length > maxChars || text.split("\n").length > maxLines)) text = write(++skip);
+  return text;
 }
 
+// "Grep ×120, Read ×80, Bash ×12, …": an agent's calls by tool, the most used first.
+function subTools(c) {
+  const list = Object.entries(c.subTools ?? {}).sort((a, b) => b[1] - a[1]);
+  return `${list.slice(0, 4).map(([tool, n]) => `${shortTool(tool)} ×${n}`).join(", ")}${list.length > 4 ? ", …" : ""}`;
+}

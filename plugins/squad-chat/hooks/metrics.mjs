@@ -357,12 +357,13 @@ function splitBySize(pieces, total) {
 // asked for it (the last one sent), a subagent's under the call that
 // started that agent.
 export function traceCall(u, key, { tool, agentId, input, at, platform }) {
-  const call = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0 };
+  const call = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
   if (agentId) {
     const owner = agentCall(u, agentId);
     if (!owner) return null;
     owner.sub.push(call);
     owner.subN++;              // every call it made: `sub` keeps the newest
+    owner.subTools[tool] = (owner.subTools[tool] ?? 0) + 1;
     if (owner.sub.length > SUBCALLS) owner.sub.splice(0, owner.sub.length - SUBCALLS);
   } else {
     const step = u.steps.at(-1);

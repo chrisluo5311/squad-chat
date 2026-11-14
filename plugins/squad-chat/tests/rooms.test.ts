@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer, tickFocus, dayOf } from '../hooks/focus.mjs'
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
-import { shortTool } from '../hooks/trajview.mjs'
+import { shortTool, trajectoryText } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
 import { state } from '../hooks/state.mjs'
 import { frameKey } from '../hooks/squad-chat.mjs'
@@ -255,6 +255,37 @@ test('Trajectory: the totals count the whole session, past the rows still kept',
   const agent = u.steps.at(-1).calls.at(-1)
   expect([agent.sub.length, agent.subN]).toEqual([40, 300])
   expect(trajectoryTotals(u).calls).toBe(481)
+})
+
+test('Trajectory: the text Share sends always fits a snippet, the oldest requests giving way', () => {
+  const saved = state.usage
+  const u = createUsage()
+  state.usage = u
+  try {
+    stepPrompt(u, 'go', 0)
+    for (let i = 0; i < 30; i++) {
+      stepEnded(u, stepStarted(u, { turnId: 't', index: i, at: i * 100 }), stepResult(100_000 + i * 10, 5), i * 100 + 50)
+      for (let c = 0; c < 3; c++) {
+        traceCall(u, `k${i}-${c}`, { tool: 'Bash', input: { command: `npm run build --workspace packages/some-long-package-name-${i}-${c} -- --verbose` }, at: i * 100 + 60 })
+        traceEnded(u, `k${i}-${c}`, { at: i * 100 + 70, isError: false })
+      }
+    }
+    traceCall(u, 'A', { tool: 'Agent', input: { description: 'map the repo' }, at: 3_000 })
+    agentSpawned(u, { id: 'a1', type: 'Explore', description: 'map the repo', parentId: null, at: 3_001 })
+    for (let i = 0; i < 300; i++) traceCall(u, `s${i}`, { tool: i % 3 ? 'Grep' : 'Read', agentId: 'a1', input: {}, at: 3_002 + i })
+    const whole = trajectoryText(4_000)
+    expect(whole.length).toBeGreaterThan(8_000)                       // Copy takes all of it
+    expect(whole).toContain('\n  #1  ')
+    expect(whole).toContain('      300 calls of its own: Grep ×200, Read ×100')   // an agent's calls on one line
+    const shared = trajectoryText(4_000, { maxChars: 8_000, maxLines: 200 })
+    expect(shared.length).toBeLessThanOrEqual(8_000)
+    expect(shared.split('\n').length).toBeLessThanOrEqual(200)
+    expect(shared).toMatch(/^Trajectory · 30 requests to Claude · 391 tool calls\n\d+ earlier requests? not listed\n/)
+    expect(shared).not.toContain('\n  #1  ')
+    expect(shared).toContain('\n  #30  ')                              // the newest stay
+  } finally {
+    state.usage = saved
+  }
 })
 
 test("Trajectory: a turn with no words is still a turn, and a result the card lost still goes with the next request", () => {
