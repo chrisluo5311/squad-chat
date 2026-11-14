@@ -997,6 +997,7 @@ test('Usage room: the Trajectory card lists each prompt, request and tool call, 
   on('tool.call', () => ({ result: '# README\nline two\n' + 'x'.repeat(8000), text: '# README\nline two\n' + 'x'.repeat(8000) }))
   on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
+  on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
   const copied: string[] = []
   on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
   const asked: any[] = []
@@ -1156,6 +1157,14 @@ test('Usage room: the Trajectory card lists each prompt, request and tool call, 
   await again.press({ key: 'traj-turns' })                                                  // and all open again
   expect(await again.find({ type: 'Text', text: '#1 Let me read it.' })).toBeDefined()
   await again.unmount()
+
+  // A /clear ends the conversation and the process goes on: the card starts over with it.
+  await $.session.end({ reason: 'clear', sessionId: 'sess-old', resume: { id: 'sess-old' } } as any)
+  await settle()
+  const cleared = await $.ui.mount({ ...PANE, surface: 'terminal', props: tall })
+  expect(await cleared.find({ type: 'Text', text: 'None yet. Each request to Claude shows up here.' })).toBeDefined()
+  expect(await cleared.find({ type: 'Text', text: /explain readme\.md/ })).toBeUndefined()
+  await cleared.unmount()
 })
 
 test('Usage room: context, limits, spend and cache', SLOW, async ($, on) => {

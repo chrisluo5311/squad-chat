@@ -44,6 +44,22 @@ export function createUsage() {
   };
 }
 
+// A /clear or a resume: the process goes on with another conversation, so
+// its numbers start over. What belongs to the account and the setup stays:
+// the rate-limit windows, the model, the MCP servers' names, whether the
+// breakdown is open, and the fixed overhead (read again at the first request).
+export function startOver(u) {
+  const fresh = createUsage();
+  fresh.rateLimits = u.rateLimits;
+  fresh.hasLimits = u.hasLimits;
+  fresh.model = u.model;
+  fresh.mcpNames = u.mcpNames;
+  fresh.showBreakdown = u.showBreakdown;
+  fresh.overhead = u.overhead;
+  fresh.overheadAt = -Infinity;
+  return fresh;
+}
+
 // ---------------------------------------------------------------- engine figures
 
 // A session.measure event or a $.session.usage() answer.

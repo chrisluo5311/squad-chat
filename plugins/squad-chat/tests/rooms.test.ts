@@ -8,7 +8,7 @@ import { state } from '../hooks/state.mjs'
 import { frameKey, breakdownWanted } from '../hooks/squad-chat.mjs'
 import { createToolbox, rerun, pickTool, toolWords, MAX_INPUT } from '../hooks/toolbox.mjs'
 import { createHabits, addHabit, deleteHabit, habitStreaks } from '../hooks/habits.mjs'
-import { noteProvider, serverLabel, toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, agentSpawned, applyOverhead, trajectory, trajectoryTotals, trajectoryLive, preview } from '../hooks/metrics.mjs'
+import { startOver, noteProvider, serverLabel, toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, agentSpawned, applyOverhead, trajectory, trajectoryTotals, trajectoryLive, preview } from '../hooks/metrics.mjs'
 
 const MIN = 60_000
 
@@ -315,6 +315,27 @@ test('Trajectory: a teammate is not taken for the Agent call that is running', (
   expect(u.steps[0].calls.map((c: any) => c.agent)).toEqual([null, null])
   agentSpawned(u, { id: 'a2', type: 'Explore', description: 'read the docs', parentId: null, at: 23 })
   expect(u.steps[0].calls[1].agent).toEqual({ id: 'a2', type: 'Explore' })
+})
+
+test('Usage: a /clear starts the conversation\'s numbers over and keeps what is the account\'s', () => {
+  const u = createUsage()
+  u.rateLimits = [{ kind: 'five_hour', percentUsed: 40 }] as any
+  u.hasLimits = true
+  u.model = 'claude-opus-5-5' as any
+  noteProvider(u, 'mcp__x__run', { plugin: 'mcp:Lab', tier: 'user' })
+  stepPrompt(u, 'the cleared conversation', 0)
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), stepResult(100_000, 100, 'old reply'), 10)
+  traceCall(u, 'k1', { tool: 'Bash', input: { command: 'ls' }, at: 20 })
+  applyOverhead(u, { categories: [{ name: 'System tools', tokens: 7_300, kind: 'used' }] })
+  const n = startOver(u)
+  expect([n.turns, n.steps, n.feed, n.stepN, n.callN, n.tokens.input]).toEqual([[], [], [], 0, 0, 0])
+  expect(trajectory(n)).toEqual([])
+  expect([n.hasLimits, n.model, n.rateLimits.length, n.mcpNames.get('mcp__x__run'), n.overhead?.tokens]).toEqual([true, 'claude-opus-5-5', 1, 'Lab', 7_300])
+  // The first request after it is the first, not a compaction of the one before.
+  stepPrompt(n, 'hello', 100)
+  const first = stepStarted(n, { turnId: 't2', index: 0, at: 110 })
+  stepEnded(n, first, stepResult(20_000, 10), 120)
+  expect([first.n, first.isCompacted, first.grown]).toEqual([1, false, null])
 })
 
 test('Trajectory: an agent is paired with the call that started it by the call\'s id, never by a guess', () => {

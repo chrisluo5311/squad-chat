@@ -15,7 +15,7 @@
 import { state, applyEvent, resetBridgeState, currentRoom, bandRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
-import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, applyOverhead, wantsOverhead, noteProvider, trajectoryLive } from "./metrics.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, applyOverhead, wantsOverhead, noteProvider, trajectoryLive, startOver } from "./metrics.mjs";
 import { toggleTurn, scrollTraj } from "./trajview.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
@@ -629,6 +629,26 @@ export function breakdownWanted() {
   const onShow = state.paneShown && activeView() === "usage";
   if (onShow && state.traj.sel === "fixed" && (!u.overhead?.parts || wantsOverhead(u))) return "full";
   return u.showBreakdown || wantsOverhead(u) ? "summary" : null;
+}
+
+// A /clear or a resume ended the conversation and the process goes on under
+// another session id, with no session.start: the Usage and Agents rooms'
+// numbers start over, and the Trajectory card with them (it would go on
+// showing the conversation that was cleared). The new id isn't known until
+// the end chain is through, so the next turn's start reads it (adoptSession).
+let sessionMoved = false;
+function conversationEnded($) {
+  state.usage = startOver(state.usage);
+  Object.assign(state.traj, { sel: null, tabs: {}, off: {}, top: null, above: 0, below: 0 });
+  state.traj.turnOpen.clear();
+  sessionMoved = true;
+  sysChanged($);
+}
+// The session this process now runs, and what was kept for it (a resumed one's tokens and chart).
+async function adoptSession($) {
+  try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
+  await restoreSessionUsage($);
+  afterChange($);
 }
 
 async function refreshUsage($) {
@@ -1418,6 +1438,7 @@ export function register(on, options) {
   on("turn.start", ($, e, next) => {
     const id = e.turnId;
     turn = id;
+    if (sessionMoved) { sessionMoved = false; adoptSession($).catch(() => {}); }
     if (!e.agentId) {
       turnStarted(state.usage, Date.now());
       stepPrompt(state.usage, e.text, Date.now());
@@ -1564,6 +1585,8 @@ export function register(on, options) {
     if (e.reason !== "clear" && e.reason !== "resume") {
       state.ended = true;
       try { await callBridge($, "/shutdown", {}); } catch { /* exiting anyway */ }
+    } else {
+      try { conversationEnded($); } catch { /* the end matters more */ }
     }
     return next(e);
   });
