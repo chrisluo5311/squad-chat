@@ -49,10 +49,12 @@ const stepMs = (s, now) => (s.endedAt ?? now) - s.at;
 const isAgent = (c) => c.tool === "Agent" || c.tool === "Task";
 
 // Moves the terminal's window `by` rows: up toward the earliest, down toward
-// the newest (where it follows them again). False when it can't go that way.
+// the newest (where it follows them again). False when it can't go that way,
+// or was asked to go nowhere: a move of no rows mustn't pin the window where
+// it is, or its rows would stop following the newest.
 export function scrollTraj(by) {
   const t = state.traj;
-  if ((by < 0 && !t.above) || (by > 0 && !t.below)) return false;
+  if (!by || (by < 0 && !t.above) || (by > 0 && !t.below)) return false;
   t.top = Math.max(0, (t.top ?? t.above) + by);
   return true;
 }
@@ -415,6 +417,7 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
     Button({ key: "traj-share", plain: true, label: "⇪ Share", onPress: () => handlers.onShareItem?.({ title: "Trajectory", lang: null, body: trajectoryText(now, { maxChars: MAX_SNIPPET, maxLines: MAX_SNIPPET_LINES }) }) }),
   ] });
   if (!u.steps.length && !u.turns.length) {
+    Object.assign(t, { top: null, above: 0, below: 0 });
     const rows = [Text({ key: "none", color: theme.muted, wrap: "truncate-end", children: "None yet. Each request to Claude shows up here." })];
     return { name: "Trajectory", node: card(els, { key: "trajectory", title: "TRAJECTORY", color: theme.usage, metaNode, rows }), height: 4 };
   }
@@ -491,7 +494,7 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
         { node: Button({ key: "traj-newer", plain: true, dimColor: !t.below, label: `▾ ${t.below} newer`, onPress: () => handlers.onTraj?.("scroll", 3) }) },
       ]);
     } else { t.top = null; t.above = 0; t.below = 0; }
-  }
+  } else { t.top = null; t.above = 0; t.below = 0; }   // every row drawn: no window to move
   const rows = [...head, ...(pager ? [pager] : []), ...shown.map((x) => x.node), Box({ key: "gap", height: 1 }), ...foot];
   const height = headRows + (pager ? 1 : 0) + shown.reduce((n, x) => n + x.h, 0) + footRows;
   return { name: "Trajectory", node: card(els, { key: "trajectory", title: "TRAJECTORY", color: theme.usage, metaNode, rows }), height: 3 + height };

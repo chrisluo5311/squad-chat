@@ -998,6 +998,8 @@ test('Usage room: the Trajectory card lists each prompt, request and tool call, 
   on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
+  const wheels: any[] = []   // the scrolls that reach the engine
+  on('ui.scroll', (_$: any, e: any) => { wheels.push(e); return {} })
   const copied: string[] = []
   on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
   const asked: any[] = []
@@ -1133,6 +1135,10 @@ test('Usage room: the Trajectory card lists each prompt, request and tool call, 
   // The desktop draws the lanes, and every row whole.
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
   expect(await desk.find({ type: 'Svg', alt: 'Model lane' })).toBeDefined()
+  // It has no window of its own: the wheel is the engine's, whatever the terminal's window had below it.
+  const before = wheels.length
+  await $.ui.scroll({ component: 'Pane', requestId: 'squad-chat', offset: 3, by: 3, bodyRows: 22, contentRows: 80, origin: { kind: 'person' } } as any)
+  expect(wheels.length).toBe(before + 1)
   expect(await desk.find({ type: 'Text', text: /━/ })).toBeUndefined()               // drawn, not set in a font
   expect(await desk.find({ type: 'Text', text: '#1 Let me read it.' })).toBeDefined()
   await desk.press({ key: 'traj-r1' })

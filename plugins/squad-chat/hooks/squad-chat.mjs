@@ -1298,6 +1298,11 @@ export function register(on, options) {
       syncRooms($);
       if (breakdownWanted() === "full") void refreshUsage($);   // FIXED left open while the pane was shut: its lists catch up
     }
+    // The Trajectory card's window over its rows is this draw's to say: one
+    // that doesn't draw it windowed (the desktop, VS Code, the pane inline,
+    // another room) leaves none, and the wheel goes to the engine.
+    state.traj.above = 0;
+    state.traj.below = 0;
     // The pane draws lines and charts as Svg where a surface paints them; the
     // terminal keeps its glyphs, so it is drawn as though it had no Svg.
     const els = $.ui.resolve(e);

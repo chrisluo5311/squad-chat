@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer, tickFocus, dayOf } from '../hooks/focus.mjs'
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
-import { shortTool, trajectoryText } from '../hooks/trajview.mjs'
+import { shortTool, trajectoryText, scrollTraj } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
 import { state } from '../hooks/state.mjs'
 import { frameKey, breakdownWanted } from '../hooks/squad-chat.mjs'
@@ -464,6 +464,19 @@ test('Trajectory: FIXED left open asks for the full breakdown again only while t
   } finally {
     Object.assign(state, { usage: saved.usage, view: saved.view, sysRooms: saved.sysRooms, paneShown: saved.paneShown })
     state.traj.sel = saved.sel
+  }
+})
+
+test('Trajectory: a scroll of no rows leaves the window following the newest', () => {
+  const saved = { ...state.traj }
+  Object.assign(state.traj, { top: null, above: 3, below: 0 })
+  try {
+    expect(scrollTraj(0)).toBe(false)
+    expect(state.traj.top).toBeNull()
+    expect(scrollTraj(-1)).toBe(true)                                   // a row up: the window is held there
+    expect(state.traj.top).toBe(2)
+  } finally {
+    Object.assign(state.traj, saved)
   }
 })
 
