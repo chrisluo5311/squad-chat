@@ -1,14 +1,15 @@
 import { test, expect } from 'claude-code/testing'
 import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer, tickFocus, dayOf } from '../hooks/focus.mjs'
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
+import { BACKDROPS, createBackdrop, restoreBackdrop, backdropWords, NO_THEME } from '../hooks/backdrop.mjs'
 import { fitSections } from '../hooks/bands.mjs'
-import { shortTool } from '../hooks/trajview.mjs'
+import { shortTool, took, trajectoryText, scrollTraj, wrappedRows } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
 import { state } from '../hooks/state.mjs'
-import { frameKey } from '../hooks/squad-chat.mjs'
+import { frameKey, breakdownWanted } from '../hooks/squad-chat.mjs'
 import { createToolbox, rerun, pickTool, toolWords, MAX_INPUT } from '../hooks/toolbox.mjs'
 import { createHabits, addHabit, deleteHabit, habitStreaks } from '../hooks/habits.mjs'
-import { noteProvider, serverLabel, toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, agentSpawned, applyOverhead, trajectory, trajectoryTotals, trajectoryLive, preview } from '../hooks/metrics.mjs'
+import { startOver, noteProvider, serverLabel, toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, agentSpawned, applyOverhead, trajectory, trajectoryTotals, trajectoryLive, preview } from '../hooks/metrics.mjs'
 
 const MIN = 60_000
 
@@ -121,6 +122,20 @@ test('Redraws while Claude works: a second at a time only for rooms that move by
   for (const view of ['habits', 'toolbox', 'clipboard', 'pet', 'usage']) expect(frameKey(view, at)).toBe(frameKey(view, at + 1_000))
   for (const view of ['focus', 'agents', 'git']) expect(frameKey(view, at)).not.toBe(frameKey(view, at + 1_000))
   expect(frameKey('habits', at)).not.toBe(frameKey('habits', at + MIN))   // a new day still shows
+  // Usage while a call runs: its timer on the Trajectory card and the band counts by the second.
+  const saved = state.usage
+  const u = createUsage()
+  state.usage = u
+  try {
+    stepPrompt(u, 'go', 0)
+    stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), { usage: { input_tokens: 1_000, output_tokens: 10 }, answer: '', stopReason: 'tool_use' }, 10)
+    traceCall(u, 'k1', { tool: 'Bash', input: { command: 'sleep 90' }, at: 20 })
+    expect(frameKey('usage', at)).not.toBe(frameKey('usage', at + 1_000))
+    traceEnded(u, 'k1', { at: 30, isError: false })
+    expect(frameKey('usage', at)).toBe(frameKey('usage', at + 1_000))   // idle again: back to the minute
+  } finally {
+    state.usage = saved
+  }
 })
 
 test('Habits: the streak running and the longest, a year back at most', () => {
@@ -203,6 +218,12 @@ test("Trajectory: a subagent's calls hang under the Agent call that started it, 
   const agent = u.steps[0].calls[0]
   expect(agent.agent).toEqual({ id: 'a1', type: 'Explore' })
   expect(agent.sub.map((c: any) => c.summary)).toEqual(['"strata"'])
+  expect([agent.sub[0].input, agent.sub[0].lines, agent.sub[0].chars]).toEqual([[], [], 20])   // its row shows neither: not kept
+  expect(agent.input).toEqual([['description', 'map the repo'], ['subagent_type', 'Explore']])
+  // Once the Agent call's request has left the rows, the agent lets go of the call.
+  for (let i = 1; i <= 30; i++) stepStarted(u, { turnId: 't', index: i, at: 100 + i })
+  expect(u.agents.get('a1').call).toBeNull()
+  expect(traceCall(u, 'k4', { tool: 'Read', agentId: 'a1', input: {}, at: 200 })).toBeNull()
   expect(u.stepIn).toEqual([])                                        // a subagent's results go to it, not to Claude
 })
 
@@ -218,7 +239,67 @@ test("Trajectory: a long Agent call outlives hundreds of its subagent's calls an
   }
   expect(u.traced.size).toBeLessThanOrEqual(200)
   expect(traceEnded(u, 'A', { at: 900, isError: false })).toBe(true)
+  // A call that has ended and whose answer is in is let go at once.
+  traceCall(u, 'k', { tool: 'Read', input: {}, at: 901 })
+  traceEnded(u, 'k', { at: 902, isError: false })
+  expect(u.traced.has('k')).toBe(true)
+  stepToolResult(u, 'k', 'text')
+  expect(u.traced.has('k')).toBe(false)
+  expect(u.steps[0].calls.at(-1).chars).toBe(4)
   expect(trajectoryLive(u)).toBeNull()
+})
+
+test('Trajectory: the totals count the whole session, past the rows still kept', () => {
+  const u = createUsage()
+  for (let t = 0; t < 12; t++) {
+    stepPrompt(u, `prompt ${t}`, t * 1_000)
+    for (let i = 0; i < 5; i++) {
+      const s = stepStarted(u, { turnId: `t${t}`, index: i, at: t * 1_000 + i * 10 })
+      stepEnded(u, s, stepResult(100_000 + (t * 5 + i) * 10, 5), t * 1_000 + i * 10 + 5)
+      for (let c = 0; c < 3; c++) traceCall(u, `k${t}-${i}-${c}`, { tool: 'Read', input: {}, at: t * 1_000 + i * 10 + 6 })
+    }
+  }
+  expect(u.steps).toHaveLength(30)                                    // the rows: the newest 30 requests
+  const tt = trajectoryTotals(u)
+  expect([tt.turns, tt.requests, tt.calls]).toEqual([12, 60, 180])
+  // An agent's calls likewise: every one counted, the newest kept.
+  traceCall(u, 'A', { tool: 'Agent', input: { description: 'map the repo' }, at: 20_000 })
+  agentSpawned(u, { id: 'a1', type: 'Explore', description: 'map the repo', parentId: null, at: 20_001 })
+  for (let i = 0; i < 300; i++) traceCall(u, `s${i}`, { tool: 'Grep', agentId: 'a1', input: {}, at: 20_002 + i })
+  const agent = u.steps.at(-1).calls.at(-1)
+  expect([agent.sub.length, agent.subN]).toEqual([40, 300])
+  expect(trajectoryTotals(u).calls).toBe(481)
+})
+
+test('Trajectory: the text Share sends always fits a snippet, the oldest requests giving way', () => {
+  const saved = state.usage
+  const u = createUsage()
+  state.usage = u
+  try {
+    stepPrompt(u, 'go', 0)
+    for (let i = 0; i < 30; i++) {
+      stepEnded(u, stepStarted(u, { turnId: 't', index: i, at: i * 100 }), stepResult(100_000 + i * 10, 5), i * 100 + 50)
+      for (let c = 0; c < 3; c++) {
+        traceCall(u, `k${i}-${c}`, { tool: 'Bash', input: { command: `npm run build --workspace packages/some-long-package-name-${i}-${c} -- --verbose` }, at: i * 100 + 60 })
+        traceEnded(u, `k${i}-${c}`, { at: i * 100 + 70, isError: false })
+      }
+    }
+    traceCall(u, 'A', { tool: 'Agent', input: { description: 'map the repo' }, at: 3_000 })
+    agentSpawned(u, { id: 'a1', type: 'Explore', description: 'map the repo', parentId: null, at: 3_001 })
+    for (let i = 0; i < 300; i++) traceCall(u, `s${i}`, { tool: i % 3 ? 'Grep' : 'Read', agentId: 'a1', input: {}, at: 3_002 + i })
+    const whole = trajectoryText(4_000)
+    expect(whole.length).toBeGreaterThan(8_000)                       // Copy takes all of it
+    expect(whole).toContain('\n  #1  ')
+    expect(whole).toContain('      300 calls of its own: Grep ×200, Read ×100')   // an agent's calls on one line
+    const shared = trajectoryText(4_000, { maxChars: 8_000, maxLines: 200 })
+    expect(shared.length).toBeLessThanOrEqual(8_000)
+    expect(shared.split('\n').length).toBeLessThanOrEqual(200)
+    expect(shared).toMatch(/^Trajectory · 30 requests to Claude · 391 tool calls\n\d+ earlier requests? not listed\n/)
+    expect(shared).not.toContain('\n  #1  ')
+    expect(shared).toContain('\n  #30  ')                              // the newest stay
+  } finally {
+    state.usage = saved
+  }
 })
 
 test("Trajectory: a turn with no words is still a turn, and a result the card lost still goes with the next request", () => {
@@ -248,6 +329,54 @@ test('Trajectory: a teammate is not taken for the Agent call that is running', (
   expect(u.steps[0].calls.map((c: any) => c.agent)).toEqual([null, null])
   agentSpawned(u, { id: 'a2', type: 'Explore', description: 'read the docs', parentId: null, at: 23 })
   expect(u.steps[0].calls[1].agent).toEqual({ id: 'a2', type: 'Explore' })
+})
+
+test('Usage: a /clear starts the conversation\'s numbers over and keeps what is the account\'s', () => {
+  const u = createUsage()
+  u.rateLimits = [{ kind: 'five_hour', percentUsed: 40 }] as any
+  u.hasLimits = true
+  u.model = 'claude-opus-5-5' as any
+  noteProvider(u, 'mcp__x__run', { plugin: 'mcp:Lab', tier: 'user' })
+  stepPrompt(u, 'the cleared conversation', 0)
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), stepResult(100_000, 100, 'old reply'), 10)
+  traceCall(u, 'k1', { tool: 'Bash', input: { command: 'ls' }, at: 20 })
+  applyOverhead(u, { categories: [{ name: 'System tools', tokens: 7_300, kind: 'used' }] })
+  const n = startOver(u)
+  expect([n.turns, n.steps, n.feed, n.stepN, n.callN, n.tokens.input]).toEqual([[], [], [], 0, 0, 0])
+  expect(trajectory(n)).toEqual([])
+  expect([n.hasLimits, n.model, n.rateLimits.length, n.mcpNames.get('mcp__x__run'), n.overhead?.tokens]).toEqual([true, 'claude-opus-5-5', 1, 'Lab', 7_300])
+  // The first request after it is the first, not a compaction of the one before.
+  stepPrompt(n, 'hello', 100)
+  const first = stepStarted(n, { turnId: 't2', index: 0, at: 110 })
+  stepEnded(n, first, stepResult(20_000, 10), 120)
+  expect([first.n, first.isCompacted, first.grown]).toEqual([1, false, null])
+})
+
+test('Trajectory: an agent is paired with the call that started it by the call\'s id, never by a guess', () => {
+  const u = createUsage()
+  stepPrompt(u, 'go', 0)
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), stepResult(1_000, 10), 10)
+  // Two Agent calls in one message, the same description.
+  traceCall(u, 'A1', { tool: 'Agent', input: { tool_use_id: 'tu_1', description: 'review the diff', subagent_type: 'Explore' }, at: 20 })
+  traceCall(u, 'A2', { tool: 'Agent', input: { tool_use_id: 'tu_2', description: 'review the diff', subagent_type: 'Plan' }, at: 21 })
+  traceCall(u, 'W', { tool: 'Workflow', input: { tool_use_id: 'tu_3' }, at: 22 })
+  agentSpawned(u, { id: 'a1', type: 'Explore', description: 'review the diff', parentId: null, toolUseId: 'tu_1', at: 23 })
+  agentSpawned(u, { id: 'a2', type: 'Plan', description: 'review the diff', parentId: null, toolUseId: 'tu_2', at: 24 })
+  const [first, second, flow] = u.steps[0].calls
+  expect([first.agent, second.agent]).toEqual([{ id: 'a1', type: 'Explore' }, { id: 'a2', type: 'Plan' }])
+  expect(first.input.map(([k]: any) => k)).toEqual(['description', 'subagent_type'])   // the id isn't its input
+  // A workflow's agents all carry its Workflow call's id: their calls hang under it.
+  agentSpawned(u, { id: 'w1', type: 'general-purpose', description: 'review', parentId: null, toolUseId: 'tu_3', at: 25 })
+  agentSpawned(u, { id: 'w2', type: 'general-purpose', description: 'verify', parentId: null, toolUseId: 'tu_3', at: 26 })
+  traceCall(u, 'k1', { tool: 'Read', agentId: 'w1', input: {}, at: 27 })
+  traceCall(u, 'k2', { tool: 'Grep', agentId: 'w2', input: {}, at: 28 })
+  traceCall(u, 'k3', { tool: 'Read', agentId: 'a2', input: {}, at: 29 })
+  expect(flow.sub.map((c: any) => c.tool)).toEqual(['Read', 'Grep'])
+  expect([first.subN, second.subN]).toEqual([0, 1])
+  // An id that names no call here links nothing, even with one Agent call open.
+  traceCall(u, 'A3', { tool: 'Agent', input: { tool_use_id: 'tu_4', description: 'map the repo' }, at: 30 })
+  agentSpawned(u, { id: 'x', type: 'general-purpose', description: 'map the repo', parentId: null, toolUseId: 'tu_gone', at: 31 })
+  expect(u.steps[0].calls[3].agent).toBeNull()
 })
 
 test('Trajectory: a request that fails hands what it carried to the retry, measured from the last that came back', () => {
@@ -319,14 +448,68 @@ test("Trajectory: a full breakdown names what is in each of FIXED's categories, 
   ] })
   const docs = u.overhead.parts.find((p: any) => p.key === 'mcp').groups[0]
   expect(serverLabel(u, docs)).toBe('Connector · update, guide')
-  expect(noteProvider(u, 'mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__guide', { name: 'claude.ai Claude Docs' })).toBe(true)
-  expect(noteProvider(u, 'Read', { name: 'engine' })).toBe(false)                  // only MCP tools
+  // The provider as tool.describe gives it: { plugin: "mcp:<server>", tier }.
+  expect(noteProvider(u, 'mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__update', { plugin: 'mcp:1a59c906-04da-521d-bda7-7f71b9f9e01c', tier: 'user' })).toBe(false)   // an id names nothing
+  expect(serverLabel(u, docs)).toBe('Connector · update, guide')
+  expect(noteProvider(u, 'mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__guide', { plugin: 'mcp:claude.ai Claude Docs', tier: 'user' })).toBe(true)
+  expect(noteProvider(u, 'Read', { plugin: 'engine', tier: 'core' })).toBe(false)   // only MCP tools
   expect(serverLabel(u, docs)).toBe('claude.ai Claude Docs')
+})
+
+test('Trajectory: FIXED left open asks for the full breakdown again only while the Usage room is on show', () => {
+  const saved = { usage: state.usage, view: state.view, sysRooms: state.sysRooms, paneShown: state.paneShown, sel: state.traj.sel }
+  const u = createUsage()
+  Object.assign(state, { usage: u, view: 'usage', sysRooms: ['usage'], paneShown: true })
+  state.traj.sel = 'fixed'
+  try {
+    stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), stepResult(1_000, 10), 10)
+    expect(breakdownWanted()).toBe('full')                              // the row is open and its lists unread
+    applyOverhead(u, { categories: [{ name: 'System tools', tokens: 7_300, kind: 'used' }], systemTools: [{ name: 'Read', tokens: 7_300 }] })
+    expect(breakdownWanted()).toBeNull()                                // read: fresh for a few requests
+    for (let i = 1; i <= 8; i++) stepEnded(u, stepStarted(u, { turnId: 't', index: i, at: i * 10 }), stepResult(1_000, 10), i * 10 + 5)
+    expect(breakdownWanted()).toBe('full')                              // on show: the lists are read again
+    state.paneShown = false
+    expect(breakdownWanted()).toBe('summary')                           // the pane shut: the totals alone, which cost nothing
+    Object.assign(state, { paneShown: true, view: 'chat' })
+    expect(breakdownWanted()).toBe('summary')                           // another room on show
+    Object.assign(state, { view: 'usage' })
+    state.traj.sel = null
+    expect(breakdownWanted()).toBe('summary')                           // the row closed
+  } finally {
+    Object.assign(state, { usage: saved.usage, view: saved.view, sysRooms: saved.sysRooms, paneShown: saved.paneShown })
+    state.traj.sel = saved.sel
+  }
+})
+
+test('Trajectory: a scroll of no rows leaves the window following the newest', () => {
+  const saved = { ...state.traj }
+  Object.assign(state.traj, { top: null, above: 3, below: 0 })
+  try {
+    expect(scrollTraj(0)).toBe(false)
+    expect(state.traj.top).toBeNull()
+    expect(scrollTraj(-1)).toBe(true)                                   // a row up: the window is held there
+    expect(state.traj.top).toBe(2)
+  } finally {
+    Object.assign(state.traj, saved)
+  }
+})
+
+test("Trajectory: a narrow pane's toolbar is counted at the rows it wraps to", () => {
+  const labels = [10, 7, 7, 10]                                         // ◷ Duration, ⊟ Turns, ⊟ Calls, ⊟ Subcalls
+  expect(wrappedRows(labels, 40, 2)).toBe(1)                            // 34 cells and three gaps of 2: 40
+  expect(wrappedRows(labels, 39, 2)).toBe(2)
+  expect(wrappedRows(labels, 18, 2)).toBe(3)
+  expect(wrappedRows(labels, 5, 2)).toBe(4)                             // never more rows than buttons
 })
 
 test('band: an MCP tool is named by its own name', () => {
   expect(shortTool('mcp__ccd_turn__update_plan')).toBe('update_plan')
   expect(shortTool('Read')).toBe('Read')
+  expect([shortTool('mcp__srv__ns__run'), shortTool('mcp__srv__other__run')]).toEqual(['ns__run', 'other__run'])   // two tools of a server never read the same
+})
+
+test('Trajectory: a time past the hour reads in hours', () => {
+  expect([took(null), took(120), took(1_800), took(41_000), took(72_000), took(75 * MIN)]).toEqual(['', '120ms', '1.8s', '41s', '1:12', '1:15:00'])
 })
 
 test('band: the trajectory after the 5-hour window, always, in the largest form that fits; no 7-day window', () => {
@@ -356,3 +539,42 @@ test('band: the trajectory after the 5-hour window, always, in the largest form 
   }
 })
 
+
+test('Backdrop: every scene is a whole SVG that fits the Svg element, with a scene name the engine takes', () => {
+  for (const it of BACKDROPS) {
+    expect(it.id).toMatch(/^[A-Za-z0-9_-]{1,64}$/)
+    expect(it.art.startsWith('<svg ')).toBe(true)
+    expect(it.art.endsWith('</svg>')).toBe(true)
+    expect(it.art.length).toBeLessThan(131_072)
+    expect(it.art).not.toMatch(/<script|href="http/i)
+  }
+})
+
+test('Backdrop: a saved pick that no longer exists is dropped; typed words find a backdrop', () => {
+  const b = createBackdrop()
+  restoreBackdrop(b, { pick: 'gone', frost: 'nope' })
+  expect(b).toMatchObject({ pick: null, frost: 'medium' })
+  restoreBackdrop(b, { pick: 'tide', frost: 'strong' })
+  expect(b).toMatchObject({ pick: 'tide', frost: 'strong' })
+  expect(backdropWords('Night  Sky')).toEqual({ pick: 'night-sky' })
+  expect(backdropWords('dusk-hills')).toEqual({ pick: 'dusk-hills' })
+  expect(backdropWords('LIGHT')).toEqual({ frost: 'light' })
+  expect(backdropWords('none')).toEqual({ pick: null })
+  expect(backdropWords('sunset')).toBeNull()
+})
+
+test('Backdrop: no scene blurs frame by frame or has a <style>', () => {
+  for (const it of BACKDROPS) {
+    expect(it.art).not.toContain('feGaussianBlur')
+    expect(it.art).not.toContain(' style="')
+    expect(it.art).not.toContain('<style')   // the desktop drew a scene with a media rule in its <style> standing still
+    expect(it.thumb.startsWith('<svg width="1600" height="1000" ')).toBe(true)
+  }
+})
+
+test('Backdrop: only a Claude Code with no $.theme counts as too old, not a theme that was refused', () => {
+  expect(NO_THEME.test("Cannot read properties of undefined (reading 'set')")).toBe(true)
+  expect(NO_THEME.test("undefined is not an object (evaluating '$.theme.set')")).toBe(true)
+  expect(NO_THEME.test("theme.set: the attribute 'sparkle' is not known")).toBe(false)
+  expect(NO_THEME.test('HooksError: environment 3: $ was revoked')).toBe(false)
+})

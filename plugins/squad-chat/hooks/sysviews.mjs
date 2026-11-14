@@ -9,7 +9,7 @@ import { state } from "./state.mjs";
 import { theme, level, nameColor } from "./theme.mjs";
 import {
   cells, clip, fit, fmtTokens, fmtUsd, fmtDur, fmtSpan, relTime, age, resetLabel,
-  bar, stretchBar, sparkline, meter, tiles, line, col, stackCards, card, CARD_GAP, LABEL_W,
+  bar, stretchBar, sparkline, meter, tiles, line, stackCards, card, CARD_GAP, LABEL_W,
   bigNumber, lineChart, xml, inlineCut,
 } from "./widgets.mjs";
 import {
@@ -27,6 +27,7 @@ import { HABITS_META, habitsDock, habitsInline, habitsBandPieces, habitsBandDesk
 import { TOOLBOX_META, toolboxDock, toolboxInline, toolboxBandPieces, toolboxBandDesk, toolboxBadge } from "./toolbox.mjs";
 import { CLIP_META, clipboardDock, clipboardInline, clipboardBandPieces, clipboardBandDesk } from "./clipboard.mjs";
 import { PET_META, petDock, petInline, petBandPieces, petBandDesk } from "./pet.mjs";
+import { BACKDROP_META, backdropDock, backdropInline, backdropBandPieces, backdropBandDesk } from "./backdrop.mjs";
 
 export const SYS = {
   usage: { icon: "◔", label: "Usage", color: theme.usage },
@@ -37,18 +38,20 @@ export const SYS = {
   toolbox: TOOLBOX_META,
   clipboard: CLIP_META,
   pet: PET_META,
+  backdrop: BACKDROP_META,
 };
 
 // The built-in rooms that live in modules of their own: each draws its
 // docked cards, its inline lines, its band (a line of text, and the
 // desktop's capsule as { color, sections }), and may badge its tab or share
-// a snapshot (Toolbox, Clipboard and Pet have nothing to share).
+// a snapshot (Toolbox, Clipboard, Pet and Backdrop have nothing to share).
 const OWN = {
   focus: { dock: focusDock, inline: focusInline, band: focusBandPieces, desk: focusBandDesk, badge: focusBadge, snapshot: focusSnapshot },
   habits: { dock: habitsDock, inline: habitsInline, band: habitsBandPieces, desk: habitsBandDesk, badge: habitsBadge, snapshot: habitsSnapshot },
   toolbox: { dock: toolboxDock, inline: toolboxInline, band: toolboxBandPieces, desk: toolboxBandDesk, badge: toolboxBadge },
   clipboard: { dock: clipboardDock, inline: clipboardInline, band: clipboardBandPieces, desk: clipboardBandDesk },
   pet: { dock: petDock, inline: petInline, band: petBandPieces, desk: petBandDesk },
+  backdrop: { dock: backdropDock, inline: backdropInline, band: backdropBandPieces, desk: backdropBandDesk },
 };
 
 // Whether a room's Share posts a snapshot of it.

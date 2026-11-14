@@ -91,6 +91,9 @@ let armed = null;   // the row whose act was pressed once: { key, at }
 function codeRow(els, k, b, item, title, handlers, room) {
   const { Box, Text, Button, Code } = els;
   const tag = b.tag ? lookup(item, b.tag) : null;
+  // A code block carries its own copy. A note without a language is drawn
+  // as text, which has none: it gets a button beside Share.
+  const copyText = !tag && b.copy ? lookup(item, b.copy) : null;
   const shareText = b.share ? lookup(item, b.share) : null;
   const actOn = b.act ? lookup(item, b.act.field) : null;
   const isArmed = armed?.key === k && Date.now() - armed.at < 5000;
@@ -106,6 +109,7 @@ function codeRow(els, k, b, item, title, handlers, room) {
       Text({ key: "t", bold: true, wrap: "truncate-end", children: title }),
       tag ? Text({ key: "tag", color: theme.muted, children: `· ${tag}` }) : null,
       Box({ key: "push", flexGrow: 1, minWidth: 1 }),
+      copyText ? Button({ key: `copy-${k}`, label: "⧉ Copy", onPress: (press) => handlers.onCopy?.(String(copyText), press?.surface) }) : null,
       shareText != null ? Button({ key: `share-${k}`, label: "⇪ Share", onPress: () => handlers.onShareItem?.({ title, lang: tag ?? null, body: String(shareText) }) }) : null,
       actOn != null ? Button({ key: `act-${k}`, label: isArmed ? "Sure?" : b.act.label, onPress: act }) : null,
     ].filter(Boolean) }),

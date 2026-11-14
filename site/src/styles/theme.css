@@ -365,6 +365,12 @@ starlight-toc a[aria-current="true"]:focus {
   background: #181818;
 }
 
+/* The Backdrop room's clip: a whole desktop window, not the terminal demo's shape. */
+.sl-markdown-content video.demo-video.backdrop-video {
+  aspect-ratio: 1920 / 1112;
+  margin-bottom: 1rem;
+}
+
 /* Geist has no CJK glyphs: name the Traditional Chinese faces before the system's default. */
 :root:lang(zh-TW) {
   --sl-font: "Geist", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;

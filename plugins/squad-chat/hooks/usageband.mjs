@@ -14,14 +14,14 @@ import { state } from "./state.mjs";
 import { theme, level, palette } from "./theme.mjs";
 import { limitWindows, cacheRatio, burnRate, totalTokens, trajectoryLive, trajectoryTotals } from "./metrics.mjs";
 import { took, shortTool } from "./trajview.mjs";
-import { fmtTokens, fmtUsd, resetLabel } from "./widgets.mjs";
+import { clip, fmtTokens, fmtUsd, resetLabel } from "./widgets.mjs";
 import { forecast, shortModel } from "./sysviews.mjs";
 import * as K from "./bandkit.mjs";
 import { capsule, draw, label, value, sub, sep } from "./bands.mjs";
 
-const WINDOW_MS = { five_hour: 5 * 3_600_000, seven_day: 7 * 86_400_000 };
-const SHORT = { five_hour: "5h", seven_day: "7d" };
-const COLOR = { five_hour: theme.git, seven_day: theme.agents };   // leaf, lilac
+const WINDOW_MS = { five_hour: 5 * 3_600_000 };
+const SHORT = { five_hour: "5h" };
+const COLOR = { five_hour: theme.git };   // leaf
 const clamp = (pct) => Math.min(100, Math.max(0, Number(pct) || 0));
 
 // How much of a window's time is gone, 0-100, or null when unknown.
@@ -74,7 +74,7 @@ export function usageSections(now, columns = 100) {
     const used = l.percentUsed;
     const elapsed = elapsedOf(l, now);
     const pace = paceWord(used, elapsed);
-    const head = `${l.kind === "five_hour" ? "5-hour" : "7-day"} window · ${used == null ? "no reading yet" : `${Math.round(used)}% used`}`;
+    const head = `5-hour window · ${used == null ? "no reading yet" : `${Math.round(used)}% used`}`;
     out.push({
       key: l.kind,
       color: COLOR[l.kind],
@@ -103,7 +103,6 @@ export function usageSections(now, columns = 100) {
       live: s.status === "streaming",
       calls: s.calls.map((c) => ({ color: c.isError ? theme.error : c.tool === "Agent" || c.tool === "Task" ? palette.teal : theme.accent, live: !c.done })),
     }));
-    const cut = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
     const chart = wide ? draw(K.lanes(marks, theme.agents), "The last requests and their calls") : null;
     let parts, smaller, head;
     if (live) {
@@ -112,8 +111,8 @@ export function usageSections(now, columns = 100) {
       const n = value(`#${live.step.n}`, theme.agents);
       const time = sub(took(now - live.since));
       head = `Request #${live.step.n} · ${doing}`;
-      parts = [chart, n, sub(cut(doing, wide ? 18 : 12)), time];
-      smaller = [[n, sub(cut(doing, 12)), time], [n, sub(cut(doing, 8))], [value(cut(tool ?? live.doing, 6), theme.agents)]];
+      parts = [chart, n, sub(clip(doing, wide ? 18 : 12)), time];
+      smaller = [[n, sub(clip(doing, 12)), time], [n, sub(clip(doing, 8))], [value(clip(tool ?? live.doing, 6), theme.agents)]];
     } else {
       const reqs = `request${tt.requests === 1 ? "" : "s"}`;
       head = `${tt.requests} ${reqs}${tt.tps ? ` · ${tt.tps} tok/s` : ""}`;

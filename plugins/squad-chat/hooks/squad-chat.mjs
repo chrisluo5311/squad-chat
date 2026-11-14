@@ -10,12 +10,12 @@
 //   fnviews.mjs   function rooms, drawn from the manifests the bridge loads
 //   metrics.mjs   this session's numbers, github.mjs the Git room's data,
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
-//   focus.mjs, habits.mjs, toolbox.mjs, clipboard.mjs, pet.mjs   the Focus, Habits, Toolbox, Clipboard and Pet rooms
+//   focus.mjs, habits.mjs, toolbox.mjs, clipboard.mjs, pet.mjs, backdrop.mjs   the Focus, Habits, Toolbox, Clipboard, Pet and Backdrop rooms
 
 import { state, applyEvent, resetBridgeState, currentRoom, bandRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
-import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, applyOverhead, wantsOverhead, noteProvider } from "./metrics.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, applyOverhead, wantsOverhead, noteProvider, trajectoryLive, startOver } from "./metrics.mjs";
 import { toggleTurn, scrollTraj } from "./trajview.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
@@ -24,6 +24,7 @@ import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggle
 import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS, CLIP_WATCH, CLIP_ONCE_WIN } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
+import { createBackdrop, backdropSaved, restoreBackdrop, themeArgs, backdropWords, backdropById, NO_THEME } from "./backdrop.mjs";
 import { emojiSelected, emojiUnselected } from "./widgets.mjs";
 
 state.focus = createFocus();
@@ -31,6 +32,7 @@ state.habits = createHabits();
 state.toolbox = createToolbox();
 state.clipboard = createClipboard();
 state.pet = createPet();
+state.backdrop = createBackdrop();
 
 const PANE_ID = "squad-chat";
 const UNDO_MS = 10_000;   // how long Cancel stays beside "Removed …"
@@ -213,10 +215,11 @@ function terminalEls(els) {
 // one line unless they ask to wrap (the tabs, chips).
 function ideEls(els) {
   const { Box } = els;
-  return { ...els, Box: (props = {}) => Box((props.flexDirection ?? "row") === "row" && props.flexWrap == null ? { ...props, flexWrap: "nowrap" } : props) };
+  return { ...els, ide: true, Box: (props = {}) => Box((props.flexDirection ?? "row") === "row" && props.flexWrap == null ? { ...props, flexWrap: "nowrap" } : props) };
 }
 
-// A surface's elements: the terminal's glyph fixes, or VS Code's rows.
+// A surface's elements: the terminal's glyph fixes, or VS Code's rows
+// (`ide` tells a room it's in VS Code, which draws pictures but no backdrop).
 const surfaceEls = (els, surface) => (surface === "terminal" ? terminalEls({ ...els, Svg: undefined }) : surface === "desktop" ? els : ideEls(els));
 
 // The band shows the room with the newest message: Open goes to that room.
@@ -597,7 +600,8 @@ async function saveSysRooms($, list) {
 }
 
 // The engine's figures, asked for directly: on opening the room, and for
-// the context breakdown (estimated locally, so it costs nothing).
+// the context breakdown. A summary is estimated locally and costs nothing.
+// A full one counts each category with the token-count API (see breakdownWanted).
 // This session's tokens and chart, kept per session across reloads, and
 // dropped once a session has been idle for a week.
 const USAGE_PREFIX = "usage:";
@@ -616,15 +620,47 @@ async function restoreSessionUsage($) {
   }
 }
 
+// Which breakdown to ask for, or null for none: the summary when it's open,
+// and now and then for the Trajectory card's FIXED row. That row open asks
+// for the full one, which names what is in each category, and again once it
+// is a few requests old, but only while the Usage room is on show in the
+// pane: a full one sends the API a request per tool and memory file, too
+// much for a list nobody is looking at. With the row closed, or the room
+// away, the summary's totals do and the lists already named stay.
+export function breakdownWanted() {
+  const u = state.usage;
+  const onShow = state.paneShown && activeView() === "usage";
+  if (onShow && state.traj.sel === "fixed" && (!u.overhead?.parts || wantsOverhead(u))) return "full";
+  return u.showBreakdown || wantsOverhead(u) ? "summary" : null;
+}
+
+// A /clear or a resume ended the conversation and the process goes on under
+// another session id, with no session.start: the Usage and Agents rooms'
+// numbers start over, and the Trajectory card with them (it would go on
+// showing the conversation that was cleared). The new id isn't known until
+// the end chain is through, so the next turn's start reads it (adoptSession).
+let sessionMoved = false;
+function conversationEnded($) {
+  state.usage = startOver(state.usage);
+  Object.assign(state.traj, { sel: null, tabs: {}, off: {}, top: null, above: 0, below: 0 });
+  state.traj.turnOpen.clear();
+  sessionMoved = true;
+  sysChanged($);
+}
+// The session this process now runs, and what was kept for it (a resumed one's tokens and chart).
+// A theme is the session's, so the backdrop goes with the old one: set it
+// again, at the first turn after a /clear or a resume.
+async function adoptSession($) {
+  try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
+  await restoreSessionUsage($);
+  if (state.backdrop.pick) await applyBackdrop($);
+  afterChange($);
+}
+
 async function refreshUsage($) {
   try {
-    // The breakdown when it's open, and now and then for the Trajectory card's
-    // FIXED row. Opening that row asks for the full one, which names what is
-    // in each category, once: after that the summary's totals do, and the
-    // lists it named stay until a full one is asked for again.
-    const full = state.traj.sel === "fixed" && (!state.usage.overhead?.parts || wantsOverhead(state.usage));
-    const breakdown = full || state.usage.showBreakdown || wantsOverhead(state.usage);
-    const u = await $.session.usage(breakdown ? { breakdown: full ? "full" : "summary" } : {});
+    const breakdown = breakdownWanted();
+    const u = await $.session.usage(breakdown ? { breakdown } : {});
     applyMeasure(state.usage, u, Date.now());
     if (u?.context?.breakdown) {
       state.usage.breakdown = u.context.breakdown;
@@ -728,6 +764,7 @@ async function restoreRooms($) {
     restoreFocus(state.focus, await $.store.get("focus"), timer, now);
     restoreHabits(state.habits, await $.store.get("habits"));
     restorePet(state.pet, await $.store.get("pet"));
+    restoreBackdrop(state.backdrop, await $.store.get("backdrop"));
     state.pet.lastBusyAt = Date.now();
     state.focusStatus = focusStatus(now);
   } catch (err) {
@@ -855,6 +892,13 @@ async function roomInput($, view, text, say = () => {}, { typed = false } = {}) 
   }
   if (view === "clipboard" && word === "clear") { clearClips($); return true; }
   if (view === "pet" && (word === "auto" || MOODS.includes(word))) { setPetMode($, word); return true; }
+  if (view === "backdrop") {
+    const asked = backdropWords(text);
+    if (!asked) return false;
+    if (asked.frost) setBackdropFrost($, asked.frost);
+    else pressBackdrop($, asked.pick);
+    return true;
+  }
   return false;
 }
 
@@ -866,6 +910,56 @@ function setPetMode($, mode) {
   state.pet.mode = mode;
   savePet($);
   $.ui.invalidate("ui.render");
+}
+
+// ---------------------------------------------------------------- Backdrop
+
+// The pick and the frost are every session's on this computer.
+function saveBackdrop($) {
+  $.store.set("backdrop", backdropSaved(state.backdrop))
+    .catch((err) => $.ui.log(`squad-chat: could not save the backdrop: ${err?.message ?? err}`, { to: "debug" }));
+}
+
+// Sets the look for the backdrop picked. `clear` takes it away when the
+// person turns it off: a clear takes whatever look stands, so only then.
+async function applyBackdrop($, { clear = false } = {}) {
+  const b = state.backdrop;
+  try {
+    const args = themeArgs(b);
+    const r = args ? await $.theme.set(args) : clear ? await $.theme.clear() : null;
+    if (args && r && !r.isDrawn) $.ui.log(`squad-chat: the backdrop isn't drawn here: ${r.reason}`, { to: "debug" });
+  } catch (err) {
+    if (NO_THEME.test(String(err?.message ?? err))) { b.supported = false; $.ui.invalidate("ui.render"); }
+    $.ui.log(`squad-chat: could not set the backdrop: ${err?.message ?? err}`, { to: "debug" });
+  }
+}
+
+// A change to the pick or the frost, on what is kept as it is now: another
+// session may have changed it since this one read it, and a save of this
+// one's copy would undo that. `fn` changes it and says whether to clear.
+async function changeBackdrop($, fn) {
+  const b = state.backdrop;
+  try { restoreBackdrop(b, await $.store.get("backdrop")); } catch (err) {
+    $.ui.log(`squad-chat: could not read the backdrop: ${err?.message ?? err}`, { to: "debug" });
+  }
+  const clear = fn(b);
+  saveBackdrop($);
+  $.ui.invalidate("ui.render");
+  await applyBackdrop($, { clear });
+}
+
+// A press on a backdrop, or on Off. The one on now is set again: another
+// plugin's look may have taken its place.
+function pressBackdrop($, id) {
+  void changeBackdrop($, (b) => {
+    const was = b.pick;
+    b.pick = id ?? null;
+    return !!was && !b.pick;
+  });
+}
+
+function setBackdropFrost($, frost) {
+  void changeBackdrop($, (b) => { b.frost = frost; return false; });
 }
 
 // The clipboard, read every couple of seconds while the room has a tab.
@@ -1047,15 +1141,16 @@ async function petLoop($) {
 }
 
 // What a built-in room's drawing changes with as time passes. Usage moves by
-// the second only while a subagent runs (its spinner and timer); otherwise
-// the session's span and the spend buckets move by the minute. A redraw a
-// second for nothing made the desktop's input box flicker all through a turn.
-// Habits, Toolbox, Clipboard and Pet have nothing that moves by the second
+// the second while a turn is under way (the Trajectory card's and the band's
+// timers on the request or call that is running) or a subagent runs (its
+// spinner and timer); idle, the session's span and the spend buckets move by
+// the minute. A redraw a second for nothing made the desktop's input box flicker.
+// Habits, Toolbox, Clipboard, Pet and Backdrop have nothing that moves by the second
 // (Clawd's frames have a loop of their own), so they keep to the minute too.
 let lastFrame = "";
-const BY_MINUTE = new Set(["habits", "toolbox", "clipboard", "pet"]);
+const BY_MINUTE = new Set(["habits", "toolbox", "clipboard", "pet", "backdrop"]);
 export function frameKey(view, now) {
-  if (BY_MINUTE.has(view) || (view === "usage" && !agentCounts(state.usage).running)) return `${view}:${Math.floor(now / 60_000)}`;
+  if (BY_MINUTE.has(view) || (view === "usage" && !agentCounts(state.usage).running && !trajectoryLive(state.usage))) return `${view}:${Math.floor(now / 60_000)}`;
   return `${view}:${Math.floor(now / 1000)}`;
 }
 
@@ -1128,7 +1223,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|snippet|monitor|weather|news|stock|lofi|docker|ping | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|backdrop|snippet|monitor|weather|news|stock|lofi|docker|ping | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -1173,6 +1268,9 @@ export function register(on, options) {
     try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
     await restoreSessionUsage($);
     await restoreRooms($);
+    // A theme is display only: nothing brings it back, so it's set again at
+    // each start (a reload too) while a backdrop is picked.
+    if (state.backdrop.pick) void applyBackdrop($);
     try { cwdCache = await $.session.cwd(); } catch { cwdCache = null; }
     try { state.usage.model = (await $.session.model()) || state.usage.model; } catch { /* the first turn tells */ }
     beat($, false);   // this session's own row in the Agents room, before any heartbeat goes out
@@ -1262,7 +1360,16 @@ export function register(on, options) {
     state.paneFocused = props.isFocused === true;
     paneSurface = e.surface;
     if (state.paneFocused) void markRead($);
-    if (!state.paneShown) { state.paneShown = true; syncRooms($); }
+    if (!state.paneShown) {
+      state.paneShown = true;
+      syncRooms($);
+      if (breakdownWanted() === "full") void refreshUsage($);   // FIXED left open while the pane was shut: its lists catch up
+    }
+    // The Trajectory card's window over its rows is this draw's to say: one
+    // that doesn't draw it windowed (the desktop, VS Code, the pane inline,
+    // another room) leaves none, and the wheel goes to the engine.
+    state.traj.above = 0;
+    state.traj.below = 0;
     // The pane draws lines and charts as Svg where a surface paints them; the
     // terminal keeps its glyphs, so it is drawn as though it had no Svg.
     const els = $.ui.resolve(e);
@@ -1350,6 +1457,9 @@ export function register(on, options) {
       onPetMode: (mode) => setPetMode($, mode),
       onToggleMore: (id) => { if (!state.moreOpen.delete(id)) state.moreOpen.add(id); $.ui.invalidate("ui.render"); },
       onPetWalk: (walk) => { state.pet.walk = walk; savePet($); $.ui.invalidate("ui.render"); },
+      onBackdropPick: (id) => pressBackdrop($, id),
+      onBackdropFrost: (frost) => setBackdropFrost($, frost),
+      onClose: () => { void $.ui.close({ id: PANE_ID }); },
     });
   });
 
@@ -1386,6 +1496,23 @@ export function register(on, options) {
     return {};
   });
 
+  // The backdrop behind the conversation, in the desktop and mobile apps:
+  // the scene picked in the Backdrop room. Another plugin's is left alone.
+  // A Claude Code too old for backdrops refuses the hook, and the rest goes on.
+  try {
+    on("ui.render", { component: "Backdrop" }, ($, e, next) => {
+      const it = backdropById(e.props?.scene);
+      const owner = String(e.props?.plugin ?? "").split("@")[0];
+      if (!it || (owner && owner !== "squad-chat")) return next(e);
+      const { Svg } = $.ui.resolve(e);
+      if (!Svg) return next(e);
+      return Svg({ key: "backdrop", source: it.art, alt: `${it.name} backdrop`, isInteractive: true });
+    });
+  } catch (err) {
+    void err;
+    state.backdrop.supported = false;   // no Backdrop here: the room says Claude Code needs updating
+  }
+
   // While the pane can't be seen (too narrow to place, or closed), a one-line
   // band above the prompt keeps the room in view. It yields to surveys.
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
@@ -1403,6 +1530,7 @@ export function register(on, options) {
   on("turn.start", ($, e, next) => {
     const id = e.turnId;
     turn = id;
+    if (sessionMoved) { sessionMoved = false; adoptSession($).catch(() => {}); }
     if (!e.agentId) {
       turnStarted(state.usage, Date.now());
       stepPrompt(state.usage, e.text, Date.now());
@@ -1482,7 +1610,7 @@ export function register(on, options) {
     try {
       const at = Date.now();
       key = toolStarted(state.usage, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform });
-      traceCall(state.usage, key, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform });
+      traceCall(state.usage, key, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform, summary: state.usage.calls.get(key)?.summary });
       sysChanged($);
     }
     catch { /* the call matters more than its timing */ }
@@ -1516,7 +1644,7 @@ export function register(on, options) {
   on("agent.spawn", async ($, e, next) => {
     const r = await next(e);
     if (r?.agentId) {
-      agentSpawned(state.usage, { id: r.agentId, type: e.subagentType || (e.isTeammate ? "teammate" : "agent"), description: e.description, parentId: e.parentAgentId, at: Date.now() });
+      agentSpawned(state.usage, { id: r.agentId, type: e.subagentType || (e.isTeammate ? "teammate" : "agent"), description: e.description, parentId: e.parentAgentId, toolUseId: e.tool_use_id, at: Date.now() });
       sysChanged($);
     }
     return r;
@@ -1549,6 +1677,8 @@ export function register(on, options) {
     if (e.reason !== "clear" && e.reason !== "resume") {
       state.ended = true;
       try { await callBridge($, "/shutdown", {}); } catch { /* exiting anyway */ }
+    } else {
+      try { conversationEnded($); } catch { /* the end matters more */ }
     }
     return next(e);
   });

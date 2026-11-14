@@ -9,9 +9,12 @@
 // of the pane, ▴ and ▾ (or the wheel) moving it back and forth.
 
 import { state } from "./state.mjs";
+import { MAX_SNIPPET, MAX_SNIPPET_LINES } from "./share.mjs";
 import { theme, palette } from "./theme.mjs";
-import { clip, fmtTokens, rowsFor, line, card } from "./widgets.mjs";
-import { trajectory, trajectoryTotals, serverLabel } from "./metrics.mjs";
+import { clip, cells, fmtTokens, fmtDur, rowsFor, line, card } from "./widgets.mjs";
+import { trajectory, trajectoryTotals, serverLabel, shortTool } from "./metrics.mjs";
+
+export { shortTool };
 
 const TAG = {
   fixed: { text: "FIXED", color: "#8F8D87" },
@@ -27,16 +30,11 @@ const LANE_COLORS = { prompt: theme.you, result: theme.amber, wait: "#5F4F72", m
 
 // "6.2k", "182": a row's tokens, a figure with no unit.
 export const kTok = (n) => (n == null ? "" : n < 1000 ? String(Math.round(n)) : n < 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : fmtTokens(n));
-// "120ms", "1.8s", "41s", "1:12"
+// "120ms", then as every duration here reads: "1.8s", "41s", "1:12", "1:15:00".
 export function took(ms) {
   if (ms == null) return "";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
-  const s = Math.round(ms / 1000);
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return ms < 1000 ? `${Math.round(ms)}ms` : fmtDur(ms);
 }
-// "mcp__ccd_turn__update_plan" → "update_plan"; a built-in tool as it is.
-export const shortTool = (name) => (String(name).startsWith("mcp__") ? String(name).slice(String(name).lastIndexOf("__") + 2) : String(name));
 // "2026-11-07 23:41:04.504", in local time.
 function stamp(ms) {
   const d = new Date(ms);
@@ -48,10 +46,12 @@ const stepMs = (s, now) => (s.endedAt ?? now) - s.at;
 const isAgent = (c) => c.tool === "Agent" || c.tool === "Task";
 
 // Moves the terminal's window `by` rows: up toward the earliest, down toward
-// the newest (where it follows them again). False when it can't go that way.
+// the newest (where it follows them again). False when it can't go that way,
+// or was asked to go nowhere: a move of no rows mustn't pin the window where
+// it is, or its rows would stop following the newest.
 export function scrollTraj(by) {
   const t = state.traj;
-  if ((by < 0 && !t.above) || (by > 0 && !t.below)) return false;
+  if (!by || (by < 0 && !t.above) || (by > 0 && !t.below)) return false;
   t.top = Math.max(0, (t.top ?? t.above) + by);
   return true;
 }
@@ -136,7 +136,7 @@ function rowLine(els, r, w, handlers, now) {
   } else {
     const c = r.call;
     live = !c.done;
-    text = `${isAgent(c) ? c.agent?.type ?? "Agent" : c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""}${c.sub.length ? ` · ${c.sub.length} calls` : ""}`;
+    text = `${isAgent(c) ? c.agent?.type ?? "Agent" : c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""}${c.subN ? ` · ${c.subN} call${c.subN === 1 ? "" : "s"}` : ""}`;
     if (c.isError) tag.color = theme.error;
     tokens = r.depth < 2 ? kTok(tokensOf(c)) : "";
     time = live ? took(now - c.at) : took(c.ms);
@@ -231,7 +231,7 @@ function details(els, r, w, handlers, now) {
     add(kv(els, "st", "Status", status, statusColor));
     const tok = tokensOf(c);
     add(kv(els, "res", "Result", tok == null ? "–" : `${kTok(tok)} tokens`));
-    if (isAgent(c)) add(kv(els, "ag", "Agent", `${c.agent?.type ?? "Agent"} · ${c.sub.length} call${c.sub.length === 1 ? "" : "s"}`));
+    if (isAgent(c)) add(kv(els, "ag", "Agent", `${c.agent?.type ?? "Agent"} · ${c.subN} call${c.subN === 1 ? "" : "s"}`));
   } else if (cur === "Input") {
     if (!c.input.length) add(els.Text({ key: "none", color: theme.muted, children: "No input." }));
     c.input.forEach(([k, v], i) => out.push(kvWrap(els, `i${i}`, k, v, w)));
@@ -241,6 +241,7 @@ function details(els, r, w, handlers, now) {
     else c.lines.forEach((l, i) => out.push(para(els, `l${i}`, l, w, theme.muted)));
   } else if (cur === "Calls") {
     if (!c.sub.length) add(els.Text({ key: "none", color: theme.muted, children: "No calls yet." }));
+    if (c.subN > c.sub.length) add(els.Text({ key: "newest", color: theme.muted, children: `The newest ${c.sub.length} of ${c.subN}.` }));
     c.sub.forEach((sc, i) => add(line(els, `s${i}`, [
       { text: sc.tool, width: 10, color: theme.amber },
       { text: sc.summary, grow: true },
@@ -401,30 +402,47 @@ function lanesTerm(els, items, w) {
 
 // ---------------------------------------------------------------- the card
 
+// The rows a wrapping row of buttons takes: each as wide as its label, `gap`
+// cells between two on a row. A narrow pane wraps the toolbar onto a second
+// row, which the terminal's window has to count or it cuts the card's last row.
+const TOOLBAR_GAP = 2;
+export function wrappedRows(widths, room, gap) {
+  let rows = 1, used = 0;
+  for (const wd of widths) {
+    if (used && used + gap + wd > room) { rows++; used = wd; }
+    else used += (used ? gap : 0) + wd;
+  }
+  return rows;
+}
+
 export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()) {
   const { Box, Button, Text } = els;
   const u = state.usage;
   const t = state.traj;
   const windowed = capacity < 1000;   // the terminal: a window the pane's height
-  const meta = `${u.steps.length} request${u.steps.length === 1 ? "" : "s"}`;
+  const meta = `${u.stepN} request${u.stepN === 1 ? "" : "s"}`;
   const metaNode = Box({ key: "meta", flexDirection: "row", alignItems: "center", columnGap: 2, flexShrink: 1, minWidth: 0, children: [
     Text({ key: "m", color: theme.muted, wrap: "truncate-start", children: meta }),
     Button({ key: "traj-copy", plain: true, label: "⧉ Copy", onPress: (press) => handlers.onCopy?.(trajectoryText(now), press?.surface) }),
-    Button({ key: "traj-share", plain: true, label: "⇪ Share", onPress: () => handlers.onShareItem?.({ title: "Trajectory", lang: null, body: trajectoryText(now) }) }),
+    Button({ key: "traj-share", plain: true, label: "⇪ Share", onPress: () => handlers.onShareItem?.({ title: "Trajectory", lang: null, body: trajectoryText(now, { maxChars: MAX_SNIPPET, maxLines: MAX_SNIPPET_LINES }) }) }),
   ] });
   if (!u.steps.length && !u.turns.length) {
+    Object.assign(t, { top: null, above: 0, below: 0 });
     const rows = [Text({ key: "none", color: theme.muted, wrap: "truncate-end", children: "None yet. Each request to Claude shows up here." })];
     return { name: "Trajectory", node: card(els, { key: "trajectory", title: "TRAJECTORY", color: theme.usage, metaNode, rows }), height: 4 };
   }
-  const fold = (k, label) => Button({ key: `traj-${k}`, plain: true, dimColor: !t[k], label, onPress: () => handlers.onTraj?.("fold", k) });
   const turnList = trajectory(u);
   const allFolded = turnList.length > 0 && !turnList.some((x) => turnIsOpen(x.n, turnList.at(-1).n));
-  const turnsFold = Button({ key: "traj-turns", plain: true, dimColor: !allFolded, label: `${allFolded ? "⊞" : "⊟"} Turns`, onPress: () => handlers.onTraj?.("turn", null) });
-  const head = [
-    Box({ key: "toolbar", flexDirection: "row", columnGap: 2, flexWrap: "wrap", children: [
-      fold("duration", "◷ Duration"), turnsFold, fold("calls", `${t.calls ? "⊞" : "⊟"} Calls`), fold("subcalls", `${t.subcalls ? "⊞" : "⊟"} Subcalls`),
-    ] }),
+  const tools = [
+    { k: "duration", label: "◷ Duration", on: t.duration, act: () => handlers.onTraj?.("fold", "duration") },
+    { k: "turns", label: `${allFolded ? "⊞" : "⊟"} Turns`, on: allFolded, act: () => handlers.onTraj?.("turn", null) },
+    { k: "calls", label: `${t.calls ? "⊞" : "⊟"} Calls`, on: t.calls, act: () => handlers.onTraj?.("fold", "calls") },
+    { k: "subcalls", label: `${t.subcalls ? "⊞" : "⊟"} Subcalls`, on: t.subcalls, act: () => handlers.onTraj?.("fold", "subcalls") },
   ];
+  const head = [
+    Box({ key: "toolbar", flexDirection: "row", columnGap: TOOLBAR_GAP, flexWrap: "wrap", children: tools.map((b) => Button({ key: `traj-${b.k}`, plain: true, dimColor: !b.on, label: b.label, onPress: b.act })) }),
+  ];
+  const toolbarRows = wrappedRows(tools.map((b) => cells(b.label)), w - 4, TOOLBAR_GAP);   // inside the card's border and padding
   const items = laneItems(u, now);
   const lanes = els.Svg ? lanesDesk(els, items) : lanesTerm(els, items, w);
   head.push(...lanes);
@@ -457,7 +475,7 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
       { text: Number.isFinite(pct) ? `, ${Math.round(pct)}% of the window.` : ".", color: theme.muted, grow: true },
     ]) : null,
   ].filter(Boolean);
-  const headRows = 1 + lanes.length;
+  const headRows = toolbarRows + lanes.length;
   const footRows = 1 + foot.length;   // a row above it
   let shown = blocks.flat();
   let pager = null;
@@ -489,7 +507,7 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
         { node: Button({ key: "traj-newer", plain: true, dimColor: !t.below, label: `▾ ${t.below} newer`, onPress: () => handlers.onTraj?.("scroll", 3) }) },
       ]);
     } else { t.top = null; t.above = 0; t.below = 0; }
-  }
+  } else { t.top = null; t.above = 0; t.below = 0; }   // every row drawn: no window to move
   const rows = [...head, ...(pager ? [pager] : []), ...shown.map((x) => x.node), Box({ key: "gap", height: 1 }), ...foot];
   const height = headRows + (pager ? 1 : 0) + shown.reduce((n, x) => n + x.h, 0) + footRows;
   return { name: "Trajectory", node: card(els, { key: "trajectory", title: "TRAJECTORY", color: theme.usage, metaNode, rows }), height: 3 + height };
@@ -498,25 +516,48 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
 // ---------------------------------------------------------------- as text
 
 // The card as plain text, for Copy and Share: each turn and request with its
-// figures, the calls by tool and what they were about. No prompt, reply,
-// input or result text: those stay in this pane.
-export function trajectoryText(now = Date.now()) {
+// figures, the calls by tool and what they were about (the brief description
+// its row shows). No prompt, reply, input or result text: those stay in this
+// pane. An agent's own calls are one line, counted by tool. Share passes a
+// chat snippet's limits, and the oldest requests give way until it fits.
+export function trajectoryText(now = Date.now(), { maxChars = Infinity, maxLines = Infinity } = {}) {
   const u = state.usage;
   const tt = trajectoryTotals(u);
-  const out = [`Trajectory · ${tt.requests} request${tt.requests === 1 ? "" : "s"} to Claude · ${tt.calls} tool call${tt.calls === 1 ? "" : "s"}`];
-  if (u.overhead) out.push(`Fixed overhead ${kTok(u.overhead.tokens)} tokens, sent with every request`);
-  for (const turn of trajectory(u)) {
-    out.push("", `${turn.earlier ? "Earlier" : `Turn ${turn.n}`} · ${turn.steps.length} request${turn.steps.length === 1 ? "" : "s"}`);
-    for (const s of turn.steps) {
-      if (s.isCompacted) out.push("  Context compacted");
-      out.push(`  #${s.n}  ${s.status === "failed" ? "failed, sent again" : `${kTok(s.input)} in · ${kTok(s.output)} out`} · ${took(stepMs(s, now))}`);
-      for (const c of s.calls) {
-        out.push(`    ${c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""} · ${kTok(tokensOf(c)) || "–"} · ${c.done ? took(c.ms) : "running"}`);
-        for (const sc of c.sub) out.push(`      ${sc.tool}${sc.summary ? ` ${sc.summary}` : ""}${sc.isError ? " ✗" : ""} · ${sc.done ? took(sc.ms) : "running"}`);
+  const head = [`Trajectory · ${tt.requests} request${tt.requests === 1 ? "" : "s"} to Claude · ${tt.calls} tool call${tt.calls === 1 ? "" : "s"}`];
+  if (u.overhead) head.push(`Fixed overhead ${kTok(u.overhead.tokens)} tokens, sent with every request`);
+  const foot = [tt.tps ? `${tt.tps} tok/s` : null, tt.next != null ? `the next request sends ${kTok(tt.next)}` : null].filter(Boolean).join(" · ");
+  const turns = trajectory(u);
+  const kept = turns.reduce((n, t) => n + t.steps.length, 0);
+  // The text with the first `skip` of the kept requests left out.
+  const write = (skip) => {
+    const out = [...head];
+    const before = u.stepN - kept + skip;   // sent before the first one written
+    if (before > 0) out.push(`${before} earlier request${before === 1 ? "" : "s"} not listed`);
+    let i = 0;
+    for (const turn of turns) {
+      const steps = turn.steps.filter(() => i++ >= skip);
+      if (!steps.length) continue;
+      out.push("", `${turn.earlier ? "Earlier" : `Turn ${turn.n}`} · ${turn.steps.length} request${turn.steps.length === 1 ? "" : "s"}`);
+      for (const s of steps) {
+        if (s.isCompacted) out.push("  Context compacted");
+        out.push(`  #${s.n}  ${s.status === "failed" ? "failed, sent again" : s.status === "streaming" ? "streaming" : `${kTok(s.input)} in · ${kTok(s.output)} out`} · ${took(stepMs(s, now))}`);
+        for (const c of s.calls) {
+          out.push(`    ${c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""} · ${kTok(tokensOf(c)) || "–"} · ${c.done ? took(c.ms) : "running"}`);
+          if (c.subN) out.push(`      ${c.subN} call${c.subN === 1 ? "" : "s"} of its own: ${subTools(c)}`);
+        }
       }
     }
-  }
-  out.push("", [tt.tps ? `${tt.tps} tok/s` : null, tt.next != null ? `the next request sends ${kTok(tt.next)}` : null].filter(Boolean).join(" · "));
-  return out.join("\n").trimEnd();
+    if (foot) out.push("", foot);
+    return out.join("\n").trimEnd();
+  };
+  let skip = 0;
+  let text = write(skip);
+  while (skip < kept && (text.length > maxChars || text.split("\n").length > maxLines)) text = write(++skip);
+  return text;
 }
 
+// "Grep ×120, Read ×80, Bash ×12, …": an agent's calls by tool, the most used first.
+function subTools(c) {
+  const list = Object.entries(c.subTools ?? {}).sort((a, b) => b[1] - a[1]);
+  return `${list.slice(0, 4).map(([tool, n]) => `${shortTool(tool)} ×${n}`).join(", ")}${list.length > 4 ? ", …" : ""}`;
+}

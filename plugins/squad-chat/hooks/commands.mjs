@@ -590,7 +590,7 @@ function showView(view, say, setView) {
 
 export const TOOL_USAGE = "/tool takes a tool's name, then what it runs on: /tool uuid 5, /tool hash hello, /tool time 1739000000.";
 
-const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /habit add|done|undo|remove|rename · /tool <name> [input] · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /habit · /tool · /clipboard · /pet · /chat · /logout · anything else is a message";
+const HELP = "/room [name] [passcode] · /room leave|delete <name> · /who · /name <new name> · /dnd on|off|auto · /share [diff|usage|git|agents|snippet] [#room] · /share to #room · /snippet add|rename|delete|copy|share · /lofi play|pause|next|add|import · /focus start|pause|skip|reset|<min> <min> · /habit add|done|undo|remove|rename · /tool <name> [input] · /set <setting> <value> (in a room with settings) · /usage · /git · /agents · /focus · /habit · /tool · /clipboard · /pet · /backdrop · /chat · /logout · anything else is a message";
 
 // The pane's input box: commands, the sign-in steps, or a message.
 // `setView(id)` shows a built-in or function room ("chat" for the chat),
@@ -622,7 +622,7 @@ export async function paneInput(call, value, say, { setDnd, sources, setView, re
   if (m) {
     const [, cmd, args] = m;
     switch (cmd) {
-      case "usage": case "git": case "agents": case "clipboard": case "pet": return showView(cmd, say, setView);
+      case "usage": case "git": case "agents": case "clipboard": case "pet": case "backdrop": return showView(cmd, say, setView);
       case "focus":
         // "/focus 50 10" or "/focus start" does it without leaving the room on show.
         if (args.trim()) return (await roomInput?.("focus", args.trim())) ? undefined : say("/focus takes start, pause, skip, reset, or the minutes: /focus 50 10.");

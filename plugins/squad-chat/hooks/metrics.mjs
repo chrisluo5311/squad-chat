@@ -36,9 +36,28 @@ export function createUsage() {
     overhead: null,            // { tokens, rows, parts }: what every request carries before the conversation
     overheadAt: 0,             // stepN when it was last read
     stepIn: [],                // what the next request carries that the last one didn't: [{ kind, label, chars }]
-    stepN: 0,
+    stepN: 0,                  // requests sent this session, the ones no longer kept included
+    stepTurns: 0,              // turns that sent a request, likewise
+    stepTurn: null,            // the turn of the last request counted
+    callN: 0,                  // tool calls on the card this session, subagents' included
     activity: { state: "idle", tool: null, since: 0 },   // idle | thinking | tool
   };
+}
+
+// A /clear or a resume: the process goes on with another conversation, so
+// its numbers start over. What belongs to the account and the setup stays:
+// the rate-limit windows, the model, the MCP servers' names, whether the
+// breakdown is open, and the fixed overhead (read again at the first request).
+export function startOver(u) {
+  const fresh = createUsage();
+  fresh.rateLimits = u.rateLimits;
+  fresh.hasLimits = u.hasLimits;
+  fresh.model = u.model;
+  fresh.mcpNames = u.mcpNames;
+  fresh.showBreakdown = u.showBreakdown;
+  fresh.overhead = u.overhead;
+  fresh.overheadAt = -Infinity;
+  return fresh;
 }
 
 // ---------------------------------------------------------------- engine figures
@@ -221,8 +240,9 @@ export function turnEnded(u, at) {
 // model is a step of it, and each tool call hangs under the request that
 // made it, a subagent's own calls under the call that started the agent.
 // Short previews (the prompt, the reply, a call's input and the first lines
-// of its result) are kept for this pane alone: Copy and Share leave them out,
-// and the Agents room's feed never sees them.
+// of its result) are kept for this pane alone: Copy and Share leave them out
+// (they carry a call's tool and its brief summary, as the Agents room's feed
+// does), and the feed never sees them.
 const STEPS = 30;
 const TURNS = 30;
 const SUBCALLS = 40;
@@ -269,12 +289,10 @@ function inputPairs(input) {
 export function stepPrompt(u, text, at = Date.now()) {
   // A turn with no words (an image alone, one the engine started) is still a
   // turn: its requests mustn't land under the one before.
-  u.turns.push({ n: ++u.turnN, at, prompt: preview(text), chars: String(text ?? "").length, piece: null });
+  u.turns.push({ n: ++u.turnN, at, prompt: preview(text), chars: String(text ?? "").length });
   if (u.turns.length > TURNS) u.turns.splice(0, u.turns.length - TURNS);
   if (!text) return;
-  const piece = { kind: "prompt", label: "prompt", chars: String(text).length, turn: u.turns.at(-1) };
-  u.turns.at(-1).piece = piece;
-  u.stepIn.push(piece);
+  u.stepIn.push({ kind: "prompt", label: "prompt", chars: String(text).length, turn: u.turns.at(-1) });
 }
 
 // A tool's answer, which goes to the model with the next request. The call
@@ -283,8 +301,10 @@ export function stepPrompt(u, text, at = Date.now()) {
 // the next request, so the others' shares aren't inflated.
 export function stepToolResult(u, key, text, { tool, agentId } = {}) {
   const call = u.traced.get(key);
+  if (call?.done) u.traced.delete(key);   // ended and answered: nothing is left to find it by its key for
   const chars = String(text ?? "").length;
-  if (call) { call.chars = chars; call.lines = firstLines(text); }
+  // A subagent's call shows no result on its row: its lines aren't kept.
+  if (call) { call.chars = chars; call.lines = call.agentId ? [] : firstLines(text); }
   if (call ? !call.agentId : !agentId) u.stepIn.push({ kind: "tool", label: call?.tool ?? tool ?? "tool", chars: Math.max(0, chars), call: call ?? null });
 }
 
@@ -294,8 +314,15 @@ export function stepStarted(u, { turnId, index = 0, at }) {
     input: null, output: null, cacheRead: 0, added: u.stepIn, grown: null, calls: [], text: "", stopReason: null, isCompacted: false,
   };
   u.stepIn = [];
+  if (step.turnN !== u.stepTurn) { u.stepTurn = step.turnN; u.stepTurns++; }
   u.steps.push(step);
-  if (u.steps.length > STEPS) u.steps.splice(0, u.steps.length - STEPS);
+  if (u.steps.length > STEPS) {
+    // A request that leaves takes its calls with it: an agent one of them
+    // started lets go of it, or the call and its own calls would stay for
+    // the whole session, reachable from the agent and no row.
+    const gone = new Set(u.steps.splice(0, u.steps.length - STEPS).flatMap((s) => s.calls));
+    if (gone.size) for (const a of u.agents.values()) if (gone.has(a.call)) a.call = null;
+  }
   return step;
 }
 
@@ -351,26 +378,35 @@ function splitBySize(pieces, total) {
 
 // A tool call joins the trajectory: the main loop's under the request that
 // asked for it (the last one sent), a subagent's under the call that
-// started that agent.
-export function traceCall(u, key, { tool, agentId, input, at, platform }) {
-  const call = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [] };
+// started that agent. A subagent's row opens to its status and timing alone,
+// so its input isn't kept (hundreds of calls an agent, each up to 2,000
+// characters an argument).
+// `summary` is the feed entry's when the caller has it, so the input is
+// read and scanned for secrets once a call.
+export function traceCall(u, key, { tool, agentId, input, at, platform, summary = toolSummary(tool, input, platform) }) {
+  const call = { key, tool, agentId: agentId ?? null, toolUseId: input?.tool_use_id ?? null, summary, input: agentId ? [] : inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
   if (agentId) {
     const owner = agentCall(u, agentId);
     if (!owner) return null;
     owner.sub.push(call);
+    owner.subN++;              // every call it made: `sub` keeps the newest
+    owner.subTools[tool] = (owner.subTools[tool] ?? 0) + 1;
     if (owner.sub.length > SUBCALLS) owner.sub.splice(0, owner.sub.length - SUBCALLS);
   } else {
     const step = u.steps.at(-1);
     if (!step) return null;
     step.calls.push(call);
   }
+  u.callN++;
   u.traced.set(key, call);
   forgetTraced(u);
   return call;
 }
 
-// Past TRACED, the oldest finished calls go first: a running one (a long
-// Agent call under hundreds of its subagent's) must still find its end.
+// A call leaves `traced` once it has ended and its answer is in (see
+// stepToolResult). This is for the ones whose answer never came (a call
+// that threw): past TRACED the oldest finished go first, as a running one (a
+// long Agent call under hundreds of its subagent's) must still find its end.
 // Running ones go only past twice that, when their ends were surely lost.
 function forgetTraced(u) {
   let over = u.traced.size - TRACED;
@@ -399,10 +435,21 @@ function agentCall(u, id, depth = 0) {
   return a.call ?? (a.parentId ? agentCall(u, a.parentId, depth + 1) : null);
 }
 
-// A subagent the session spawned finds the Agent call that started it: the
-// newest one still running with no agent yet, its description first.
-function linkAgent(u, a) {
+// A subagent the session spawned finds the call that started it by the
+// call's own id, which agent.spawn carries: two Agent calls in one message
+// with the same description each keep their own agent, and a workflow's
+// agents all hang under its Workflow call. An id that names no call here (a
+// teammate's, a resumed run's) links nothing. Only with no id at all is it
+// the newest Agent call still running with no agent yet, its description first.
+function linkAgent(u, a, toolUseId) {
   if (a.call || a.parentId) return;
+  if (toolUseId) {
+    const call = u.steps.flatMap((s) => s.calls).findLast((c) => c.toolUseId === toolUseId);
+    if (!call) return;
+    if (call.tool === "Agent" || call.tool === "Task") call.agent ??= { id: a.id, type: a.type };
+    a.call = call;
+    return;
+  }
   const open = u.steps.flatMap((s) => s.calls).filter((c) => (c.tool === "Agent" || c.tool === "Task") && !c.agent && !c.done);
   const said = toolSummary("Agent", { description: a.description });
   // By its description, or the one running when there's no other to mistake it for.
@@ -452,7 +499,7 @@ function overheadParts(b) {
       g.tokens += t.tokens;
       g.tools.push(t.name);
       // "mcp__claude-in-chrome__computer" is "computer" under its server.
-      g.items.push({ name: t.name.startsWith("mcp__") ? t.name.slice(t.name.lastIndexOf("__") + 2) : t.name, tokens: t.tokens });
+      g.items.push({ name: shortTool(t.name), tokens: t.tokens });
       servers.set(key, g);
     }
     const groups = by([...servers.values()]).map((s) => ({ ...s, items: by(s.items) }));
@@ -471,12 +518,23 @@ function overheadParts(b) {
 // in its serverName and in its tools' names ("mcp__1a59c906-…__batch"), so
 // the name tool.describe gave a tool is used first, then the name it was
 // reported with, then the one its tools carry. Null when every one is an id.
+// tool.describe says who provides a tool as { plugin, tier }: a configured
+// MCP server's is "mcp:<server>", the name it was set up with.
 const ID_LIKE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i;
 export function noteProvider(u, tool, provider) {
-  const name = provider?.name;
-  if (!String(tool ?? "").startsWith("mcp__") || typeof name !== "string" || !name || ID_LIKE.test(name)) return false;
+  const from = typeof provider?.plugin === "string" ? provider.plugin : "";
+  const name = from.startsWith("mcp:") ? from.slice(4) : "";
+  if (!String(tool ?? "").startsWith("mcp__") || !name || ID_LIKE.test(name)) return false;
   u.mcpNames.set(tool, name);
   return true;
+}
+// An MCP tool by its own name, "mcp__ccd_turn__update_plan" as "update_plan":
+// what follows its server, which ends at the first "__" (as serverOf reads
+// it), so two tools of a server that differ before a later "__" stay apart.
+// A built-in tool as it is.
+export function shortTool(name) {
+  const m = /^mcp__.+?__(.+)$/.exec(String(name));
+  return m ? m[1] : String(name);
 }
 function serverOf(t) {
   const s = String(t.serverName ?? "");
@@ -514,18 +572,18 @@ export function trajectory(u) {
   return list.filter((t) => t.n >= first);
 }
 
-// The figures under the rows: requests, calls, output speed, and what the
-// next request sends (the last one's input and its reply).
+// The figures under the rows: turns, requests and calls over the whole
+// session (the rows keep only the newest), output speed over the requests
+// still kept, and what the next request sends (the last one's input and its reply).
 export function trajectoryTotals(u) {
   const done = u.steps.filter((s) => s.status === "done");
-  const calls = u.steps.reduce((n, s) => n + s.calls.length + s.calls.reduce((k, c) => k + c.sub.length, 0), 0);
   const gen = done.reduce((n, s) => n + (s.firstAt != null && s.endedAt != null ? Math.max(0, s.endedAt - s.firstAt) : 0), 0);
   const out = done.reduce((n, s) => n + (s.firstAt != null ? s.output : 0), 0);
   const last = done.at(-1);
   return {
-    turns: new Set(u.steps.map((s) => s.turnN)).size,
-    requests: u.steps.length,
-    calls,
+    turns: u.stepTurns,
+    requests: u.stepN,
+    calls: u.callN,
     tps: gen >= 200 ? Math.round(out / (gen / 1000)) : null,
     next: last ? last.input + (last.output ?? 0) : null,
   };
@@ -556,14 +614,14 @@ function agentEntry(u, id, at) {
   return a;
 }
 
-export function agentSpawned(u, { id, type, description, parentId, at }) {
+export function agentSpawned(u, { id, type, description, parentId, toolUseId, at }) {
   if (!id) return false;
   const a = agentEntry(u, id, at);
   a.type = type || a.type;
   a.description = description || a.description;
   a.parentId = parentId ?? a.parentId;
   a.startedAt = Math.min(a.startedAt, at);
-  linkAgent(u, a);
+  linkAgent(u, a, toolUseId);
   return true;
 }
 

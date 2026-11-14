@@ -311,12 +311,16 @@ function card(els, { key, title, titleColor, meta, metaColor, metaNode, children
   });
 }
 
-function titleBar(els) {
-  const { Box, Text } = els;
+// The docked pane's top line. It starts with a close mark of our own: the
+// engine's sits at the frame's top right, where a host that lays its own
+// buttons over the terminal's corner (Orca) covers it.
+function titleBar(els, handlers = null) {
+  const { Box, Text, Button } = els;
   const conn = connection();
   const who = state.auth === "signed_in" && state.user ? state.user.name : null;
   return Box({ key: "titlebar", flexDirection: "row", justifyContent: "space-between", children: [
     Box({ key: "brand", flexDirection: "row", gap: 1, children: [
+      handlers?.onClose ? Button({ key: "close-pane", plain: true, dimColor: true, label: "✕", onPress: () => handlers.onClose() }) : null,
       Text({ key: "logo", color: theme.accent, bold: true, children: `${glyph.brand} squad-chat` }),
       who ? Text({ key: "me", color: theme.muted, wrap: "truncate-end", children: who }) : null,
     ].filter(Boolean) }),
@@ -598,6 +602,7 @@ const SYS_INPUT = {
   toolbox: { placeholder: "text for the tool, a tool's name, or /tool hash hello", label: "run" },
   clipboard: { placeholder: "clear · /help", label: "run" },
   pet: { placeholder: "auto, or a mood: vibe typing wave cheer sleepy …", label: "run" },
+  backdrop: { placeholder: "a backdrop's name, off, or light · medium · strong", label: "run" },
 };
 function inputMode() {
   const view = activeView();
@@ -663,7 +668,7 @@ function dockView(els, props, handlers) {
   const mode = inputMode();
   const view = activeView();
   const desk = props.surface === "desktop" && els.Svg;
-  const parts = desk ? headerDesk(els, handlers) : [titleBar(els)];
+  const parts = desk ? headerDesk(els, handlers) : [titleBar(els, handlers)];
   let used = desk ? parts.length : 1;
 
   if (desk) {
@@ -770,6 +775,7 @@ const SYS_HINTS = {
   toolbox: "⧉ copies · kept in memory, never shared",
   clipboard: "⧉ copies again · kept in memory, never shared",
   pet: "Clawd follows what goes on, or keeps one mood",
+  backdrop: "shows in the Desktop and mobile apps",
 };
 
 // A built-in room's hints, after a Share button that posts its snapshot

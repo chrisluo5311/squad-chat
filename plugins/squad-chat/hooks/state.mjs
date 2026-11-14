@@ -8,11 +8,12 @@ import { emptyGit } from "./github.mjs";
 export const MAX_MESSAGES = 100;   // per room
 
 // The built-in rooms, in tab order. They need no server and no sign-in.
-export const SYS_ROOMS = ["usage", "git", "agents", "focus", "habits", "toolbox", "clipboard", "pet"];
+export const SYS_ROOMS = ["usage", "git", "agents", "focus", "habits", "toolbox", "clipboard", "pet", "backdrop"];
 // Function rooms come from the bridge (manifests in rooms/<id>/room.json).
 // These have tabs until /chat rooms says otherwise. Clipboard reads what
-// you copy, so it waits to be asked for.
-export const DEFAULT_ROOMS = [...SYS_ROOMS.filter((id) => id !== "clipboard"), "snippet", "monitor"];
+// you copy, so it waits to be asked for. Backdrop shows only in the desktop
+// and mobile apps, so it waits too.
+export const DEFAULT_ROOMS = [...SYS_ROOMS.filter((id) => id !== "clipboard" && id !== "backdrop"), "snippet", "monitor"];
 export const ROOM_ID = /^[a-z][a-z0-9-]{1,23}$/;
 
 export const state = {
@@ -58,6 +59,7 @@ export const state = {
   toolbox: null,          // the Toolbox room's tool, input and result (toolbox.mjs), likewise
   clipboard: null,        // the Clipboard room's history (clipboard.mjs), likewise
   pet: null,              // the Pet room's Clawd (pet.mjs), likewise
+  backdrop: null,         // the Backdrop room's pick and frost (backdrop.mjs), likewise
   focusStatus: "",        // "🍅 18:42" for the status line while a timer runs, kept by the mod
   sessionId: null,
   self: null,             // this session's latest heartbeat (sessions.mjs)
