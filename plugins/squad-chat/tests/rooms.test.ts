@@ -217,6 +217,12 @@ test("Trajectory: a subagent's calls hang under the Agent call that started it, 
   const agent = u.steps[0].calls[0]
   expect(agent.agent).toEqual({ id: 'a1', type: 'Explore' })
   expect(agent.sub.map((c: any) => c.summary)).toEqual(['"strata"'])
+  expect([agent.sub[0].input, agent.sub[0].lines, agent.sub[0].chars]).toEqual([[], [], 20])   // its row shows neither: not kept
+  expect(agent.input).toEqual([['description', 'map the repo'], ['subagent_type', 'Explore']])
+  // Once the Agent call's request has left the rows, the agent lets go of the call.
+  for (let i = 1; i <= 30; i++) stepStarted(u, { turnId: 't', index: i, at: 100 + i })
+  expect(u.agents.get('a1').call).toBeNull()
+  expect(traceCall(u, 'k4', { tool: 'Read', agentId: 'a1', input: {}, at: 200 })).toBeNull()
   expect(u.stepIn).toEqual([])                                        // a subagent's results go to it, not to Claude
 })
 

@@ -304,7 +304,8 @@ export function stepPrompt(u, text, at = Date.now()) {
 export function stepToolResult(u, key, text, { tool, agentId } = {}) {
   const call = u.traced.get(key);
   const chars = String(text ?? "").length;
-  if (call) { call.chars = chars; call.lines = firstLines(text); }
+  // A subagent's call shows no result on its row: its lines aren't kept.
+  if (call) { call.chars = chars; call.lines = call.agentId ? [] : firstLines(text); }
   if (call ? !call.agentId : !agentId) u.stepIn.push({ kind: "tool", label: call?.tool ?? tool ?? "tool", chars: Math.max(0, chars), call: call ?? null });
 }
 
@@ -316,7 +317,13 @@ export function stepStarted(u, { turnId, index = 0, at }) {
   u.stepIn = [];
   if (step.turnN !== u.stepTurn) { u.stepTurn = step.turnN; u.stepTurns++; }
   u.steps.push(step);
-  if (u.steps.length > STEPS) u.steps.splice(0, u.steps.length - STEPS);
+  if (u.steps.length > STEPS) {
+    // A request that leaves takes its calls with it: an agent one of them
+    // started lets go of it, or the call and its own calls would stay for
+    // the whole session, reachable from the agent and no row.
+    const gone = new Set(u.steps.splice(0, u.steps.length - STEPS).flatMap((s) => s.calls));
+    if (gone.size) for (const a of u.agents.values()) if (gone.has(a.call)) a.call = null;
+  }
   return step;
 }
 
@@ -372,9 +379,11 @@ function splitBySize(pieces, total) {
 
 // A tool call joins the trajectory: the main loop's under the request that
 // asked for it (the last one sent), a subagent's under the call that
-// started that agent.
+// started that agent. A subagent's row opens to its status and timing alone,
+// so its input isn't kept (hundreds of calls an agent, each up to 2,000
+// characters an argument).
 export function traceCall(u, key, { tool, agentId, input, at, platform }) {
-  const call = { key, tool, agentId: agentId ?? null, toolUseId: input?.tool_use_id ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
+  const call = { key, tool, agentId: agentId ?? null, toolUseId: input?.tool_use_id ?? null, summary: toolSummary(tool, input, platform), input: agentId ? [] : inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
   if (agentId) {
     const owner = agentCall(u, agentId);
     if (!owner) return null;
