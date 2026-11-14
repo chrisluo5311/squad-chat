@@ -11,8 +11,10 @@
 import { state } from "./state.mjs";
 import { MAX_SNIPPET, MAX_SNIPPET_LINES } from "./share.mjs";
 import { theme, palette } from "./theme.mjs";
-import { clip, cells, fmtTokens, rowsFor, line, card } from "./widgets.mjs";
-import { trajectory, trajectoryTotals, serverLabel } from "./metrics.mjs";
+import { clip, cells, fmtTokens, fmtDur, rowsFor, line, card } from "./widgets.mjs";
+import { trajectory, trajectoryTotals, serverLabel, shortTool } from "./metrics.mjs";
+
+export { shortTool };
 
 const TAG = {
   fixed: { text: "FIXED", color: "#8F8D87" },
@@ -28,16 +30,11 @@ const LANE_COLORS = { prompt: theme.you, result: theme.amber, wait: "#5F4F72", m
 
 // "6.2k", "182": a row's tokens, a figure with no unit.
 export const kTok = (n) => (n == null ? "" : n < 1000 ? String(Math.round(n)) : n < 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : fmtTokens(n));
-// "120ms", "1.8s", "41s", "1:12"
+// "120ms", then as every duration here reads: "1.8s", "41s", "1:12", "1:15:00".
 export function took(ms) {
   if (ms == null) return "";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
-  const s = Math.round(ms / 1000);
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return ms < 1000 ? `${Math.round(ms)}ms` : fmtDur(ms);
 }
-// "mcp__ccd_turn__update_plan" → "update_plan"; a built-in tool as it is.
-export const shortTool = (name) => (String(name).startsWith("mcp__") ? String(name).slice(String(name).lastIndexOf("__") + 2) : String(name));
 // "2026-11-07 23:41:04.504", in local time.
 function stamp(ms) {
   const d = new Date(ms);

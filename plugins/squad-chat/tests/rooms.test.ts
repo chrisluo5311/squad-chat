@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer, tickFocus, dayOf } from '../hooks/focus.mjs'
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
-import { shortTool, trajectoryText, scrollTraj, wrappedRows } from '../hooks/trajview.mjs'
+import { shortTool, took, trajectoryText, scrollTraj, wrappedRows } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
 import { state } from '../hooks/state.mjs'
 import { frameKey, breakdownWanted } from '../hooks/squad-chat.mjs'
@@ -504,6 +504,11 @@ test("Trajectory: a narrow pane's toolbar is counted at the rows it wraps to", (
 test('band: an MCP tool is named by its own name', () => {
   expect(shortTool('mcp__ccd_turn__update_plan')).toBe('update_plan')
   expect(shortTool('Read')).toBe('Read')
+  expect([shortTool('mcp__srv__ns__run'), shortTool('mcp__srv__other__run')]).toEqual(['ns__run', 'other__run'])   // two tools of a server never read the same
+})
+
+test('Trajectory: a time past the hour reads in hours', () => {
+  expect([took(null), took(120), took(1_800), took(41_000), took(72_000), took(75 * MIN)]).toEqual(['', '120ms', '1.8s', '41s', '1:12', '1:15:00'])
 })
 
 test('band: the trajectory after the 5-hour window, always, in the largest form that fits; no 7-day window', () => {

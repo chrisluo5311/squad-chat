@@ -499,7 +499,7 @@ function overheadParts(b) {
       g.tokens += t.tokens;
       g.tools.push(t.name);
       // "mcp__claude-in-chrome__computer" is "computer" under its server.
-      g.items.push({ name: t.name.startsWith("mcp__") ? t.name.slice(t.name.lastIndexOf("__") + 2) : t.name, tokens: t.tokens });
+      g.items.push({ name: shortTool(t.name), tokens: t.tokens });
       servers.set(key, g);
     }
     const groups = by([...servers.values()]).map((s) => ({ ...s, items: by(s.items) }));
@@ -527,6 +527,14 @@ export function noteProvider(u, tool, provider) {
   if (!String(tool ?? "").startsWith("mcp__") || !name || ID_LIKE.test(name)) return false;
   u.mcpNames.set(tool, name);
   return true;
+}
+// An MCP tool by its own name, "mcp__ccd_turn__update_plan" as "update_plan":
+// what follows its server, which ends at the first "__" (as serverOf reads
+// it), so two tools of a server that differ before a later "__" stay apart.
+// A built-in tool as it is.
+export function shortTool(name) {
+  const m = /^mcp__.+?__(.+)$/.exec(String(name));
+  return m ? m[1] : String(name);
 }
 function serverOf(t) {
   const s = String(t.serverName ?? "");
