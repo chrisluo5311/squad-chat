@@ -235,6 +235,28 @@ test("Trajectory: a long Agent call outlives hundreds of its subagent's calls an
   expect(trajectoryLive(u)).toBeNull()
 })
 
+test('Trajectory: the totals count the whole session, past the rows still kept', () => {
+  const u = createUsage()
+  for (let t = 0; t < 12; t++) {
+    stepPrompt(u, `prompt ${t}`, t * 1_000)
+    for (let i = 0; i < 5; i++) {
+      const s = stepStarted(u, { turnId: `t${t}`, index: i, at: t * 1_000 + i * 10 })
+      stepEnded(u, s, stepResult(100_000 + (t * 5 + i) * 10, 5), t * 1_000 + i * 10 + 5)
+      for (let c = 0; c < 3; c++) traceCall(u, `k${t}-${i}-${c}`, { tool: 'Read', input: {}, at: t * 1_000 + i * 10 + 6 })
+    }
+  }
+  expect(u.steps).toHaveLength(30)                                    // the rows: the newest 30 requests
+  const tt = trajectoryTotals(u)
+  expect([tt.turns, tt.requests, tt.calls]).toEqual([12, 60, 180])
+  // An agent's calls likewise: every one counted, the newest kept.
+  traceCall(u, 'A', { tool: 'Agent', input: { description: 'map the repo' }, at: 20_000 })
+  agentSpawned(u, { id: 'a1', type: 'Explore', description: 'map the repo', parentId: null, at: 20_001 })
+  for (let i = 0; i < 300; i++) traceCall(u, `s${i}`, { tool: 'Grep', agentId: 'a1', input: {}, at: 20_002 + i })
+  const agent = u.steps.at(-1).calls.at(-1)
+  expect([agent.sub.length, agent.subN]).toEqual([40, 300])
+  expect(trajectoryTotals(u).calls).toBe(481)
+})
+
 test("Trajectory: a turn with no words is still a turn, and a result the card lost still goes with the next request", () => {
   const u = createUsage()
   stepPrompt(u, 'first', 0)

@@ -36,7 +36,10 @@ export function createUsage() {
     overhead: null,            // { tokens, rows, parts }: what every request carries before the conversation
     overheadAt: 0,             // stepN when it was last read
     stepIn: [],                // what the next request carries that the last one didn't: [{ kind, label, chars }]
-    stepN: 0,
+    stepN: 0,                  // requests sent this session, the ones no longer kept included
+    stepTurns: 0,              // turns that sent a request, likewise
+    stepTurn: null,            // the turn of the last request counted
+    callN: 0,                  // tool calls on the card this session, subagents' included
     activity: { state: "idle", tool: null, since: 0 },   // idle | thinking | tool
   };
 }
@@ -294,6 +297,7 @@ export function stepStarted(u, { turnId, index = 0, at }) {
     input: null, output: null, cacheRead: 0, added: u.stepIn, grown: null, calls: [], text: "", stopReason: null, isCompacted: false,
   };
   u.stepIn = [];
+  if (step.turnN !== u.stepTurn) { u.stepTurn = step.turnN; u.stepTurns++; }
   u.steps.push(step);
   if (u.steps.length > STEPS) u.steps.splice(0, u.steps.length - STEPS);
   return step;
@@ -353,17 +357,19 @@ function splitBySize(pieces, total) {
 // asked for it (the last one sent), a subagent's under the call that
 // started that agent.
 export function traceCall(u, key, { tool, agentId, input, at, platform }) {
-  const call = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [] };
+  const call = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0 };
   if (agentId) {
     const owner = agentCall(u, agentId);
     if (!owner) return null;
     owner.sub.push(call);
+    owner.subN++;              // every call it made: `sub` keeps the newest
     if (owner.sub.length > SUBCALLS) owner.sub.splice(0, owner.sub.length - SUBCALLS);
   } else {
     const step = u.steps.at(-1);
     if (!step) return null;
     step.calls.push(call);
   }
+  u.callN++;
   u.traced.set(key, call);
   forgetTraced(u);
   return call;
@@ -517,18 +523,18 @@ export function trajectory(u) {
   return list.filter((t) => t.n >= first);
 }
 
-// The figures under the rows: requests, calls, output speed, and what the
-// next request sends (the last one's input and its reply).
+// The figures under the rows: turns, requests and calls over the whole
+// session (the rows keep only the newest), output speed over the requests
+// still kept, and what the next request sends (the last one's input and its reply).
 export function trajectoryTotals(u) {
   const done = u.steps.filter((s) => s.status === "done");
-  const calls = u.steps.reduce((n, s) => n + s.calls.length + s.calls.reduce((k, c) => k + c.sub.length, 0), 0);
   const gen = done.reduce((n, s) => n + (s.firstAt != null && s.endedAt != null ? Math.max(0, s.endedAt - s.firstAt) : 0), 0);
   const out = done.reduce((n, s) => n + (s.firstAt != null ? s.output : 0), 0);
   const last = done.at(-1);
   return {
-    turns: new Set(u.steps.map((s) => s.turnN)).size,
-    requests: u.steps.length,
-    calls,
+    turns: u.stepTurns,
+    requests: u.stepN,
+    calls: u.callN,
     tps: gen >= 200 ? Math.round(out / (gen / 1000)) : null,
     next: last ? last.input + (last.output ?? 0) : null,
   };

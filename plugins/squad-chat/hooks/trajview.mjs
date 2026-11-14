@@ -136,7 +136,7 @@ function rowLine(els, r, w, handlers, now) {
   } else {
     const c = r.call;
     live = !c.done;
-    text = `${isAgent(c) ? c.agent?.type ?? "Agent" : c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""}${c.sub.length ? ` · ${c.sub.length} calls` : ""}`;
+    text = `${isAgent(c) ? c.agent?.type ?? "Agent" : c.tool}${c.summary ? ` ${c.summary}` : ""}${c.isError ? " ✗" : ""}${c.subN ? ` · ${c.subN} call${c.subN === 1 ? "" : "s"}` : ""}`;
     if (c.isError) tag.color = theme.error;
     tokens = r.depth < 2 ? kTok(tokensOf(c)) : "";
     time = live ? took(now - c.at) : took(c.ms);
@@ -231,7 +231,7 @@ function details(els, r, w, handlers, now) {
     add(kv(els, "st", "Status", status, statusColor));
     const tok = tokensOf(c);
     add(kv(els, "res", "Result", tok == null ? "–" : `${kTok(tok)} tokens`));
-    if (isAgent(c)) add(kv(els, "ag", "Agent", `${c.agent?.type ?? "Agent"} · ${c.sub.length} call${c.sub.length === 1 ? "" : "s"}`));
+    if (isAgent(c)) add(kv(els, "ag", "Agent", `${c.agent?.type ?? "Agent"} · ${c.subN} call${c.subN === 1 ? "" : "s"}`));
   } else if (cur === "Input") {
     if (!c.input.length) add(els.Text({ key: "none", color: theme.muted, children: "No input." }));
     c.input.forEach(([k, v], i) => out.push(kvWrap(els, `i${i}`, k, v, w)));
@@ -241,6 +241,7 @@ function details(els, r, w, handlers, now) {
     else c.lines.forEach((l, i) => out.push(para(els, `l${i}`, l, w, theme.muted)));
   } else if (cur === "Calls") {
     if (!c.sub.length) add(els.Text({ key: "none", color: theme.muted, children: "No calls yet." }));
+    if (c.subN > c.sub.length) add(els.Text({ key: "newest", color: theme.muted, children: `The newest ${c.sub.length} of ${c.subN}.` }));
     c.sub.forEach((sc, i) => add(line(els, `s${i}`, [
       { text: sc.tool, width: 10, color: theme.amber },
       { text: sc.summary, grow: true },
@@ -406,7 +407,7 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
   const u = state.usage;
   const t = state.traj;
   const windowed = capacity < 1000;   // the terminal: a window the pane's height
-  const meta = `${u.steps.length} request${u.steps.length === 1 ? "" : "s"}`;
+  const meta = `${u.stepN} request${u.stepN === 1 ? "" : "s"}`;
   const metaNode = Box({ key: "meta", flexDirection: "row", alignItems: "center", columnGap: 2, flexShrink: 1, minWidth: 0, children: [
     Text({ key: "m", color: theme.muted, wrap: "truncate-start", children: meta }),
     Button({ key: "traj-copy", plain: true, label: "⧉ Copy", onPress: (press) => handlers.onCopy?.(trajectoryText(now), press?.surface) }),
