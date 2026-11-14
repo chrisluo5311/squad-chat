@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer, tickFocus, dayOf } from '../hooks/focus.mjs'
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
 import { fitSections } from '../hooks/bands.mjs'
-import { shortTool, trajectoryText, scrollTraj } from '../hooks/trajview.mjs'
+import { shortTool, trajectoryText, scrollTraj, wrappedRows } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
 import { state } from '../hooks/state.mjs'
 import { frameKey, breakdownWanted } from '../hooks/squad-chat.mjs'
@@ -478,6 +478,14 @@ test('Trajectory: a scroll of no rows leaves the window following the newest', (
   } finally {
     Object.assign(state.traj, saved)
   }
+})
+
+test("Trajectory: a narrow pane's toolbar is counted at the rows it wraps to", () => {
+  const labels = [10, 7, 7, 10]                                         // ◷ Duration, ⊟ Turns, ⊟ Calls, ⊟ Subcalls
+  expect(wrappedRows(labels, 40, 2)).toBe(1)                            // 34 cells and three gaps of 2: 40
+  expect(wrappedRows(labels, 39, 2)).toBe(2)
+  expect(wrappedRows(labels, 18, 2)).toBe(3)
+  expect(wrappedRows(labels, 5, 2)).toBe(4)                             // never more rows than buttons
 })
 
 test('band: an MCP tool is named by its own name', () => {

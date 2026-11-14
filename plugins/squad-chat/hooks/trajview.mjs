@@ -11,7 +11,7 @@
 import { state } from "./state.mjs";
 import { MAX_SNIPPET, MAX_SNIPPET_LINES } from "./share.mjs";
 import { theme, palette } from "./theme.mjs";
-import { clip, fmtTokens, rowsFor, line, card } from "./widgets.mjs";
+import { clip, cells, fmtTokens, rowsFor, line, card } from "./widgets.mjs";
 import { trajectory, trajectoryTotals, serverLabel } from "./metrics.mjs";
 
 const TAG = {
@@ -405,6 +405,19 @@ function lanesTerm(els, items, w) {
 
 // ---------------------------------------------------------------- the card
 
+// The rows a wrapping row of buttons takes: each as wide as its label, `gap`
+// cells between two on a row. A narrow pane wraps the toolbar onto a second
+// row, which the terminal's window has to count or it cuts the card's last row.
+const TOOLBAR_GAP = 2;
+export function wrappedRows(widths, room, gap) {
+  let rows = 1, used = 0;
+  for (const wd of widths) {
+    if (used && used + gap + wd > room) { rows++; used = wd; }
+    else used += (used ? gap : 0) + wd;
+  }
+  return rows;
+}
+
 export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()) {
   const { Box, Button, Text } = els;
   const u = state.usage;
@@ -421,15 +434,18 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
     const rows = [Text({ key: "none", color: theme.muted, wrap: "truncate-end", children: "None yet. Each request to Claude shows up here." })];
     return { name: "Trajectory", node: card(els, { key: "trajectory", title: "TRAJECTORY", color: theme.usage, metaNode, rows }), height: 4 };
   }
-  const fold = (k, label) => Button({ key: `traj-${k}`, plain: true, dimColor: !t[k], label, onPress: () => handlers.onTraj?.("fold", k) });
   const turnList = trajectory(u);
   const allFolded = turnList.length > 0 && !turnList.some((x) => turnIsOpen(x.n, turnList.at(-1).n));
-  const turnsFold = Button({ key: "traj-turns", plain: true, dimColor: !allFolded, label: `${allFolded ? "⊞" : "⊟"} Turns`, onPress: () => handlers.onTraj?.("turn", null) });
-  const head = [
-    Box({ key: "toolbar", flexDirection: "row", columnGap: 2, flexWrap: "wrap", children: [
-      fold("duration", "◷ Duration"), turnsFold, fold("calls", `${t.calls ? "⊞" : "⊟"} Calls`), fold("subcalls", `${t.subcalls ? "⊞" : "⊟"} Subcalls`),
-    ] }),
+  const tools = [
+    { k: "duration", label: "◷ Duration", on: t.duration, act: () => handlers.onTraj?.("fold", "duration") },
+    { k: "turns", label: `${allFolded ? "⊞" : "⊟"} Turns`, on: allFolded, act: () => handlers.onTraj?.("turn", null) },
+    { k: "calls", label: `${t.calls ? "⊞" : "⊟"} Calls`, on: t.calls, act: () => handlers.onTraj?.("fold", "calls") },
+    { k: "subcalls", label: `${t.subcalls ? "⊞" : "⊟"} Subcalls`, on: t.subcalls, act: () => handlers.onTraj?.("fold", "subcalls") },
   ];
+  const head = [
+    Box({ key: "toolbar", flexDirection: "row", columnGap: TOOLBAR_GAP, flexWrap: "wrap", children: tools.map((b) => Button({ key: `traj-${b.k}`, plain: true, dimColor: !b.on, label: b.label, onPress: b.act })) }),
+  ];
+  const toolbarRows = wrappedRows(tools.map((b) => cells(b.label)), w - 4, TOOLBAR_GAP);   // inside the card's border and padding
   const items = laneItems(u, now);
   const lanes = els.Svg ? lanesDesk(els, items) : lanesTerm(els, items, w);
   head.push(...lanes);
@@ -462,7 +478,7 @@ export function trajectoryCard(els, w, capacity, handlers = {}, now = Date.now()
       { text: Number.isFinite(pct) ? `, ${Math.round(pct)}% of the window.` : ".", color: theme.muted, grow: true },
     ]) : null,
   ].filter(Boolean);
-  const headRows = 1 + lanes.length;
+  const headRows = toolbarRows + lanes.length;
   const footRows = 1 + foot.length;   // a row above it
   let shown = blocks.flat();
   let pager = null;
