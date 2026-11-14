@@ -471,10 +471,13 @@ function overheadParts(b) {
 // in its serverName and in its tools' names ("mcp__1a59c906-…__batch"), so
 // the name tool.describe gave a tool is used first, then the name it was
 // reported with, then the one its tools carry. Null when every one is an id.
+// tool.describe says who provides a tool as { plugin, tier }: a configured
+// MCP server's is "mcp:<server>", the name it was set up with.
 const ID_LIKE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i;
 export function noteProvider(u, tool, provider) {
-  const name = provider?.name;
-  if (!String(tool ?? "").startsWith("mcp__") || typeof name !== "string" || !name || ID_LIKE.test(name)) return false;
+  const from = typeof provider?.plugin === "string" ? provider.plugin : "";
+  const name = from.startsWith("mcp:") ? from.slice(4) : "";
+  if (!String(tool ?? "").startsWith("mcp__") || !name || ID_LIKE.test(name)) return false;
   u.mcpNames.set(tool, name);
   return true;
 }

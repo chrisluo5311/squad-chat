@@ -333,8 +333,11 @@ test("Trajectory: a full breakdown names what is in each of FIXED's categories, 
   ] })
   const docs = u.overhead.parts.find((p: any) => p.key === 'mcp').groups[0]
   expect(serverLabel(u, docs)).toBe('Connector · update, guide')
-  expect(noteProvider(u, 'mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__guide', { name: 'claude.ai Claude Docs' })).toBe(true)
-  expect(noteProvider(u, 'Read', { name: 'engine' })).toBe(false)                  // only MCP tools
+  // The provider as tool.describe gives it: { plugin: "mcp:<server>", tier }.
+  expect(noteProvider(u, 'mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__update', { plugin: 'mcp:1a59c906-04da-521d-bda7-7f71b9f9e01c', tier: 'user' })).toBe(false)   // an id names nothing
+  expect(serverLabel(u, docs)).toBe('Connector · update, guide')
+  expect(noteProvider(u, 'mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__guide', { plugin: 'mcp:claude.ai Claude Docs', tier: 'user' })).toBe(true)
+  expect(noteProvider(u, 'Read', { plugin: 'engine', tier: 'core' })).toBe(false)   // only MCP tools
   expect(serverLabel(u, docs)).toBe('claude.ai Claude Docs')
 })
 
