@@ -235,7 +235,7 @@ Tabs before your chat rooms. They need no server and no sign-in, and nothing in 
 | ⌁ Ping | Whether your servers answer, and how fast | `/chat rooms +ping` |
 | ♫ Lo-fi | Music while you work | `/chat rooms +lofi` |
 | ◰ Docker | Containers, images, volumes, networks, and a container's logs | `/chat rooms +docker` |
-| ☾ Backdrop | A picture behind the conversation in the Desktop and mobile apps | `/chat rooms +backdrop` |
+| ☾ Backdrop | A picture behind the conversation in the Desktop and mobile apps ([see it move](https://chrisluo5311.github.io/squad-chat/use/built-in-rooms/#-backdrop)) | `/chat rooms +backdrop` |
 
 Open one with its tab or `/chat <room>`. **⇪ Share** (or `/chat-share usage #room`) posts a snapshot as a card, and the [room store](https://chrisluo5311.github.io/squad-chat/rooms/store/) has more rooms. Each room, with pictures, is in the [docs](https://chrisluo5311.github.io/squad-chat/use/built-in-rooms/).
 

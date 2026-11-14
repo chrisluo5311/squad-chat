@@ -48,7 +48,7 @@ To show other sessions, each session keeps a small heartbeat file in `/tmp/squad
 
 The Clipboard room is off until you add it. With a tab, it reads the clipboard every 2 seconds (`pbpaste`, `wl-paste` or `xclip`) and keeps the last 30 items in that session's memory only. Nothing is written to disk or sent anywhere, items that resemble a secret are masked, and the room cannot be shared to a chat.
 
-Focus keeps its lengths and the days you finished a round, Habits your habits and how many times you did each a day for the last year, and Pet its mood, bond and a short log (who wrote in which room, never the content), in Claude Code's plugin store on this computer.
+Focus keeps its lengths and the days you finished a round, Habits your habits and how many times you did each a day for the last year, Pet its mood, bond and a short log (who wrote in which room, never the content), and Backdrop the backdrop and frost you picked, in Claude Code's plugin store on this computer. Backdrop's pictures are drawn by squad-chat itself and load nothing from the network.
 
 Snippets you save stay in `~/.config/squad-chat/room-data/snippet/list.json`, readable only by you. The Snippets room never touches the network.
 
