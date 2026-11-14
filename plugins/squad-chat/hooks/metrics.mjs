@@ -224,8 +224,9 @@ export function turnEnded(u, at) {
 // model is a step of it, and each tool call hangs under the request that
 // made it, a subagent's own calls under the call that started the agent.
 // Short previews (the prompt, the reply, a call's input and the first lines
-// of its result) are kept for this pane alone: Copy and Share leave them out,
-// and the Agents room's feed never sees them.
+// of its result) are kept for this pane alone: Copy and Share leave them out
+// (they carry a call's tool and its brief summary, as the Agents room's feed
+// does), and the feed never sees them.
 const STEPS = 30;
 const TURNS = 30;
 const SUBCALLS = 40;
