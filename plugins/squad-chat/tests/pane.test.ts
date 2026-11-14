@@ -936,6 +936,22 @@ const branchPr = (checks: any[]) => ({
   mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', reviews: [{ author: { login: 'alice' }, state: 'APPROVED' }], reviewRequests: [{ login: 'bob' }],
 })
 
+test('the docked pane closes from a ✕ at its top left, where no host covers it', SLOW, async ($, on) => {
+  const closed: string[] = []
+  on('ui.close', (_$: any, e: any) => { closed.push(e.id); return { value: undefined } })
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  bridge.emit({ type: 'ready', socket: '/tmp/fake.sock', pid: 1 }, { type: 'auth', state: 'signed_out', user: null })
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  const bar = await ui.find({ type: 'Box', key: 'brand' }) as any
+  expect(bar?.children[0]?.props.key).toBe('close-pane')                // first on the top line
+  await ui.press({ key: 'close-pane' })
+  await settle()
+  expect(closed).toEqual(['squad-chat'])
+  await ui.unmount()
+})
+
 test('built-in rooms have tabs even signed out; the chat tab brings the sign-in back', SLOW, async ($, on) => {
   const bridge = fakeBridge(on)
   await bridge.start($)

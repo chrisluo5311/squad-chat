@@ -1390,6 +1390,7 @@ export function register(on, options) {
       onPetMode: (mode) => setPetMode($, mode),
       onToggleMore: (id) => { if (!state.moreOpen.delete(id)) state.moreOpen.add(id); $.ui.invalidate("ui.render"); },
       onPetWalk: (walk) => { state.pet.walk = walk; savePet($); $.ui.invalidate("ui.render"); },
+      onClose: () => { void $.ui.close({ id: PANE_ID }); },
     });
   });
 
