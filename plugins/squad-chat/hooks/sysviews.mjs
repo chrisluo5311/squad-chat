@@ -9,7 +9,7 @@ import { state } from "./state.mjs";
 import { theme, level, nameColor } from "./theme.mjs";
 import {
   cells, clip, fit, fmtTokens, fmtUsd, fmtDur, fmtSpan, relTime, age, resetLabel,
-  bar, stretchBar, sparkline, meter, tiles, line, col, stackCards, card, CARD_GAP, LABEL_W,
+  bar, stretchBar, sparkline, meter, tiles, line, stackCards, card, CARD_GAP, LABEL_W,
   bigNumber, lineChart, xml, inlineCut,
 } from "./widgets.mjs";
 import {

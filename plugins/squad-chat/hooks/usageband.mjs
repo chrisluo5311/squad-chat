@@ -19,9 +19,9 @@ import { forecast, shortModel } from "./sysviews.mjs";
 import * as K from "./bandkit.mjs";
 import { capsule, draw, label, value, sub, sep } from "./bands.mjs";
 
-const WINDOW_MS = { five_hour: 5 * 3_600_000, seven_day: 7 * 86_400_000 };
-const SHORT = { five_hour: "5h", seven_day: "7d" };
-const COLOR = { five_hour: theme.git, seven_day: theme.agents };   // leaf, lilac
+const WINDOW_MS = { five_hour: 5 * 3_600_000 };
+const SHORT = { five_hour: "5h" };
+const COLOR = { five_hour: theme.git };   // leaf
 const clamp = (pct) => Math.min(100, Math.max(0, Number(pct) || 0));
 
 // How much of a window's time is gone, 0-100, or null when unknown.
@@ -74,7 +74,7 @@ export function usageSections(now, columns = 100) {
     const used = l.percentUsed;
     const elapsed = elapsedOf(l, now);
     const pace = paceWord(used, elapsed);
-    const head = `${l.kind === "five_hour" ? "5-hour" : "7-day"} window · ${used == null ? "no reading yet" : `${Math.round(used)}% used`}`;
+    const head = `5-hour window · ${used == null ? "no reading yet" : `${Math.round(used)}% used`}`;
     out.push({
       key: l.kind,
       color: COLOR[l.kind],

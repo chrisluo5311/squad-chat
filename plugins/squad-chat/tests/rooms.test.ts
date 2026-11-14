@@ -238,6 +238,13 @@ test("Trajectory: a long Agent call outlives hundreds of its subagent's calls an
   }
   expect(u.traced.size).toBeLessThanOrEqual(200)
   expect(traceEnded(u, 'A', { at: 900, isError: false })).toBe(true)
+  // A call that has ended and whose answer is in is let go at once.
+  traceCall(u, 'k', { tool: 'Read', input: {}, at: 901 })
+  traceEnded(u, 'k', { at: 902, isError: false })
+  expect(u.traced.has('k')).toBe(true)
+  stepToolResult(u, 'k', 'text')
+  expect(u.traced.has('k')).toBe(false)
+  expect(u.steps[0].calls.at(-1).chars).toBe(4)
   expect(trajectoryLive(u)).toBeNull()
 })
 

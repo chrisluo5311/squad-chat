@@ -1523,7 +1523,7 @@ export function register(on, options) {
     try {
       const at = Date.now();
       key = toolStarted(state.usage, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform });
-      traceCall(state.usage, key, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform });
+      traceCall(state.usage, key, { tool: e.tool, agentId: e.agentId, input: e, at, platform: state.platform, summary: state.usage.calls.get(key)?.summary });
       sysChanged($);
     }
     catch { /* the call matters more than its timing */ }

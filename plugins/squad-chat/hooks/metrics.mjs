@@ -289,12 +289,10 @@ function inputPairs(input) {
 export function stepPrompt(u, text, at = Date.now()) {
   // A turn with no words (an image alone, one the engine started) is still a
   // turn: its requests mustn't land under the one before.
-  u.turns.push({ n: ++u.turnN, at, prompt: preview(text), chars: String(text ?? "").length, piece: null });
+  u.turns.push({ n: ++u.turnN, at, prompt: preview(text), chars: String(text ?? "").length });
   if (u.turns.length > TURNS) u.turns.splice(0, u.turns.length - TURNS);
   if (!text) return;
-  const piece = { kind: "prompt", label: "prompt", chars: String(text).length, turn: u.turns.at(-1) };
-  u.turns.at(-1).piece = piece;
-  u.stepIn.push(piece);
+  u.stepIn.push({ kind: "prompt", label: "prompt", chars: String(text).length, turn: u.turns.at(-1) });
 }
 
 // A tool's answer, which goes to the model with the next request. The call
@@ -303,6 +301,7 @@ export function stepPrompt(u, text, at = Date.now()) {
 // the next request, so the others' shares aren't inflated.
 export function stepToolResult(u, key, text, { tool, agentId } = {}) {
   const call = u.traced.get(key);
+  if (call?.done) u.traced.delete(key);   // ended and answered: nothing is left to find it by its key for
   const chars = String(text ?? "").length;
   // A subagent's call shows no result on its row: its lines aren't kept.
   if (call) { call.chars = chars; call.lines = call.agentId ? [] : firstLines(text); }
@@ -382,8 +381,10 @@ function splitBySize(pieces, total) {
 // started that agent. A subagent's row opens to its status and timing alone,
 // so its input isn't kept (hundreds of calls an agent, each up to 2,000
 // characters an argument).
-export function traceCall(u, key, { tool, agentId, input, at, platform }) {
-  const call = { key, tool, agentId: agentId ?? null, toolUseId: input?.tool_use_id ?? null, summary: toolSummary(tool, input, platform), input: agentId ? [] : inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
+// `summary` is the feed entry's when the caller has it, so the input is
+// read and scanned for secrets once a call.
+export function traceCall(u, key, { tool, agentId, input, at, platform, summary = toolSummary(tool, input, platform) }) {
+  const call = { key, tool, agentId: agentId ?? null, toolUseId: input?.tool_use_id ?? null, summary, input: agentId ? [] : inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
   if (agentId) {
     const owner = agentCall(u, agentId);
     if (!owner) return null;
@@ -402,8 +403,10 @@ export function traceCall(u, key, { tool, agentId, input, at, platform }) {
   return call;
 }
 
-// Past TRACED, the oldest finished calls go first: a running one (a long
-// Agent call under hundreds of its subagent's) must still find its end.
+// A call leaves `traced` once it has ended and its answer is in (see
+// stepToolResult). This is for the ones whose answer never came (a call
+// that threw): past TRACED the oldest finished go first, as a running one (a
+// long Agent call under hundreds of its subagent's) must still find its end.
 // Running ones go only past twice that, when their ends were surely lost.
 function forgetTraced(u) {
   let over = u.traced.size - TRACED;
@@ -441,7 +444,7 @@ function agentCall(u, id, depth = 0) {
 function linkAgent(u, a, toolUseId) {
   if (a.call || a.parentId) return;
   if (toolUseId) {
-    const call = [...u.traced.values()].findLast((c) => !c.agentId && c.toolUseId === toolUseId);
+    const call = u.steps.flatMap((s) => s.calls).findLast((c) => c.toolUseId === toolUseId);
     if (!call) return;
     if (call.tool === "Agent" || call.tool === "Task") call.agent ??= { id: a.id, type: a.type };
     a.call = call;
