@@ -317,6 +317,33 @@ test('Trajectory: a teammate is not taken for the Agent call that is running', (
   expect(u.steps[0].calls[1].agent).toEqual({ id: 'a2', type: 'Explore' })
 })
 
+test('Trajectory: an agent is paired with the call that started it by the call\'s id, never by a guess', () => {
+  const u = createUsage()
+  stepPrompt(u, 'go', 0)
+  stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), stepResult(1_000, 10), 10)
+  // Two Agent calls in one message, the same description.
+  traceCall(u, 'A1', { tool: 'Agent', input: { tool_use_id: 'tu_1', description: 'review the diff', subagent_type: 'Explore' }, at: 20 })
+  traceCall(u, 'A2', { tool: 'Agent', input: { tool_use_id: 'tu_2', description: 'review the diff', subagent_type: 'Plan' }, at: 21 })
+  traceCall(u, 'W', { tool: 'Workflow', input: { tool_use_id: 'tu_3' }, at: 22 })
+  agentSpawned(u, { id: 'a1', type: 'Explore', description: 'review the diff', parentId: null, toolUseId: 'tu_1', at: 23 })
+  agentSpawned(u, { id: 'a2', type: 'Plan', description: 'review the diff', parentId: null, toolUseId: 'tu_2', at: 24 })
+  const [first, second, flow] = u.steps[0].calls
+  expect([first.agent, second.agent]).toEqual([{ id: 'a1', type: 'Explore' }, { id: 'a2', type: 'Plan' }])
+  expect(first.input.map(([k]: any) => k)).toEqual(['description', 'subagent_type'])   // the id isn't its input
+  // A workflow's agents all carry its Workflow call's id: their calls hang under it.
+  agentSpawned(u, { id: 'w1', type: 'general-purpose', description: 'review', parentId: null, toolUseId: 'tu_3', at: 25 })
+  agentSpawned(u, { id: 'w2', type: 'general-purpose', description: 'verify', parentId: null, toolUseId: 'tu_3', at: 26 })
+  traceCall(u, 'k1', { tool: 'Read', agentId: 'w1', input: {}, at: 27 })
+  traceCall(u, 'k2', { tool: 'Grep', agentId: 'w2', input: {}, at: 28 })
+  traceCall(u, 'k3', { tool: 'Read', agentId: 'a2', input: {}, at: 29 })
+  expect(flow.sub.map((c: any) => c.tool)).toEqual(['Read', 'Grep'])
+  expect([first.subN, second.subN]).toEqual([0, 1])
+  // An id that names no call here links nothing, even with one Agent call open.
+  traceCall(u, 'A3', { tool: 'Agent', input: { tool_use_id: 'tu_4', description: 'map the repo' }, at: 30 })
+  agentSpawned(u, { id: 'x', type: 'general-purpose', description: 'map the repo', parentId: null, toolUseId: 'tu_gone', at: 31 })
+  expect(u.steps[0].calls[3].agent).toBeNull()
+})
+
 test('Trajectory: a request that fails hands what it carried to the retry, measured from the last that came back', () => {
   const u = createUsage()
   stepPrompt(u, 'look around', 0)

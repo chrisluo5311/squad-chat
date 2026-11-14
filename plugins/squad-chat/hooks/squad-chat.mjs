@@ -1531,7 +1531,7 @@ export function register(on, options) {
   on("agent.spawn", async ($, e, next) => {
     const r = await next(e);
     if (r?.agentId) {
-      agentSpawned(state.usage, { id: r.agentId, type: e.subagentType || (e.isTeammate ? "teammate" : "agent"), description: e.description, parentId: e.parentAgentId, at: Date.now() });
+      agentSpawned(state.usage, { id: r.agentId, type: e.subagentType || (e.isTeammate ? "teammate" : "agent"), description: e.description, parentId: e.parentAgentId, toolUseId: e.tool_use_id, at: Date.now() });
       sysChanged($);
     }
     return r;

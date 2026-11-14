@@ -358,7 +358,7 @@ function splitBySize(pieces, total) {
 // asked for it (the last one sent), a subagent's under the call that
 // started that agent.
 export function traceCall(u, key, { tool, agentId, input, at, platform }) {
-  const call = { key, tool, agentId: agentId ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
+  const call = { key, tool, agentId: agentId ?? null, toolUseId: input?.tool_use_id ?? null, summary: toolSummary(tool, input, platform), input: inputPairs(input), at, ms: null, isError: false, done: false, chars: null, lines: [], tokens: null, agent: null, sub: [], subN: 0, subTools: {} };
   if (agentId) {
     const owner = agentCall(u, agentId);
     if (!owner) return null;
@@ -407,10 +407,21 @@ function agentCall(u, id, depth = 0) {
   return a.call ?? (a.parentId ? agentCall(u, a.parentId, depth + 1) : null);
 }
 
-// A subagent the session spawned finds the Agent call that started it: the
-// newest one still running with no agent yet, its description first.
-function linkAgent(u, a) {
+// A subagent the session spawned finds the call that started it by the
+// call's own id, which agent.spawn carries: two Agent calls in one message
+// with the same description each keep their own agent, and a workflow's
+// agents all hang under its Workflow call. An id that names no call here (a
+// teammate's, a resumed run's) links nothing. Only with no id at all is it
+// the newest Agent call still running with no agent yet, its description first.
+function linkAgent(u, a, toolUseId) {
   if (a.call || a.parentId) return;
+  if (toolUseId) {
+    const call = [...u.traced.values()].findLast((c) => !c.agentId && c.toolUseId === toolUseId);
+    if (!call) return;
+    if (call.tool === "Agent" || call.tool === "Task") call.agent ??= { id: a.id, type: a.type };
+    a.call = call;
+    return;
+  }
   const open = u.steps.flatMap((s) => s.calls).filter((c) => (c.tool === "Agent" || c.tool === "Task") && !c.agent && !c.done);
   const said = toolSummary("Agent", { description: a.description });
   // By its description, or the one running when there's no other to mistake it for.
@@ -567,14 +578,14 @@ function agentEntry(u, id, at) {
   return a;
 }
 
-export function agentSpawned(u, { id, type, description, parentId, at }) {
+export function agentSpawned(u, { id, type, description, parentId, toolUseId, at }) {
   if (!id) return false;
   const a = agentEntry(u, id, at);
   a.type = type || a.type;
   a.description = description || a.description;
   a.parentId = parentId ?? a.parentId;
   a.startedAt = Math.min(a.startedAt, at);
-  linkAgent(u, a);
+  linkAgent(u, a, toolUseId);
   return true;
 }
 
