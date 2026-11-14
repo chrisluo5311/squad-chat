@@ -5,7 +5,7 @@ import { fitSections } from '../hooks/bands.mjs'
 import { shortTool, trajectoryText } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
 import { state } from '../hooks/state.mjs'
-import { frameKey } from '../hooks/squad-chat.mjs'
+import { frameKey, breakdownWanted } from '../hooks/squad-chat.mjs'
 import { createToolbox, rerun, pickTool, toolWords, MAX_INPUT } from '../hooks/toolbox.mjs'
 import { createHabits, addHabit, deleteHabit, habitStreaks } from '../hooks/habits.mjs'
 import { noteProvider, serverLabel, toolSummary, createUsage, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, agentSpawned, applyOverhead, trajectory, trajectoryTotals, trajectoryLive, preview } from '../hooks/metrics.mjs'
@@ -392,6 +392,31 @@ test("Trajectory: a full breakdown names what is in each of FIXED's categories, 
   expect(noteProvider(u, 'mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__guide', { plugin: 'mcp:claude.ai Claude Docs', tier: 'user' })).toBe(true)
   expect(noteProvider(u, 'Read', { plugin: 'engine', tier: 'core' })).toBe(false)   // only MCP tools
   expect(serverLabel(u, docs)).toBe('claude.ai Claude Docs')
+})
+
+test('Trajectory: FIXED left open asks for the full breakdown again only while the Usage room is on show', () => {
+  const saved = { usage: state.usage, view: state.view, sysRooms: state.sysRooms, paneShown: state.paneShown, sel: state.traj.sel }
+  const u = createUsage()
+  Object.assign(state, { usage: u, view: 'usage', sysRooms: ['usage'], paneShown: true })
+  state.traj.sel = 'fixed'
+  try {
+    stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), stepResult(1_000, 10), 10)
+    expect(breakdownWanted()).toBe('full')                              // the row is open and its lists unread
+    applyOverhead(u, { categories: [{ name: 'System tools', tokens: 7_300, kind: 'used' }], systemTools: [{ name: 'Read', tokens: 7_300 }] })
+    expect(breakdownWanted()).toBeNull()                                // read: fresh for a few requests
+    for (let i = 1; i <= 8; i++) stepEnded(u, stepStarted(u, { turnId: 't', index: i, at: i * 10 }), stepResult(1_000, 10), i * 10 + 5)
+    expect(breakdownWanted()).toBe('full')                              // on show: the lists are read again
+    state.paneShown = false
+    expect(breakdownWanted()).toBe('summary')                           // the pane shut: the totals alone, which cost nothing
+    Object.assign(state, { paneShown: true, view: 'chat' })
+    expect(breakdownWanted()).toBe('summary')                           // another room on show
+    Object.assign(state, { view: 'usage' })
+    state.traj.sel = null
+    expect(breakdownWanted()).toBe('summary')                           // the row closed
+  } finally {
+    Object.assign(state, { usage: saved.usage, view: saved.view, sysRooms: saved.sysRooms, paneShown: saved.paneShown })
+    state.traj.sel = saved.sel
+  }
 })
 
 test('band: an MCP tool is named by its own name', () => {

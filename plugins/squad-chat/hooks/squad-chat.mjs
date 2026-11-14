@@ -597,7 +597,8 @@ async function saveSysRooms($, list) {
 }
 
 // The engine's figures, asked for directly: on opening the room, and for
-// the context breakdown (estimated locally, so it costs nothing).
+// the context breakdown. A summary is estimated locally and costs nothing.
+// A full one counts each category with the token-count API (see breakdownWanted).
 // This session's tokens and chart, kept per session across reloads, and
 // dropped once a session has been idle for a week.
 const USAGE_PREFIX = "usage:";
@@ -616,15 +617,24 @@ async function restoreSessionUsage($) {
   }
 }
 
+// Which breakdown to ask for, or null for none: the summary when it's open,
+// and now and then for the Trajectory card's FIXED row. That row open asks
+// for the full one, which names what is in each category, and again once it
+// is a few requests old, but only while the Usage room is on show in the
+// pane: a full one sends the API a request per tool and memory file, too
+// much for a list nobody is looking at. With the row closed, or the room
+// away, the summary's totals do and the lists already named stay.
+export function breakdownWanted() {
+  const u = state.usage;
+  const onShow = state.paneShown && activeView() === "usage";
+  if (onShow && state.traj.sel === "fixed" && (!u.overhead?.parts || wantsOverhead(u))) return "full";
+  return u.showBreakdown || wantsOverhead(u) ? "summary" : null;
+}
+
 async function refreshUsage($) {
   try {
-    // The breakdown when it's open, and now and then for the Trajectory card's
-    // FIXED row. Opening that row asks for the full one, which names what is
-    // in each category, once: after that the summary's totals do, and the
-    // lists it named stay until a full one is asked for again.
-    const full = state.traj.sel === "fixed" && (!state.usage.overhead?.parts || wantsOverhead(state.usage));
-    const breakdown = full || state.usage.showBreakdown || wantsOverhead(state.usage);
-    const u = await $.session.usage(breakdown ? { breakdown: full ? "full" : "summary" } : {});
+    const breakdown = breakdownWanted();
+    const u = await $.session.usage(breakdown ? { breakdown } : {});
     applyMeasure(state.usage, u, Date.now());
     if (u?.context?.breakdown) {
       state.usage.breakdown = u.context.breakdown;
@@ -1263,7 +1273,11 @@ export function register(on, options) {
     state.paneFocused = props.isFocused === true;
     paneSurface = e.surface;
     if (state.paneFocused) void markRead($);
-    if (!state.paneShown) { state.paneShown = true; syncRooms($); }
+    if (!state.paneShown) {
+      state.paneShown = true;
+      syncRooms($);
+      if (breakdownWanted() === "full") void refreshUsage($);   // FIXED left open while the pane was shut: its lists catch up
+    }
     // The pane draws lines and charts as Svg where a surface paints them; the
     // terminal keeps its glyphs, so it is drawn as though it had no Svg.
     const els = $.ui.resolve(e);
