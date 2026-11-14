@@ -1601,6 +1601,8 @@ test('Snippet room: an empty list says how to add one; a long one gives way with
 // The desktop draws snippets as code blocks with labeled buttons, and its
 // Delete asks once more before it runs.
 test('Snippet room on the desktop: code blocks with their own copy, a Share button, and a Delete that asks first', SLOW, async ($, on) => {
+  const copied: string[] = []
+  on('ui.copy', (_$: any, e: any) => { copied.push(e.text); return { value: { isCopied: true } } })
   const room = JSON.parse(JSON.stringify(SNIPPET_ROOM))
   room.layout.cards[0].desktop = { ...room.layout.cards[0].body, act: { label: 'Delete', action: 'delete', field: 'name' }, code: true }
   const bridge = fakeBridge(on, { store: { view: 'snippet' } })
@@ -1614,6 +1616,10 @@ test('Snippet room on the desktop: code blocks with their own copy, a Share butt
   expect(await desk.find({ type: 'Code' })).toBeDefined()
   expect(await desk.find({ key: `copy-c0-${first.id}` })).toBeUndefined()   // the code block carries its own copy
   expect(await desk.find({ key: `share-c0-${first.id}` })).toBeDefined()
+  // One saved without a language is drawn as text, which has no copy of its own: a button copies it.
+  await desk.press({ key: `copy-c0-${SNIPS[1].id}` })
+  await settle()
+  expect(copied).toEqual([SNIPS[1].body])
   const del = `act-c0-${first.id}`
   await desk.press({ key: del })
   expect(bridge.calls.some((c) => c.path === '/fnroom/action')).toBe(false)     // the first press only asks
