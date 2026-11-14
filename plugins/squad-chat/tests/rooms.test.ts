@@ -121,6 +121,20 @@ test('Redraws while Claude works: a second at a time only for rooms that move by
   for (const view of ['habits', 'toolbox', 'clipboard', 'pet', 'usage']) expect(frameKey(view, at)).toBe(frameKey(view, at + 1_000))
   for (const view of ['focus', 'agents', 'git']) expect(frameKey(view, at)).not.toBe(frameKey(view, at + 1_000))
   expect(frameKey('habits', at)).not.toBe(frameKey('habits', at + MIN))   // a new day still shows
+  // Usage while a call runs: its timer on the Trajectory card and the band counts by the second.
+  const saved = state.usage
+  const u = createUsage()
+  state.usage = u
+  try {
+    stepPrompt(u, 'go', 0)
+    stepEnded(u, stepStarted(u, { turnId: 't', index: 0, at: 0 }), { usage: { input_tokens: 1_000, output_tokens: 10 }, answer: '', stopReason: 'tool_use' }, 10)
+    traceCall(u, 'k1', { tool: 'Bash', input: { command: 'sleep 90' }, at: 20 })
+    expect(frameKey('usage', at)).not.toBe(frameKey('usage', at + 1_000))
+    traceEnded(u, 'k1', { at: 30, isError: false })
+    expect(frameKey('usage', at)).toBe(frameKey('usage', at + 1_000))   // idle again: back to the minute
+  } finally {
+    state.usage = saved
+  }
 })
 
 test('Habits: the streak running and the longest, a year back at most', () => {

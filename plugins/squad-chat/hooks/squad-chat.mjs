@@ -15,7 +15,7 @@
 import { state, applyEvent, resetBridgeState, currentRoom, bandRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
 import { paneView, bandView } from "./views.mjs";
-import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, applyOverhead, wantsOverhead, noteProvider } from "./metrics.mjs";
+import { applyMeasure, applyTurnUsage, recordTurnContext, usageSnapshot, restoreUsage, toolStarted, toolEnded, turnStarted, turnEnded, agentSpawned, applyAgentList, agentCounts, runningCalls, stepPrompt, stepToolResult, stepStarted, stepChunk, stepEnded, traceCall, traceEnded, applyOverhead, wantsOverhead, noteProvider, trajectoryLive } from "./metrics.mjs";
 import { toggleTurn, scrollTraj } from "./trajview.mjs";
 import { fetchGit, diffGit } from "./github.mjs";
 import { heartbeat, beatKey } from "./sessions.mjs";
@@ -1047,15 +1047,16 @@ async function petLoop($) {
 }
 
 // What a built-in room's drawing changes with as time passes. Usage moves by
-// the second only while a subagent runs (its spinner and timer); otherwise
-// the session's span and the spend buckets move by the minute. A redraw a
-// second for nothing made the desktop's input box flicker all through a turn.
+// the second while a turn is under way (the Trajectory card's and the band's
+// timers on the request or call that is running) or a subagent runs (its
+// spinner and timer); idle, the session's span and the spend buckets move by
+// the minute. A redraw a second for nothing made the desktop's input box flicker.
 // Habits, Toolbox, Clipboard and Pet have nothing that moves by the second
 // (Clawd's frames have a loop of their own), so they keep to the minute too.
 let lastFrame = "";
 const BY_MINUTE = new Set(["habits", "toolbox", "clipboard", "pet"]);
 export function frameKey(view, now) {
-  if (BY_MINUTE.has(view) || (view === "usage" && !agentCounts(state.usage).running)) return `${view}:${Math.floor(now / 60_000)}`;
+  if (BY_MINUTE.has(view) || (view === "usage" && !agentCounts(state.usage).running && !trajectoryLive(state.usage))) return `${view}:${Math.floor(now / 60_000)}`;
   return `${view}:${Math.floor(now / 1000)}`;
 }
 
