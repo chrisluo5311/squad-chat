@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer, tickFocus, dayOf } from '../hooks/focus.mjs'
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
+import { BACKDROPS, createBackdrop, restoreBackdrop, backdropWords, NO_THEME } from '../hooks/backdrop.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { shortTool, took, trajectoryText, scrollTraj, wrappedRows } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
@@ -538,3 +539,42 @@ test('band: the trajectory after the 5-hour window, always, in the largest form 
   }
 })
 
+
+test('Backdrop: every scene is a whole SVG that fits the Svg element, with a scene name the engine takes', () => {
+  for (const it of BACKDROPS) {
+    expect(it.id).toMatch(/^[A-Za-z0-9_-]{1,64}$/)
+    expect(it.art.startsWith('<svg ')).toBe(true)
+    expect(it.art.endsWith('</svg>')).toBe(true)
+    expect(it.art.length).toBeLessThan(131_072)
+    expect(it.art).not.toMatch(/<script|href="http/i)
+  }
+})
+
+test('Backdrop: a saved pick that no longer exists is dropped; typed words find a backdrop', () => {
+  const b = createBackdrop()
+  restoreBackdrop(b, { pick: 'gone', frost: 'nope' })
+  expect(b).toMatchObject({ pick: null, frost: 'medium' })
+  restoreBackdrop(b, { pick: 'tide', frost: 'strong' })
+  expect(b).toMatchObject({ pick: 'tide', frost: 'strong' })
+  expect(backdropWords('Night  Sky')).toEqual({ pick: 'night-sky' })
+  expect(backdropWords('dusk-hills')).toEqual({ pick: 'dusk-hills' })
+  expect(backdropWords('LIGHT')).toEqual({ frost: 'light' })
+  expect(backdropWords('none')).toEqual({ pick: null })
+  expect(backdropWords('sunset')).toBeNull()
+})
+
+test('Backdrop: no scene blurs frame by frame or has a <style>', () => {
+  for (const it of BACKDROPS) {
+    expect(it.art).not.toContain('feGaussianBlur')
+    expect(it.art).not.toContain(' style="')
+    expect(it.art).not.toContain('<style')   // the desktop drew a scene with a media rule in its <style> standing still
+    expect(it.thumb.startsWith('<svg width="1600" height="1000" ')).toBe(true)
+  }
+})
+
+test('Backdrop: only a Claude Code with no $.theme counts as too old, not a theme that was refused', () => {
+  expect(NO_THEME.test("Cannot read properties of undefined (reading 'set')")).toBe(true)
+  expect(NO_THEME.test("undefined is not an object (evaluating '$.theme.set')")).toBe(true)
+  expect(NO_THEME.test("theme.set: the attribute 'sparkle' is not known")).toBe(false)
+  expect(NO_THEME.test('HooksError: environment 3: $ was revoked')).toBe(false)
+})

@@ -602,6 +602,7 @@ const SYS_INPUT = {
   toolbox: { placeholder: "text for the tool, a tool's name, or /tool hash hello", label: "run" },
   clipboard: { placeholder: "clear · /help", label: "run" },
   pet: { placeholder: "auto, or a mood: vibe typing wave cheer sleepy …", label: "run" },
+  backdrop: { placeholder: "a backdrop's name, off, or light · medium · strong", label: "run" },
 };
 function inputMode() {
   const view = activeView();
@@ -774,6 +775,7 @@ const SYS_HINTS = {
   toolbox: "⧉ copies · kept in memory, never shared",
   clipboard: "⧉ copies again · kept in memory, never shared",
   pet: "Clawd follows what goes on, or keeps one mood",
+  backdrop: "shows in the Desktop and mobile apps",
 };
 
 // A built-in room's hints, after a Share button that posts its snapshot

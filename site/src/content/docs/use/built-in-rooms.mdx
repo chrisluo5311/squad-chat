@@ -1,6 +1,6 @@
 ---
 title: Built-in rooms
-description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks, Ping, Lo-fi and Docker tabs that sit before your chat rooms.
+description: The Usage, Git, Agents, Focus, Habits, Toolbox, Clipboard, Pet, Snippets, Monitor, Weather, Tech News, Stocks, Ping, Lo-fi, Docker and Backdrop tabs that sit before your chat rooms.
 ---
 
 These tabs appear before your chat rooms. They require no server and no sign-in, and nothing in them reaches a chat room unless you share it.
@@ -23,8 +23,9 @@ These tabs appear before your chat rooms. They require no server and no sign-in,
 | [⌁ Ping](#-ping) | Whether your servers answer, and how fast | `/chat rooms +ping` |
 | [♫ Lo-fi](#-lo-fi) | Music while you work | `/chat rooms +lofi` |
 | [◰ Docker](#-docker) | Containers, images, volumes, networks, and a container's logs | `/chat rooms +docker` |
+| [☾ Backdrop](#-backdrop) | A picture behind the conversation in the Desktop and mobile apps | `/chat rooms +backdrop` |
 
-Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). The last seven access the network, your clipboard or Docker, so they must be added manually. In the desktop app, **+** in the header also adds one.
+Open one with its tab, or `/chat <room>` (`/chat usage`, `/chat stock`). Clipboard through Docker access the network, your clipboard or Docker, and Backdrop only shows in the Desktop and mobile apps, so these must be added manually. In the desktop app, **+** in the header also adds one.
 
 ## ◔ Usage
 
@@ -159,6 +160,15 @@ Lofi Girl and SomaFM through [mpv](https://mpv.io) and [yt-dlp](https://github.c
 <figure class="shot pane"><img src="/squad-chat/media/rooms/docker.png" alt="The Docker room: the unhealthy container shop-api with its CPU, memory, port and last log lines, above the list of containers." /></figure>
 
 This computer's Docker, through the `docker` CLI: containers, images, volumes and networks, one section at a time. `1` to `4` switch between them, as do the buttons at the top. Press a container's name to see its CPU, memory and last five log lines below the list. The one needing a look (unhealthy or restarting) comes first and is shown until you pick another. The band above the prompt names what needs a look, a crashed container (exited with an error) first and in red. It only reads, and works with Docker Desktop, OrbStack and colima.
+
+## ☾ Backdrop
+
+A picture behind the conversation, picked from six drawn for squad-chat: Night Sky, Tide and Coral Glow move slowly, Dusk Hills, Blueprint and Paper stay still. The Desktop and mobile apps draw it, and the Desktop app frosts its panels over it. The terminal and VS Code draw none, so there the room is a list to pick from, and the pick shows the next time you open the Desktop app.
+
+- **Frost**: how much the panels blur and cover the backdrop. Light, Medium or Strong.
+- **One look at a time.** A backdrop replaces any theme another plugin set. **Off** takes it away.
+- Type a backdrop's name, `off`, or `light`, `medium` or `strong` in the room's box.
+- The pick is kept on this computer for every session. Needs Claude Code 2.1.319 or newer.
 
 ## More rooms, sharing, hiding
 

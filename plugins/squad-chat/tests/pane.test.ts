@@ -1732,7 +1732,7 @@ test('/chat rooms takes function rooms too, and +name or -name', SLOW, async ($,
   await $.command.run({ command: 'chat', args: 'rooms +snippet -git' })
   expect(logs.at(-1)).toBe('Rooms with tabs: usage, agents, focus, habits, toolbox, pet, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms weather' })
-  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, habits, toolbox, clipboard, pet, snippet.')
+  expect(logs.at(-1)).toBe('No room called weather. There are usage, git, agents, focus, habits, toolbox, clipboard, pet, backdrop, snippet.')
   await $.command.run({ command: 'chat', args: 'rooms snippet' })
   expect(logs.at(-1)).toBe('Rooms with tabs: snippet.')
 })
@@ -3736,4 +3736,141 @@ test('Ping room: a heartbeat per server, pressed open for its details and presse
   expect(await band.find({ type: 'Text', text: '⌁ Ping' })).toBeDefined()
   expect(await band.find({ type: 'Text', text: 'db.internal:5432 down 18m · 1 up · 1.1.1.1 10 ms' })).toBeDefined()
   await band.unmount()
+})
+
+// ---------------------------------------------------------------- Backdrop room
+
+// $.theme faked: each set or clear recorded, the desktop said to draw it.
+function fakeTheme(on: any) {
+  const calls: { op: 'set' | 'clear'; args?: any }[] = []
+  on('theme.set', (_$: any, e: any) => { calls.push({ op: 'set', args: e }); return { value: { isDrawn: true, requestId: 'look' } } })
+  on('theme.clear', () => { calls.push({ op: 'clear' }); return { value: { isDrawn: false, reason: 'cleared' } } })
+  return calls
+}
+
+test('Backdrop room: a pick sets the scene with its frost; Off clears it', SLOW, async ($, on) => {
+  const theme = fakeTheme(on)
+  const store: Record<string, unknown> = { view: 'backdrop', sysRooms: ['usage', 'backdrop'] }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await svgAlts(desk)).toEqual(expect.arrayContaining(['Night Sky backdrop', 'No backdrop']))
+  expect(await desk.find({ type: 'Text', text: "Press a backdrop's name to switch to it" })).toBeDefined()
+  expect(theme).toEqual([])   // nothing set until a pick
+
+  await desk.press({ key: 'pick-tide' })
+  await settle()
+  expect(theme.at(-1)).toEqual({ op: 'set', args: { backdrop: { scene: 'tide', glass: { blur: 16, opacity: 0.55 } }, overrideColorScheme: 'dark' } })
+  expect(store.backdrop).toEqual({ pick: 'tide', frost: 'medium' })
+  expect((await desk.find({ key: 'pick-tide' }) as any)?.props.label).toBe('● Tide')
+
+  // Another of ours goes straight in, and the frost sets it again.
+  await desk.press({ key: 'pick-paper' })
+  await settle()
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('paper')
+  expect(theme.at(-1)?.args?.overrideColorScheme).toBe('light')
+  await desk.press({ key: 'frost-strong' })
+  await settle()
+  expect(theme.at(-1)?.args?.backdrop?.glass).toEqual({ blur: 28, opacity: 0.75 })
+  expect(store.backdrop).toEqual({ pick: 'paper', frost: 'strong' })
+
+  await desk.press({ key: 'pick-off' })
+  await settle()
+  expect(theme.at(-1)).toEqual({ op: 'clear' })
+  expect(store.backdrop).toEqual({ pick: null, frost: 'strong' })
+  await desk.unmount()
+})
+
+test('Backdrop room: the terminal lists them to pick by name, and a start sets the saved one again', SLOW, async ($, on) => {
+  const theme = fakeTheme(on)
+  recordUi(on)
+  const store: Record<string, unknown> = { view: 'backdrop', sysRooms: ['backdrop'], backdrop: { pick: 'night-sky', frost: 'light' } }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  expect(theme).toEqual([{ op: 'set', args: { backdrop: { scene: 'night-sky', glass: { blur: 8, opacity: 0.35 } }, overrideColorScheme: 'dark' } }])
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await settle()
+  expect((await ui.find({ key: 'pick-night-sky' }) as any)?.props.label).toBe('● Night Sky')
+  expect((await ui.find({ key: 'pick-tide' }) as any)?.props.label).toBe('○ Tide')
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  // Typed in the room's box: a name, a frost, off.
+  await ui.input({ key: 'compose', text: 'coral glow' })
+  await settle()
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('coral-glow')
+  await ui.input({ key: 'compose', text: 'medium' })
+  await settle()
+  expect(store.backdrop).toEqual({ pick: 'coral-glow', frost: 'medium' })
+  await ui.input({ key: 'compose', text: 'off' })
+  await settle()
+  expect(theme.at(-1)).toEqual({ op: 'clear' })
+  await ui.unmount()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal', props: bandProps })
+  expect(await band.find({ type: 'Text', text: /no backdrop/ })).toBeDefined()
+  await band.unmount()
+})
+
+test('Backdrop: the desktop draws our scene behind the conversation, and leaves another plugin\'s alone', SLOW, async ($, on) => {
+  fakeTheme(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  await settle()
+  const glass = { blur: 16, opacity: 0.55 }
+  const ours = await $.ui.mount({ plugin: 'squad-chat', component: 'Backdrop', requestId: 'look', surface: 'desktop', props: { scene: 'dusk-hills', plugin: 'squad-chat', glass } } as any)
+  const drawn = (await ours.findAll({ type: 'Svg' }) as any[]).find((x) => x.props.alt === 'Dusk Hills backdrop')
+  expect(drawn?.props.isInteractive).toBe(true)
+  expect(drawn?.props.source.length).toBeLessThan(131_072)
+  await ours.unmount()
+  const theirs = await $.ui.mount({ plugin: 'squad-chat', component: 'Backdrop', requestId: 'look', surface: 'desktop', props: { scene: 'dusk-hills', plugin: 'other-look', glass } } as any)
+  expect(await theirs.find({ type: 'Svg' })).toBeUndefined()
+  await theirs.unmount()
+})
+
+test('Backdrop room: the one on is set again when pressed, and a change keeps what another session saved', SLOW, async ($, on) => {
+  const theme = fakeTheme(on)
+  const store: Record<string, unknown> = { view: 'backdrop', sysRooms: ['usage', 'backdrop'], backdrop: { pick: 'tide', frost: 'medium' } }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  expect(theme.length).toBe(1)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  // Another plugin's look may have replaced it: pressing it sets it again.
+  await desk.press({ key: 'pick-tide' })
+  await settle()
+  expect(theme.length).toBe(2)
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('tide')
+  // Another session picked Paper since: the frost here keeps that pick.
+  store.backdrop = { pick: 'paper', frost: 'medium' }
+  await desk.press({ key: 'frost-strong' })
+  await settle()
+  expect(store.backdrop).toEqual({ pick: 'paper', frost: 'strong' })
+  expect(theme.at(-1)?.args?.backdrop).toEqual({ scene: 'paper', glass: { blur: 28, opacity: 0.75 } })
+  await desk.unmount()
+
+  // VS Code draws pictures but no backdrop: a list, as in the terminal.
+  const ide = await $.ui.mount({ ...PANE, surface: 'vscode', props: props('dock') })
+  await settle()
+  expect(await svgAlts(ide)).not.toContain('Tide backdrop')
+  expect((await ide.find({ key: 'pick-paper' }) as any)?.props.label).toBe('● Paper')
+  await ide.unmount()
+})
+
+test('Backdrop room: /backdrop in the pane opens it', SLOW, async ($, on) => {
+  recordUi(on)
+  fakeTheme(on)
+  const store: Record<string, unknown> = { view: 'usage', sysRooms: ['usage', 'backdrop'] }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await settle()
+  await ui.input({ key: 'compose', text: '/backdrop' })
+  await settle()
+  expect(store.view).toBe('backdrop')
+  await ui.unmount()
 })
