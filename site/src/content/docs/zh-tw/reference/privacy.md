@@ -48,7 +48,7 @@ Usage 和 Agents 房間從 Claude Code 讀取此工作階段本身的數據：co
 
 Clipboard 房間預設為關閉。加入分頁後，該房間每 2 秒讀取一次剪貼簿（`pbpaste`、`wl-paste` 或 `xclip`），並僅在該工作階段的記憶體中保留最近 30 筆項目。資料不會寫入硬碟或傳送至任何地方，疑似密鑰的項目會遮蔽顯示，且此房間無法分享至聊天室。
 
-Focus 保留您設定的時間長度與完成番茄鐘的日期，Habits 保留您的習慣及過去一年每日的完成次數，Pet 保留其心情、羈絆與一份簡短紀錄（僅記錄何人在哪個房間發言，不包含內容），Backdrop 保留您選的背景與 Frost。上述資料皆存放於本機 Claude Code 的外掛儲存區。Backdrop 的背景圖由 squad-chat 自己繪製，不會從網路載入任何東西。
+Focus 保留您設定的時間長度與完成番茄鐘的日期，Habits 保留您的習慣及過去一年每日的完成次數，Pet 保留其心情、羈絆與一份簡短紀錄（僅記錄何人在哪個房間發言，不包含內容），Backdrop 保留您選的背景（所有專案共用、各專案資料夾、各工作階段各一份）、Frost，以及說出「merged」時是否放煙火。上述資料皆存放於本機 Claude Code 的外掛儲存區。Backdrop 的背景圖由 squad-chat 自己繪製，不會從網路載入任何東西。為了在「merged」時放煙火，它會檢查 Claude 回覆的文字裡有沒有這個字，但不會保存任何內容。
 
 您儲存的 snippet 存放於 `~/.config/squad-chat/room-data/snippet/list.json`，僅限您本人讀取。Snippets 房間不會進行任何網路連線。
 

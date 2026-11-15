@@ -59,6 +59,7 @@ description: squad-chat 的所有 slash 指令、功能說明與範例。
 | `/chat notify on` / `off` | 有人提及 `@yourname` 時發出通知（預設關閉） |
 | `/chat dnd on` / `off` / `auto` | 勿擾模式：不發出通知，橫條與狀態列保持靜音，其他成員會看到您處於忙碌狀態。`auto` 會在 Claude 處理超過 30 秒的工作時自動開啟，結束後彙整錯過的訊息。 |
 | `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` / `backdrop` | 開啟窗格並切換至指定的[內建房間](/squad-chat/zh-tw/use/built-in-rooms/)。`/chat chat` 返回聊天。 |
+| `/chat fireworks` / `fireworks on` / `off` | 在[背景](/squad-chat/zh-tw/use/built-in-rooms/#-backdrop)上放幾秒鐘的煙火。`on` 和 `off` 決定 Claude 說出「merged」時是否也自動放。 |
 | `/chat band [room]` | 在不開啟窗格的情況下，於提示列上方的橫條顯示另一個房間。橫條上的 **‹** 和 **›** 功能相同，每次切換一個房間。 |
 | `/chat rooms <list>` | 設定要顯示分頁的內建房間：`usage`、`git`、`agents`、`focus`、`habits`、`toolbox`、`clipboard`、`pet`、`snippet`、`monitor`、`weather`、`news`、`stock`、`ping`、`lofi`、`docker`、`backdrop` 可任意組合，或使用 `all`、`none`。`+name` 和 `-name` 用於加入或移除單一房間。 |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | 從提示列操控 Focus 房間的計時器。單獨輸入 `/focus` 會開啟房間。 |

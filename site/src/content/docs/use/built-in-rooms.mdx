@@ -165,12 +165,14 @@ This computer's Docker, through the `docker` CLI: containers, images, volumes an
 
 <video class="demo-video backdrop-video" src="/squad-chat/media/rooms/backdrop.mp4" poster="/squad-chat/media/rooms/backdrop.jpg" controls muted loop playsinline preload="metadata" aria-label="The Backdrop room in the Claude desktop app: Night Sky, Tide, Coral Glow, Dusk Hills, Blueprint and Paper behind the conversation in turn, then the frost changed"></video>
 
-A picture behind the conversation, picked from six drawn for squad-chat: Night Sky, Tide and Coral Glow move slowly, Dusk Hills, Blueprint and Paper stay still. The Desktop and mobile apps draw it, and the Desktop app frosts its panels over it. The terminal and VS Code draw none, so there the room is a list to pick from, and the pick shows the next time you open the Desktop app.
+A picture behind the conversation, picked from 21 drawn for squad-chat, 13 for a dark window and 8 for a light one. Most move slowly (Aurora, Rain, Lanterns, Jellyfish, Clouds and more), and Dusk Hills, Blueprint, Paper, Terrazzo, Meadow, Desert Noon and Contours stay still. The Desktop and mobile apps draw it, and the Desktop app frosts its panels over it. The terminal and VS Code draw none, so there the room is a list to pick from, and the pick shows the next time you open the Desktop app.
 
+- **Apply to**: Every project, This project or This session. A pick goes where this is set. A session shows its own pick, else its project's, else the one for every project. A git worktree counts as its main checkout. **Clear** hands a project's or a session's pick back to the layer under it. Other sessions of the project take a project pick at their next turn.
 - **Frost**: how much the panels blur and cover the backdrop. Light, Medium or Strong.
+- **Fireworks**: a show of about 7 seconds over the backdrop, then the backdrop comes back. **Set them off** in the room or `/chat fireworks`. They also go off when Claude says a pull request or branch was merged ("PR #12 is merged"), over the room's own backdrop and while the room has its tab, unless you pick **Only by hand** (or `/chat fireworks off`). "Not merged yet" or "once it's merged" set off nothing.
 - **One look at a time.** A backdrop replaces any theme another plugin set. **Off** takes it away.
-- Type a backdrop's name, `off`, or `light`, `medium` or `strong` in the room's box.
-- The pick is kept on this computer for every session. Needs Claude Code 2.1.319 or newer.
+- Type a backdrop's name, `off`, or `light`, `medium` or `strong` in the room's box. Put `project`, `session` or `everywhere` after a name to pick for that one (`aurora session`). `clear project` and `clear session` clear a layer, and `fireworks` sets off a show.
+- The picks are kept on this computer. Needs Claude Code 2.1.319 or newer.
 
 ## More rooms, sharing, hiding
 

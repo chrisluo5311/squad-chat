@@ -11,6 +11,7 @@
 //   metrics.mjs   this session's numbers, github.mjs the Git room's data,
 //   sessions.mjs  heartbeats shared with the other sessions on this computer
 //   focus.mjs, habits.mjs, toolbox.mjs, clipboard.mjs, pet.mjs, backdrop.mjs   the Focus, Habits, Toolbox, Clipboard, Pet and Backdrop rooms
+//   scenes.mjs    the Backdrop room's drawings and its fireworks
 
 import { state, applyEvent, resetBridgeState, currentRoom, bandRoom, roomMessages, statusText, isQuiet, missedText, activeView, DEFAULT_ROOMS, ROOM_ID, roomIds, enabledRooms, isFnRoom } from "./state.mjs";
 import { PRIVATE_ARGS, TOOL_USAGE, login, logout, rename, room, who, dnd, share, shareItem, snippet, lofi, chatAdmin, retargetShare, sendMessage, paneInput } from "./commands.mjs";
@@ -24,7 +25,7 @@ import { createHabits, habitWords, habitsSaved, restoreHabits, markHabit, toggle
 import { createToolbox, toolWords, pickTool, rerun as toolAgain, setInput as setToolInput, MAX_INPUT as MAX_TOOL_INPUT } from "./toolbox.mjs";
 import { createClipboard, addClip, removeClip, CLIP_READERS, CLIP_WATCH, CLIP_ONCE_WIN } from "./clipboard.mjs";
 import { createPet, petMood, petFrameMs, petTick, petNote, petRound, petSaved, restorePet, MOODS } from "./pet.mjs";
-import { createBackdrop, backdropSaved, restoreBackdrop, themeArgs, backdropWords, backdropById, NO_THEME } from "./backdrop.mjs";
+import { createBackdrop, backdropSaved, restoreBackdrop, restoreLayers, layersSaved, setLayer, clearLayer, projectFolder, themeArgs, showArgs, sceneFor, backdropWords, NO_THEME, UNSUPPORTED, SHOW_MS, saysMerged } from "./backdrop.mjs";
 import { emojiSelected, emojiUnselected } from "./widgets.mjs";
 
 state.focus = createFocus();
@@ -649,11 +650,12 @@ function conversationEnded($) {
 }
 // The session this process now runs, and what was kept for it (a resumed one's tokens and chart).
 // A theme is the session's, so the backdrop goes with the old one: set it
-// again, at the first turn after a /clear or a resume.
+// again, at the first turn after a /clear or a resume (this session's own
+// pick read again: outside the desktop app the key is the session's id).
 async function adoptSession($) {
   try { state.sessionId = String(await $.session.id()); } catch { state.sessionId = null; }
   await restoreSessionUsage($);
-  if (state.backdrop.pick) await applyBackdrop($);
+  startBackdrop($);
   afterChange($);
 }
 
@@ -764,7 +766,6 @@ async function restoreRooms($) {
     restoreFocus(state.focus, await $.store.get("focus"), timer, now);
     restoreHabits(state.habits, await $.store.get("habits"));
     restorePet(state.pet, await $.store.get("pet"));
-    restoreBackdrop(state.backdrop, await $.store.get("backdrop"));
     state.pet.lastBusyAt = Date.now();
     state.focusStatus = focusStatus(now);
   } catch (err) {
@@ -895,8 +896,12 @@ async function roomInput($, view, text, say = () => {}, { typed = false } = {}) 
   if (view === "backdrop") {
     const asked = backdropWords(text);
     if (!asked) return false;
-    if (asked.frost) setBackdropFrost($, asked.frost);
-    else pressBackdrop($, asked.pick);
+    if (asked.fireworks) say(await fireworks($, { asked: true }));
+    else if ("auto" in asked) setFireworksAuto($, asked.auto);
+    else if (asked.clear) clearBackdropLayer($, asked.clear);
+    else if (asked.frost) setBackdropFrost($, asked.frost);
+    else if ("pick" in asked) pressBackdrop($, asked.pick, asked.scope);
+    else setBackdropScope($, asked.scope);
     return true;
   }
   return false;
@@ -914,52 +919,212 @@ function setPetMode($, mode) {
 
 // ---------------------------------------------------------------- Backdrop
 
-// The pick and the frost are every session's on this computer.
-function saveBackdrop($) {
-  $.store.set("backdrop", backdropSaved(state.backdrop))
-    .catch((err) => $.ui.log(`squad-chat: could not save the backdrop: ${err?.message ?? err}`, { to: "debug" }));
+// The pick for every project, the frost, where the next pick goes and the
+// fireworks setting are kept under "backdrop". A project's own pick is kept
+// by its folder, a session's by its key, each map for every session here.
+const PROJECTS_KEY = "backdropProjects";
+const SESSIONS_KEY = "backdropSessions";
+
+// One read, change and save at a time: a press, a turn's look at the other
+// sessions' picks and a show each wait for the one before, so none puts
+// back what another is saving.
+let backdropQueue = Promise.resolve();
+function inQueue(task) {
+  const p = backdropQueue.then(task);
+  backdropQueue = p.catch(() => {});
+  return p;
 }
 
-// Sets the look for the backdrop picked. `clear` takes it away when the
-// person turns it off: a clear takes whatever look stands, so only then.
-async function applyBackdrop($, { clear = false } = {}) {
+// Who set this session's look last, as far as this mod saw: "ours",
+// "other" (another plugin), "none" (cleared), or "unknown" (not since
+// this mod loaded). The hooks on theme.set and theme.clear tell, and a set
+// or clear of this mod's own is counted while it runs.
+let look = "unknown";
+let settingLook = 0;
+async function setLook($, args) {
+  settingLook++;
+  try {
+    const r = await $.theme.set(args);
+    look = "ours";
+    if (r && !r.isDrawn) $.ui.log(`squad-chat: the backdrop isn't drawn here: ${r.reason}`, { to: "debug" });
+    return r;
+  } finally { settingLook--; }
+}
+async function clearLook($) {
+  settingLook++;
+  try { await $.theme.clear(); look = "none"; } finally { settingLook--; }
+}
+function lookFailed($, err) {
+  if (NO_THEME.test(String(err?.message ?? err))) { state.backdrop.supported = false; $.ui.invalidate("ui.render"); }
+  $.ui.log(`squad-chat: could not set the backdrop: ${err?.message ?? err}`, { to: "debug" });
+}
+
+// This session's key, and the project's folder where it's asked for. The
+// desktop app's own id for its row outlives /clear: the session's id
+// serves elsewhere. The folder is kept once git has answered: one stood in
+// for a git that didn't answer (too slow, say) is asked again next time.
+let projectSure = false;
+async function backdropKeys($, { project }) {
+  const b = state.backdrop;
+  let host = "";
+  try { host = (await $.env.get("CLAUDE_CODE_HOST_SESSION_ID")) || ""; } catch { /* not the desktop app */ }
+  b.sessionKey = host ? `host:${host}` : state.sessionId;
+  if (!project || projectSure) return;
+  try {
+    let cwd = null, root = null;
+    try { cwd = await $.session.cwd(); } catch { /* the root serves */ }
+    try { root = await $.session.root(); } catch { /* the folder it runs in */ }
+    if (!cwd && !root) throw new Error("no folder to tell it by");
+    const found = await projectFolder((argv) => $.process.run(argv, { cwd: cwd ?? root, timeoutMs: 5_000 }), root ?? cwd);
+    b.projectKey = found.folder;
+    projectSure = found.sure;
+  } catch (err) {
+    $.ui.log(`squad-chat: could not tell the backdrop's project: ${err?.message ?? err}`, { to: "debug" });
+  }
+}
+
+// Every layer as kept now: another session may have changed one since.
+// The project is told only where some project has a pick or the room has
+// a tab. Throws when the store can't be read.
+async function readBackdrop($) {
+  const b = state.backdrop;
+  restoreBackdrop(b, await $.store.get("backdrop"));
+  const projects = await $.store.get(PROJECTS_KEY);
+  const sessions = await $.store.get(SESSIONS_KEY);
+  const anyProject = !!projects && typeof projects === "object" && Object.keys(projects).length > 0;
+  await backdropKeys($, { project: anyProject || state.sysRooms.includes("backdrop") });
+  restoreLayers(b, projects, sessions);
+  return { projects, sessions };
+}
+
+// `maps` is what was read: null when the read failed, and then only the
+// pick for every project and the settings are written, so a map read as
+// nothing never stands in for the other projects' and sessions' picks.
+async function saveBackdrop($, maps) {
   const b = state.backdrop;
   try {
-    const args = themeArgs(b);
-    const r = args ? await $.theme.set(args) : clear ? await $.theme.clear() : null;
-    if (args && r && !r.isDrawn) $.ui.log(`squad-chat: the backdrop isn't drawn here: ${r.reason}`, { to: "debug" });
+    await $.store.set("backdrop", backdropSaved(b));
+    if (!maps) return;
+    const kept = layersSaved(b, maps.projects, maps.sessions, Date.now());
+    await $.store.set(PROJECTS_KEY, kept.projects);
+    await $.store.set(SESSIONS_KEY, kept.sessions);
   } catch (err) {
-    if (NO_THEME.test(String(err?.message ?? err))) { b.supported = false; $.ui.invalidate("ui.render"); }
-    $.ui.log(`squad-chat: could not set the backdrop: ${err?.message ?? err}`, { to: "debug" });
+    $.ui.log(`squad-chat: could not save the backdrop: ${err?.message ?? err}`, { to: "debug" });
   }
 }
 
-// A change to the pick or the frost, on what is kept as it is now: another
-// session may have changed it since this one read it, and a save of this
-// one's copy would undo that. `fn` changes it and says whether to clear.
-async function changeBackdrop($, fn) {
-  const b = state.backdrop;
-  try { restoreBackdrop(b, await $.store.get("backdrop")); } catch (err) {
-    $.ui.log(`squad-chat: could not read the backdrop: ${err?.message ?? err}`, { to: "debug" });
-  }
-  const clear = fn(b);
-  saveBackdrop($);
-  $.ui.invalidate("ui.render");
-  await applyBackdrop($, { clear });
+// The look for the backdrop shown here: set, or cleared when none is left
+// and the look standing is this mod's own.
+async function applyBackdrop($) {
+  const args = themeArgs(state.backdrop);
+  try {
+    if (args) await setLook($, args);
+    else if (look === "ours") await clearLook($);
+  } catch (err) { lookFailed($, err); }
 }
 
-// A press on a backdrop, or on Off. The one on now is set again: another
-// plugin's look may have taken its place.
-function pressBackdrop($, id) {
-  void changeBackdrop($, (b) => {
-    const was = b.pick;
-    b.pick = id ?? null;
-    return !!was && !b.pick;
+// At a start, a reload or after a /clear: the layers read, and the backdrop
+// shown here set again.
+function startBackdrop($) {
+  void inQueue(async () => {
+    try { await readBackdrop($); } catch (err) {
+      $.ui.log(`squad-chat: could not read the backdrop: ${err?.message ?? err}`, { to: "debug" });
+    }
+    $.ui.invalidate("ui.render");
+    if (themeArgs(state.backdrop)) await applyBackdrop($);
   });
 }
 
+// A change in the room, made on what is kept as it is now. `sets` says what
+// it does to the look: "press" (a backdrop or Off pressed, set again even
+// if unchanged, since another plugin's may stand), "changed" (set where
+// the backdrop shown here or its frost changed), "never" (the scope or the
+// fireworks setting: no look of anyone's is touched). A show going on is
+// left to end: its end sets the look.
+function changeBackdrop($, fn, sets) {
+  return inQueue(async () => {
+    const b = state.backdrop;
+    let maps = null;
+    try { maps = await readBackdrop($); } catch (err) {
+      $.ui.log(`squad-chat: could not read the backdrop: ${err?.message ?? err}`, { to: "debug" });
+    }
+    const before = JSON.stringify(themeArgs(b));
+    fn(b);
+    await saveBackdrop($, maps);
+    $.ui.invalidate("ui.render");
+    if (b.show || sets === "never") return;
+    if (sets === "press" || JSON.stringify(themeArgs(b)) !== before) await applyBackdrop($);
+  });
+}
+
+// A press on a backdrop, or on Off, goes to the scope chosen (or the one typed after it).
+function pressBackdrop($, id, scope) {
+  void changeBackdrop($, (b) => setLayer(b, scope ?? b.scope, id ?? null), "press");
+}
+function setBackdropScope($, scope) {
+  void changeBackdrop($, (b) => { b.scope = scope; }, "never");
+}
+// This project's or this session's pick taken away: it follows the one under it again.
+function clearBackdropLayer($, scope) {
+  void changeBackdrop($, (b) => clearLayer(b, scope), "changed");
+}
 function setBackdropFrost($, frost) {
-  void changeBackdrop($, (b) => { b.frost = frost; return false; });
+  void changeBackdrop($, (b) => { b.frost = frost; }, "changed");
+}
+function setFireworksAuto($, auto) {
+  void changeBackdrop($, (b) => { b.auto = auto; }, "never");
+}
+
+// At each turn: a pick made for the project in another session shows here
+// too, but never over another plugin's look, and only a change sets it.
+function followBackdrop($) {
+  return inQueue(async () => {
+    const b = state.backdrop;
+    if (b.show || !b.supported || look === "other") return;
+    const before = JSON.stringify(themeArgs(b));
+    try { await readBackdrop($); } catch { return; }
+    if (JSON.stringify(themeArgs(b)) === before) return;
+    $.ui.invalidate("ui.render");
+    await applyBackdrop($);
+  });
+}
+
+// A short show over the scene shown here (or a night sky of its own), then
+// the look as it was. One at a time. A show nobody asked for (Claude said
+// "merged") goes only over this mod's own scene, so it never takes another
+// plugin's look away. Answers what to say, or null for an unasked show
+// that didn't go.
+let shows = 0;
+async function fireworks($, { asked }) {
+  const b = state.backdrop;
+  if (b.show) return asked ? "Fireworks are already going." : null;
+  if (!b.supported) return asked ? UNSUPPORTED : null;
+  b.show = ++shows;
+  let said;
+  try {
+    said = await inQueue(async () => {
+      try { await readBackdrop($); } catch { /* the last one read stands */ }
+      if (!asked && !(themeArgs(b) && look === "ours")) return null;
+      const r = await setLook($, showArgs(b, b.show));
+      return r && r.isDrawn === false ? "Fireworks. If none show, this window doesn't draw backdrops." : "Fireworks.";
+    });
+  } catch (err) {
+    b.show = 0;
+    lookFailed($, err);
+    return NO_THEME.test(String(err?.message ?? err)) ? UNSUPPORTED : `Fireworks could not be shown: ${err?.message ?? err}`;
+  }
+  if (said === null) { b.show = 0; return null; }
+  $.ui.invalidate("ui.render");
+  void (async () => {
+    await $.clock.sleep(SHOW_MS);
+    await inQueue(async () => {
+      b.show = 0;
+      $.ui.invalidate("ui.render");
+      // Another plugin set its look during the show: that one stays.
+      if (look === "ours") await applyBackdrop($);
+    });
+  })().catch(() => { b.show = 0; });
+  return said;
 }
 
 // The clipboard, read every couple of seconds while the room has a tab.
@@ -1223,7 +1388,7 @@ async function answer($, fn) {
 }
 
 const COMMANDS = [
-  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|backdrop|snippet|monitor|weather|news|stock|lofi|docker|ping | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
+  { name: "chat", description: "squad-chat: open the pane: chat, or a room such as Usage, Git, Agents, Focus or Snippets (notify, dnd, rooms: settings)", argumentHint: "[usage|git|agents|focus|habits|toolbox|clipboard|pet|backdrop|snippet|monitor|weather|news|stock|lofi|docker|ping | fireworks [on|off] | band <room> | rooms <list> | set <room> <setting> <value> | store [words] | install|update|uninstall <room> | notify on|off | dnd on|off|auto]" },
   { name: "say", description: "squad-chat: send a message to the current room", argumentHint: "<message>" },
   { name: "room", description: "squad-chat: list, switch, join/create, leave or delete rooms", argumentHint: "[name] [passcode] | leave <name> | delete <name>" },
   { name: "who", description: "squad-chat: who's online" },
@@ -1269,8 +1434,9 @@ export function register(on, options) {
     await restoreSessionUsage($);
     await restoreRooms($);
     // A theme is display only: nothing brings it back, so it's set again at
-    // each start (a reload too) while a backdrop is picked.
-    if (state.backdrop.pick) void applyBackdrop($);
+    // each start (a reload too) while a backdrop is picked. In the
+    // background: telling the project may run git, and the chat waits for none of it.
+    startBackdrop($);
     try { cwdCache = await $.session.cwd(); } catch { cwdCache = null; }
     try { state.usage.model = (await $.session.model()) || state.usage.model; } catch { /* the first turn tells */ }
     beat($, false);   // this session's own row in the Agents room, before any heartbeat goes out
@@ -1302,6 +1468,14 @@ export function register(on, options) {
       if (!list.includes(want)) return say(`No room called ${want} with a tab. There are ${list.join(", ")}.`);
       await setView($, want);
       return say(`The band shows ${want}.`);
+    }
+    // "/chat fireworks": a show now. "on" or "off" after it: when Claude says "merged".
+    const fw = /^fireworks\b\s*(?:auto\s+)?(on|off)?$/i.exec(args);
+    if (fw) {
+      if (!fw[1]) return say(await fireworks($, { asked: true }));
+      const auto = fw[1].toLowerCase() === "on";
+      setFireworksAuto($, auto);
+      return say(auto ? 'Fireworks go off when Claude says "merged" (with the Backdrop room\'s tab on).' : "Fireworks go off only when you set them off.");
     }
     const admin = chatAdmin(call, args, say, { saveRooms: (list) => saveSysRooms($, list) });
     if (admin) return admin;
@@ -1459,6 +1633,10 @@ export function register(on, options) {
       onPetWalk: (walk) => { state.pet.walk = walk; savePet($); $.ui.invalidate("ui.render"); },
       onBackdropPick: (id) => pressBackdrop($, id),
       onBackdropFrost: (frost) => setBackdropFrost($, frost),
+      onBackdropScope: (scope) => setBackdropScope($, scope),
+      onBackdropClear: (scope) => clearBackdropLayer($, scope),
+      onFireworks: () => { void fireworks($, { asked: true }).then((said) => { if (said && said !== "Fireworks.") $.ui.toast(said); }); },
+      onFireworksAuto: (auto) => setFireworksAuto($, auto),
       onClose: () => { void $.ui.close({ id: PANE_ID }); },
     });
   });
@@ -1501,12 +1679,12 @@ export function register(on, options) {
   // A Claude Code too old for backdrops refuses the hook, and the rest goes on.
   try {
     on("ui.render", { component: "Backdrop" }, ($, e, next) => {
-      const it = backdropById(e.props?.scene);
+      const it = sceneFor(e.props?.scene);
       const owner = String(e.props?.plugin ?? "").split("@")[0];
       if (!it || (owner && owner !== "squad-chat")) return next(e);
       const { Svg } = $.ui.resolve(e);
       if (!Svg) return next(e);
-      return Svg({ key: "backdrop", source: it.art, alt: `${it.name} backdrop`, isInteractive: true });
+      return Svg({ key: "backdrop", source: it.art, alt: it.alt, isInteractive: true });
     });
   } catch (err) {
     void err;
@@ -1531,6 +1709,7 @@ export function register(on, options) {
     const id = e.turnId;
     turn = id;
     if (sessionMoved) { sessionMoved = false; adoptSession($).catch(() => {}); }
+    else if (!e.agentId && state.sysRooms.includes("backdrop")) void followBackdrop($).catch(() => {});
     if (!e.agentId) {
       turnStarted(state.usage, Date.now());
       stepPrompt(state.usage, e.text, Date.now());
@@ -1660,6 +1839,34 @@ export function register(on, options) {
     }
     return next(e);
   });
+
+  // Fireworks when Claude says "merged", while the Backdrop room has a tab
+  // and the room hasn't turned them off. Only the word is looked for.
+  on("session.append", { door: "response" }, ($, e, next) => {
+    const b = state.backdrop;
+    if (!e.agentId && b.auto && b.supported && !b.show && state.sysRooms.includes("backdrop")) {
+      if (saysMerged(e.message?.content)) void fireworks($, { asked: false }).catch(() => {});
+    }
+    return next(e);
+  });
+
+  // Who set the look last: this mod, another, or nobody (cleared). Only
+  // watched, passed on unchanged: the mod changes or clears a look of its
+  // own unasked, never another's. A Claude Code with no $.theme refuses these.
+  try {
+    on("theme.set", async ($, e, next) => {
+      const ours = settingLook > 0;
+      const r = await next(e);
+      if (!ours) look = "other";
+      return r;
+    });
+    on("theme.clear", async ($, e, next) => {
+      const ours = settingLook > 0;
+      const r = await next(e);
+      if (!ours) look = "none";
+      return r;
+    });
+  } catch { /* no themes here: the Backdrop room says so */ }
 
   on("session.append", { door: "command" }, ($, e, next) => {
     if (!privateCommand(e.message)) return next(e);
