@@ -165,12 +165,14 @@ Clawd 的專屬空間。牠的心情會隨工作階段變化：Claude 工作時�
 
 <video class="demo-video backdrop-video" src="/squad-chat/media/rooms/backdrop.mp4" poster="/squad-chat/media/rooms/backdrop.jpg" controls muted loop playsinline preload="metadata" aria-label="Claude 桌面版中的 Backdrop 房間：對話後方依序換成 Night Sky、Tide、Coral Glow、Dusk Hills、Blueprint 和 Paper，最後調整 Frost"></video>
 
-對話後方的背景圖，從六張為 squad-chat 繪製的圖中挑選：Night Sky、Tide 和 Coral Glow 會緩慢移動，Dusk Hills、Blueprint 和 Paper 是靜態的。桌面版和手機 App 會繪製背景，桌面版會把面板做成霧面玻璃疊在背景上。終端機和 VS Code 不繪製背景，所以在這些地方房間只是一份可挑選的清單，選好的背景會在下次開啟桌面版時套用。
+對話後方的背景圖，從 21 張為 squad-chat 繪製的圖中挑選，13 張適合深色視窗，8 張適合淺色視窗。大部分會緩慢移動（Aurora、Rain、Lanterns、Jellyfish、Clouds 等），Dusk Hills、Blueprint、Paper、Terrazzo、Meadow、Desert Noon 和 Contours 是靜態的。桌面版和手機 App 會繪製背景，桌面版會把面板做成霧面玻璃疊在背景上。終端機和 VS Code 不繪製背景，所以在這些地方房間只是一份可挑選的清單，選好的背景會在下次開啟桌面版時套用。
 
+- **Apply to**：Every project、This project 或 This session，選到的背景會套用到這裡設定的範圍。每個工作階段先看自己的選擇，沒有就用專案的，再沒有就用所有專案共用的。git worktree 算在主專案裡。**Clear** 會移除專案或工作階段自己的選擇，改回沿用下一層。同專案的其他工作階段會在下一輪對話時套用專案的選擇。
 - **Frost**：面板模糊與遮蓋背景的程度，可選 Light、Medium 或 Strong。
+- **Fireworks**：在背景上放大約 7 秒的煙火，結束後回到原本的背景。在房間裡按 **Set them off** 或輸入 `/chat fireworks`。房間有分頁、而且顯示的是這個房間的背景時，Claude 說 PR 或分支已經合併（例如「PR #12 is merged」）也會自動放，「not merged yet」或「once it's merged」這類句子不會觸發。選 **Only by hand**（或 `/chat fireworks off`）就只在手動時放。
 - **一次只有一種外觀。** 背景會取代其他外掛設定的主題。**Off** 會移除背景。
-- 在房間的輸入框輸入背景名稱、`off`，或 `light`、`medium`、`strong`。
-- 選擇會保存在這台電腦上，所有工作階段通用。需要 Claude Code 2.1.319 或更新版本。
+- 在房間的輸入框輸入背景名稱、`off`，或 `light`、`medium`、`strong`。在名稱後面加上 `project`、`session` 或 `everywhere` 可以指定範圍（例如 `aurora session`）。`clear project` 和 `clear session` 會移除該層的選擇，`fireworks` 會放煙火。
+- 選擇會保存在這台電腦上。需要 Claude Code 2.1.319 或更新版本。
 
 ## 更多房間、分享、隱藏
 

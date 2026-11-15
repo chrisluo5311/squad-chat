@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import { createFocus, start, adjust, progress, restoreFocus, streaks, focusTimer, tickFocus, dayOf } from '../hooks/focus.mjs'
 import { createPet, petTick, petSaved, restorePet } from '../hooks/pet.mjs'
-import { BACKDROPS, createBackdrop, restoreBackdrop, backdropWords, NO_THEME } from '../hooks/backdrop.mjs'
+import { BACKDROPS, createBackdrop, restoreBackdrop, backdropWords, NO_THEME, restoreLayers, layersSaved, setLayer, clearLayer, shownPick, shownFrom, projectFolder, themeArgs, showArgs, sceneFor, saysMerged, SESSIONS_KEPT } from '../hooks/backdrop.mjs'
 import { fitSections } from '../hooks/bands.mjs'
 import { shortTool, took, trajectoryText, scrollTraj, wrappedRows } from '../hooks/trajview.mjs'
 import { usageSections } from '../hooks/usageband.mjs'
@@ -550,10 +550,13 @@ test('Backdrop: every scene is a whole SVG that fits the Svg element, with a sce
   }
 })
 
-test('Backdrop: a saved pick that no longer exists is dropped; typed words find a backdrop', () => {
+test('Backdrop: a saved pick this version doesn\'t draw is kept but shows nothing; typed words find a backdrop', () => {
   const b = createBackdrop()
-  restoreBackdrop(b, { pick: 'gone', frost: 'nope' })
-  expect(b).toMatchObject({ pick: null, frost: 'medium' })
+  restoreBackdrop(b, { pick: 'from-a-newer-version', frost: 'nope' })
+  expect(b).toMatchObject({ pick: 'from-a-newer-version', frost: 'medium' })
+  expect(themeArgs(b)).toBeNull()
+  restoreBackdrop(b, { pick: { not: 'an id' } })
+  expect(b.pick).toBeNull()
   restoreBackdrop(b, { pick: 'tide', frost: 'strong' })
   expect(b).toMatchObject({ pick: 'tide', frost: 'strong' })
   expect(backdropWords('Night  Sky')).toEqual({ pick: 'night-sky' })
@@ -577,4 +580,136 @@ test('Backdrop: only a Claude Code with no $.theme counts as too old, not a them
   expect(NO_THEME.test("undefined is not an object (evaluating '$.theme.set')")).toBe(true)
   expect(NO_THEME.test("theme.set: the attribute 'sparkle' is not known")).toBe(false)
   expect(NO_THEME.test('HooksError: environment 3: $ was revoked')).toBe(false)
+})
+
+test('Backdrop: 21 scenes with names of their own, dark ones first', () => {
+  expect(BACKDROPS.length).toBe(21)
+  expect(new Set(BACKDROPS.map((x) => x.id)).size).toBe(21)
+  expect(new Set(BACKDROPS.map((x) => x.name.toLowerCase())).size).toBe(21)
+  const modes = BACKDROPS.map((x) => x.mode)
+  expect(modes.lastIndexOf('dark')).toBeLessThan(modes.indexOf('light'))
+})
+
+test('Backdrop: a session shows its own pick, else its project\'s, else every project\'s', () => {
+  const b = createBackdrop()
+  setLayer(b, 'everywhere', 'tide')
+  expect([shownPick(b), shownFrom(b)]).toEqual(['tide', 'everywhere'])
+  setLayer(b, 'project', 'aurora')
+  expect([shownPick(b), shownFrom(b)]).toEqual(['aurora', 'project'])
+  setLayer(b, 'session', null)   // none in this session, whatever the others say
+  expect([shownPick(b), shownFrom(b)]).toEqual([null, 'session'])
+  expect(themeArgs(b)).toBeNull()
+  clearLayer(b, 'session')
+  expect(shownPick(b)).toBe('aurora')
+  clearLayer(b, 'project')
+  expect(shownPick(b)).toBe('tide')
+  clearLayer(b, 'everywhere')   // every project's stays: it's the bottom layer
+  expect(b.pick).toBe('tide')
+})
+
+test('Backdrop: the layers are kept by project folder and session key, and read back', () => {
+  const b = createBackdrop()
+  Object.assign(b, { projectKey: '/code/app', sessionKey: 'host:1' })
+  setLayer(b, 'project', 'rain')
+  setLayer(b, 'session', 'clouds')
+  const kept = layersSaved(b, { '/code/other': 'paper' }, { 'host:0': { pick: null, at: 1 } }, 5)
+  expect(kept.projects).toEqual({ '/code/other': 'paper', '/code/app': 'rain' })
+  expect(kept.sessions).toEqual({ 'host:0': { pick: null, at: 1 }, 'host:1': { pick: 'clouds', at: 5 } })
+
+  const again = createBackdrop()
+  Object.assign(again, { projectKey: '/code/app', sessionKey: 'host:0' })
+  restoreLayers(again, kept.projects, kept.sessions)
+  expect([again.project, again.session]).toEqual(['rain', null])
+  // A backdrop a newer version drew is kept, so a save here doesn't drop it.
+  restoreLayers(again, { '/code/app': 'from-a-newer-version' }, { 'host:0': { pick: 42 } })
+  expect([again.project, again.session]).toEqual(['from-a-newer-version', undefined])
+  expect(layersSaved(again, { '/code/app': 'from-a-newer-version' }, {}, 7).projects).toEqual({ '/code/app': 'from-a-newer-version' })
+
+  // Cleared, the key goes.
+  clearLayer(b, 'project')
+  expect(layersSaved(b, kept.projects, kept.sessions, 6).projects).toEqual({ '/code/other': 'paper' })
+})
+
+test('Backdrop: only the newest sessions\' picks are kept', () => {
+  const sessions: Record<string, unknown> = {}
+  for (let i = 0; i < SESSIONS_KEPT; i++) sessions[`s${i}`] = { pick: 'tide', at: i }
+  const b = createBackdrop()
+  Object.assign(b, { sessionKey: 'new' })
+  setLayer(b, 'session', 'rain')
+  const kept = layersSaved(b, {}, sessions, 9_999).sessions
+  expect(Object.keys(kept).length).toBe(SESSIONS_KEPT)
+  expect(kept.s0).toBeUndefined()
+  expect(kept.new).toEqual({ pick: 'rain', at: 9_999 })
+})
+
+test('Backdrop: a git worktree counts as its main checkout; out of git, the session\'s folder', async () => {
+  const answers = (common: string, top = '') => async (argv: string[]) => argv.includes('--git-common-dir')
+    ? { exitCode: common ? 0 : 128, stdout: common, stderr: '' }
+    : { exitCode: top ? 0 : 128, stdout: top, stderr: '' }
+  expect(await projectFolder(answers('/code/app/.git\n'), '/x')).toEqual({ folder: '/code/app', sure: true })
+  expect(await projectFolder(answers('C:/code/app/.git\n'), 'C:\\x')).toEqual({ folder: 'C:/code/app', sure: true })
+  // A submodule's common folder lies inside the outer repository's .git: its own top serves.
+  expect(await projectFolder(answers('/code/app/.git/modules/lib\n', '/code/app/lib\n'), '/x')).toEqual({ folder: '/code/app/lib', sure: true })
+  // Not a repository: git said so, and the folder is the answer.
+  expect(await projectFolder(answers(''), '/home/me/notes')).toEqual({ folder: '/home/me/notes', sure: true })
+  // git never answered (missing, or too slow): a stand-in, to ask again later.
+  expect(await projectFolder(async () => { throw new Error('timed out') }, '/home/me')).toEqual({ folder: '/home/me', sure: false })
+})
+
+test('Backdrop: typed words pick for a scope, clear a layer, choose the scope, or set off fireworks', () => {
+  expect(backdropWords('aurora session')).toEqual({ pick: 'aurora', scope: 'session' })
+  expect(backdropWords('City Night project')).toEqual({ pick: 'city-night', scope: 'project' })
+  expect(backdropWords('off everywhere')).toEqual({ pick: null, scope: 'everywhere' })
+  expect(backdropWords('clear project')).toEqual({ clear: 'project' })
+  expect(backdropWords('session')).toEqual({ scope: 'session' })
+  expect(backdropWords('fireworks')).toEqual({ fireworks: true })
+  expect(backdropWords('fireworks off')).toEqual({ auto: false })
+  expect(backdropWords('sunset project')).toBeNull()
+  expect(backdropWords('constructor')).toBeNull()
+  expect(backdropWords('__proto__')).toBeNull()
+})
+
+test('Backdrop: a show draws the bursts over the scene shown, or a night sky where none is', () => {
+  const b = createBackdrop()
+  expect(showArgs(b, 1)).toEqual({ backdrop: { scene: 'fireworks-night', glass: { blur: 10, opacity: 0.45 } }, overrideColorScheme: 'dark' })
+  setLayer(b, 'project', 'clouds')
+  const a = showArgs(b, 1), c = showArgs(b, 2)
+  expect(a.overrideColorScheme).toBe('light')
+  expect(a.backdrop.scene).not.toBe(c.backdrop.scene)   // a second show is a new scene, so it starts afresh
+  for (const id of [a.backdrop.scene, c.backdrop.scene, 'fireworks-night']) {
+    expect(id).toMatch(/^[A-Za-z0-9_-]{1,64}$/)
+    const it = sceneFor(id)!
+    expect(it.art.startsWith('<svg ')).toBe(true)
+    expect(it.art.endsWith('</svg>')).toBe(true)
+    expect(it.art.length).toBeLessThan(131_072)
+    expect(it.art).not.toContain('<style')
+    expect(it.art).toContain('fill="freeze"')   // each burst plays once
+  }
+  expect(sceneFor('clouds--fireworks-a')!.alt).toBe('Fireworks over Clouds')
+  expect(sceneFor('nothing--fireworks-a')).toBeNull()
+  expect(sceneFor('nothing')).toBeNull()
+})
+
+test('Backdrop: only a reply saying a pull request or branch was merged sets off fireworks', () => {
+  const says = (text: string) => saysMerged([{ type: 'text', text }])
+  expect(says('PR #12 is merged.')).toBe(true)
+  expect(says('Merged into main.')).toBe(true)
+  expect(says('Done. The pull request was merged and the branch deleted.')).toBe(true)
+  expect(says('The tests pass.\nPR #40 merged.')).toBe(true)
+  // Not yet, not at all, or not a pull request.
+  expect(says("The PR can't be merged: there are conflicts.")).toBe(false)
+  expect(says('PR #12 is not merged yet.')).toBe(false)
+  expect(says("Once it's merged into main I'll tag it.")).toBe(false)
+  expect(says('I merged the two helpers into one.')).toBe(false)
+  expect(says('still unmerged')).toBe(false)
+  expect(says('a pattern emerged in the PR')).toBe(false)
+  expect(saysMerged([{ type: 'tool_use', name: 'merged' }])).toBe(false)
+  expect(saysMerged(undefined)).toBe(false)
+})
+
+test('Backdrop: the tiles together stay far under what the desktop draws of a pane, and stand still', () => {
+  // 21 moving tiles came to 266 KB and the desktop drew none of the pane.
+  const total = BACKDROPS.reduce((n, it) => n + it.thumb.length, 0)
+  expect(total).toBeLessThan(131_072)
+  for (const it of BACKDROPS) expect(it.thumb).not.toMatch(/<animate/)
 })

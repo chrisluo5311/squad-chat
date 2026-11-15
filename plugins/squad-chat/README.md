@@ -64,6 +64,7 @@ In a terminal 110 columns wide or more (fullscreen), the pane docks on the right
 | `/chat notify on` / `off` | Toast when someone writes `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and friends see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then sums up what you missed. |
 | `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` / `backdrop` | Open the pane on a built-in room |
+| `/chat fireworks` / `fireworks on` / `off` | Fireworks over the Backdrop room's backdrop, now or each time Claude says "merged" |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. **‹** and **›** on the band do the same, one room at a time. |
 | `/chat rooms <list>` | Which built-in rooms have tabs (`usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `ping`, `lofi`, `docker`, `backdrop`, `all` or `none`, or `+name` / `-name`). Clipboard, Weather, Tech News, Stocks, Ping, Lo-fi, Docker and Backdrop are off until you add them. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | The Focus room's Pomodoro timer, with a chime when focus or a break ends |
@@ -118,6 +119,7 @@ Every program is named in the code, with fixed arguments, and none comes from a 
 |---|---|---|
 | `node --version`, then `node bridge/dist/bridge.mjs` | When Claude Code starts | Checks for Node 22 or newer, then starts the bridge, the one process that talks to Supabase and the room hosts above |
 | `git`, `gh` | Git room, `/chat-share diff` | Reads this folder's branch, diff, pull requests and checks |
+| `git rev-parse` | Backdrop room, at start and when you pick for a project | Finds the project's folder (a worktree's main checkout) to keep a project's backdrop under. Read only |
 | `pbpaste`, `wl-paste` or `xclip`, or `powershell` on Windows | Clipboard room, only once you add it. On Windows also the Toolbox's paste, once each time you press it | Reads the clipboard every 2 seconds (on Windows, one PowerShell that stays up looks once a second) |
 | `vm_stat`, `sysctl`, `netstat`, `df`, `pmset`, `ioreg`, `macmon` (Mac), `nvidia-smi` (Linux, Windows), `netstat -e` and `powershell` (Windows) | Monitor room | Reads CPU, memory, disk, network, battery and GPU figures. On Windows, PowerShell reads the battery and page file every 30 seconds. No shell, no sudo |
 | `docker` (`ps`, `images`, `volume ls`, `network ls`, `stats`, `logs`) | Docker room, only once you add it | Reads what Docker has, every 5 seconds while the room is on show. Read only. No shell |
@@ -133,6 +135,8 @@ The mod watches Claude Code events to draw its rooms. It never asks for permissi
 | `tool.describe` | Notes which MCP server provides each tool, so the Usage room names servers by the name they were set up with, then passes the event on unchanged |
 | `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `agent.spawn`, `session.measure` | Measures timings, tokens and tool names for the Usage and Agents rooms, and keeps short previews of prompts, replies and tool calls in memory for the Usage room's Trajectory card, then passes each event on unchanged |
 | `session.append` | For `/say`, `/room` and `/chat-login` only, replaces the arguments with a placeholder before the transcript stores them, so messages and passcodes stay out of it |
+| `session.append` (Claude's replies) | While the Backdrop room has a tab and its fireworks are on, looks in the main conversation's replies for a sentence saying a pull request or branch was merged, to set off fireworks. Keeps nothing and changes nothing |
+| `theme.set`, `theme.clear` | Notes whether the look standing is the Backdrop room's own, so the room never changes or clears another plugin's look unasked. Passes each on unchanged |
 | `command.run` | Answers squad-chat's own slash commands |
 | `ui.*`, `clock`, `branch`, `pr`, `session.start`, `session.end` | Draws the pane and band, registers the commands, and stops the bridge when the session ends |
 

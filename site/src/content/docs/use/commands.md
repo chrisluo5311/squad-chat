@@ -59,6 +59,7 @@ description: Every squad-chat slash command, with a description and examples.
 | `/chat notify on` / `off` | Show a notification when someone mentions `@yourname` (off by default) |
 | `/chat dnd on` / `off` / `auto` | Do not disturb: no toasts, a quiet band and status line, and other members see you as busy. `auto` turns it on while Claude works on something longer than 30 seconds, then summarizes what you missed. |
 | `/chat usage` / `git` / `agents` / `focus` / `habits` / `toolbox` / `clipboard` / `pet` / `snippet` / `monitor` / `weather` / `news` / `stock` / `ping` / `lofi` / `docker` / `backdrop` | Open the pane on a [built-in room](/squad-chat/use/built-in-rooms/). `/chat chat` goes back to the chat. |
+| `/chat fireworks` / `fireworks on` / `off` | Set off fireworks over the [backdrop](/squad-chat/use/built-in-rooms/#-backdrop) for a few seconds. `on` and `off` choose whether they also go off when Claude says "merged". |
 | `/chat band [room]` | Show another room in the band above the prompt without opening the pane. The **‹** and **›** buttons on the band do the same, one room at a time. |
 | `/chat rooms <list>` | Which built-in rooms have tabs: any of `usage`, `git`, `agents`, `focus`, `habits`, `toolbox`, `clipboard`, `pet`, `snippet`, `monitor`, `weather`, `news`, `stock`, `ping`, `lofi`, `docker`, `backdrop`, or `all`, or `none`. `+name` and `-name` add or drop one. |
 | `/focus start` / `pause` / `skip` / `reset` / `<focus min> [break min]` | Drive the Focus room's timer from the prompt. `/focus` alone opens the room. |

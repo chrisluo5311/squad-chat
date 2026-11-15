@@ -3763,7 +3763,7 @@ test('Backdrop room: a pick sets the scene with its frost; Off clears it', SLOW,
   await desk.press({ key: 'pick-tide' })
   await settle()
   expect(theme.at(-1)).toEqual({ op: 'set', args: { backdrop: { scene: 'tide', glass: { blur: 16, opacity: 0.55 } }, overrideColorScheme: 'dark' } })
-  expect(store.backdrop).toEqual({ pick: 'tide', frost: 'medium' })
+  expect(store.backdrop).toMatchObject({ pick: 'tide', frost: 'medium' })
   expect((await desk.find({ key: 'pick-tide' }) as any)?.props.label).toBe('● Tide')
 
   // Another of ours goes straight in, and the frost sets it again.
@@ -3774,12 +3774,12 @@ test('Backdrop room: a pick sets the scene with its frost; Off clears it', SLOW,
   await desk.press({ key: 'frost-strong' })
   await settle()
   expect(theme.at(-1)?.args?.backdrop?.glass).toEqual({ blur: 28, opacity: 0.75 })
-  expect(store.backdrop).toEqual({ pick: 'paper', frost: 'strong' })
+  expect(store.backdrop).toMatchObject({ pick: 'paper', frost: 'strong' })
 
   await desk.press({ key: 'pick-off' })
   await settle()
   expect(theme.at(-1)).toEqual({ op: 'clear' })
-  expect(store.backdrop).toEqual({ pick: null, frost: 'strong' })
+  expect(store.backdrop).toMatchObject({ pick: null, frost: 'strong' })
   await desk.unmount()
 })
 
@@ -3803,7 +3803,7 @@ test('Backdrop room: the terminal lists them to pick by name, and a start sets t
   expect(theme.at(-1)?.args?.backdrop?.scene).toBe('coral-glow')
   await ui.input({ key: 'compose', text: 'medium' })
   await settle()
-  expect(store.backdrop).toEqual({ pick: 'coral-glow', frost: 'medium' })
+  expect(store.backdrop).toMatchObject({ pick: 'coral-glow', frost: 'medium' })
   await ui.input({ key: 'compose', text: 'off' })
   await settle()
   expect(theme.at(-1)).toEqual({ op: 'clear' })
@@ -3848,7 +3848,7 @@ test('Backdrop room: the one on is set again when pressed, and a change keeps wh
   store.backdrop = { pick: 'paper', frost: 'medium' }
   await desk.press({ key: 'frost-strong' })
   await settle()
-  expect(store.backdrop).toEqual({ pick: 'paper', frost: 'strong' })
+  expect(store.backdrop).toMatchObject({ pick: 'paper', frost: 'strong' })
   expect(theme.at(-1)?.args?.backdrop).toEqual({ scene: 'paper', glass: { blur: 28, opacity: 0.75 } })
   await desk.unmount()
 
@@ -3872,5 +3872,136 @@ test('Backdrop room: /backdrop in the pane opens it', SLOW, async ($, on) => {
   await ui.input({ key: 'compose', text: '/backdrop' })
   await settle()
   expect(store.view).toBe('backdrop')
+  await ui.unmount()
+})
+
+test('Backdrop room: a pick goes to the scope chosen, and Clear hands a layer back to the one under it', SLOW, async ($, on) => {
+  const theme = fakeTheme(on)
+  mock.env(on, { CLAUDE_CODE_HOST_SESSION_ID: 'row-7' })
+  on('session.cwd', () => ({ value: '/code/app-wt' }))   // a worktree of /code/app
+  const store: Record<string, unknown> = { view: 'backdrop', sysRooms: ['usage', 'backdrop'], backdrop: { pick: 'tide', frost: 'medium' } }
+  // A worktree's git answers with the main checkout's .git: that folder is the project.
+  const bridge = fakeBridge(on, { store, git: '/code/app/.git\n' })
+  await bridge.start($)
+  await settle()
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  expect(await desk.find({ type: 'Text', text: 'app' })).toBeDefined()   // the project's own name on its layer
+
+  await desk.press({ key: 'scope-project' })
+  await settle()
+  expect(store.backdrop).toMatchObject({ pick: 'tide', scope: 'project' })
+  await desk.press({ key: 'pick-aurora' })
+  await settle()
+  expect(store.backdropProjects).toEqual({ '/code/app': 'aurora' })
+  expect(store.backdrop).toMatchObject({ pick: 'tide' })   // every project's stays as it was
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('aurora')
+
+  await desk.press({ key: 'scope-session' })
+  await settle()
+  await desk.press({ key: 'pick-off' })
+  await settle()
+  expect(store.backdropSessions).toMatchObject({ 'host:row-7': { pick: null } })
+  expect(theme.at(-1)).toEqual({ op: 'clear' })
+
+  await desk.press({ key: 'clear-session' })
+  await settle()
+  expect(store.backdropSessions).toEqual({})
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('aurora')
+  await desk.press({ key: 'clear-project' })
+  await settle()
+  expect(store.backdropProjects).toEqual({})
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('tide')
+  await desk.unmount()
+})
+
+test('Backdrop room: a project\'s pick made in another session shows here at the next turn', SLOW, async ($, on) => {
+  const theme = fakeTheme(on)
+  on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
+  on('session.cwd', () => ({ value: '/code/app-wt' }))
+  const store: Record<string, unknown> = { view: 'backdrop', sysRooms: ['backdrop'], backdrop: { pick: 'tide', frost: 'medium' } }
+  const bridge = fakeBridge(on, { store, git: '/code/app/.git\n' })
+  await bridge.start($)
+  await settle()
+  expect(theme.length).toBe(1)
+  await $.turn.start({ turnId: 't1', text: 'hi' } as any)
+  await settle()
+  expect(theme.length).toBe(1)   // nothing changed: nothing set again
+  store.backdropProjects = { '/code/app': 'lanterns' }
+  await $.turn.start({ turnId: 't2', text: 'again' } as any)
+  await settle()
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('lanterns')
+})
+
+test('Backdrop room: fireworks go over the scene for a few seconds, one show at a time, then the scene comes back', SLOW, async ($, on) => {
+  const theme = fakeTheme(on)
+  recordUi(on)
+  const store: Record<string, unknown> = { view: 'backdrop', sysRooms: ['backdrop'], backdrop: { pick: 'night-sky', frost: 'light' } }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: props('dock') })
+  await settle()
+  await ui.input({ key: 'compose', text: 'fireworks' })
+  await settle()
+  const show = theme.at(-1)?.args
+  expect(show?.backdrop?.scene).toMatch(/^night-sky--fireworks-[ab]$/)
+  expect(show?.backdrop?.glass).toEqual({ blur: 8, opacity: 0.35 })
+  await ui.input({ key: 'compose', text: 'fireworks' })
+  await settle()
+  expect(theme.length).toBe(2)   // the start's set and the show: no second show on top
+  await bridge.clock.advance(7_000)
+  await settle()
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('night-sky')
+
+  await ui.input({ key: 'compose', text: 'fireworks off' })
+  await settle()
+  expect(store.backdrop).toMatchObject({ auto: false })
+  await ui.unmount()
+
+  // With no backdrop, a show brings its own night sky and clears it after.
+  store.backdrop = { pick: null, frost: 'light', auto: false }
+  await $.command.run({ command: 'chat', args: 'fireworks' })
+  await settle()
+  expect(theme.at(-1)?.args?.backdrop?.scene).toBe('fireworks-night')
+  await bridge.clock.advance(7_000)
+  await settle()
+  expect(theme.at(-1)).toEqual({ op: 'clear' })
+  await $.command.run({ command: 'chat', args: 'fireworks on' })
+  await settle()
+  expect(store.backdrop).toMatchObject({ auto: true })
+})
+
+// (Another plugin's look can't be raised from a test: the kit's $ has no
+// theme noun. What can be held here: a setting that changes no look sets none.)
+test('Backdrop room: the scope and the fireworks setting set no look', SLOW, async ($, on) => {
+  const theme = fakeTheme(on)
+  const store: Record<string, unknown> = { view: 'backdrop', sysRooms: ['usage', 'backdrop'], backdrop: { pick: 'tide', frost: 'medium' } }
+  const bridge = fakeBridge(on, { store })
+  await bridge.start($)
+  await settle()
+  expect(theme.length).toBe(1)   // ours, at the start
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop', props: props('dock') })
+  await settle()
+  await desk.press({ key: 'scope-session' })
+  await settle()
+  await desk.press({ key: 'auto-off' })
+  await settle()
+  await $.command.run({ command: 'chat', args: 'fireworks on' })
+  await settle()
+  expect(store.backdrop).toMatchObject({ scope: 'session', auto: true })
+  expect(theme.length).toBe(1)
+  await desk.unmount()
+})
+
+test('Backdrop: the desktop draws a show over our scene', SLOW, async ($, on) => {
+  fakeTheme(on)
+  const bridge = fakeBridge(on)
+  await bridge.start($)
+  await settle()
+  const glass = { blur: 16, opacity: 0.55 }
+  const ui = await $.ui.mount({ plugin: 'squad-chat', component: 'Backdrop', requestId: 'look', surface: 'desktop', props: { scene: 'aurora--fireworks-a', plugin: 'squad-chat', glass } } as any)
+  const drawn = (await ui.findAll({ type: 'Svg' }) as any[]).find((x) => x.props.alt === 'Fireworks over Aurora')
+  expect(drawn?.props.source).toContain('fill="freeze"')
   await ui.unmount()
 })
